@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 roboscapesim-common = { path = "../roboscapesim-common" }
+babylon = { git = "https://github.com/gsteinLTU/babylon.rs.git", branch = "webrs"}

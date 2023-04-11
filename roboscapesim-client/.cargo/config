@@ -1,4 +1,0 @@
-[build]
-
-target = "wasm23-unknown-unknown"
-
