@@ -1,14 +1,16 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+use nalgebra::{Vector3, Quaternion};
+
+pub struct Transform {
+    pub position: Vector3<f64>,
+    pub rotation: Orientation,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub enum Orientation {
+    Euler(Vector3<f64>),
+    Quaternion(Quaternion<f64>)
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub struct ObjectData {
+    pub name: String,
+    pub transform: Option<Transform>
 }

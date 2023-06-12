@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 roboscapesim-common = { path = "../roboscapesim-common" }
+cyberdeck = { version = "0.1.3" }
+rapier3d = { version = "0.17.2", features = ["serde-serialize", "simd-stable"] }
