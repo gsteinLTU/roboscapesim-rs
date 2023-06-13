@@ -36,10 +36,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Add JS
     lines.push("");
-    lines.push("\tvar element = document.createElement('script');");
-    lines.push("\telement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');");
-    lines.push("\tdocument.head.appendChild(element);");
-    
+    lines.push("\tvar scriptElement = document.createElement('script');");
+
+    // Create dialog for later use
+    lines.push("");
+    lines.push("\tscriptElement.onload = () => {");        
+    lines.push("\t\tvar element = createDialog('RoboScape Online');");
+    lines.push("\t\tconst canvas = document.createElement('canvas');");
+    lines.push("\t\tcanvas.id = 'roboscape-canvas';");
+    lines.push("\t\telement.querySelector('content').appendChild(canvas);");
+    lines.push("\t\tsetupDialog(element);");
+    lines.push("\t\twindow.externalVariables['roboscapedialog'] = element;");
+    lines.push("\t};");
+
+    lines.push("\tscriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');");
+    lines.push("\tdocument.head.appendChild(scriptElement);");
+
+
+
+    // Restore end of document
     lines.push(end);
 
     // Overwrite existing

@@ -20,6 +20,7 @@
 
         getMenu() {
             return {
+				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
         }
@@ -55,13 +56,13 @@
     path = path.substring(0, path.lastIndexOf("/"));
     var s = document.createElement('script');
     s.type = "module";
-    s.innerHTML = `import init, {} from '${path}/pkg/netsblox_extension_rs.js';
+    s.innerHTML = `import init, {show_3d_view} from '${path}/pkg/roboscapesim_client.js';
     
     
         await init();
 
         window.RoboScapeOnline_fns = {};
-
+		window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
         `;
     document.body.appendChild(s);
 
@@ -71,7 +72,16 @@
 	element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
 	document.head.appendChild(element);
 
-	var element = document.createElement('script');
-	element.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
-	document.head.appendChild(element);
+	var scriptElement = document.createElement('script');
+
+	scriptElement.onload = () => {
+		var element = createDialog('RoboScape Online');
+		const canvas = document.createElement('canvas');
+		canvas.id = 'roboscape-canvas';
+		element.querySelector('content').appendChild(canvas);
+		setupDialog(element);
+		window.externalVariables['roboscapedialog'] = element;
+	};
+	scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
+	document.head.appendChild(scriptElement);
 })();
