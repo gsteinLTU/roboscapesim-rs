@@ -4,7 +4,7 @@ mod util;
 use js_sys::{Reflect, Function};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsCast, JsValue};
 use web_sys::{console, window};
 use neo_babylon::prelude::*;
 use self::util::*;
@@ -50,6 +50,17 @@ pub fn main() {
     console::log_1(&"RoboScape Online loaded!".to_owned().into());
 
     wasm_bindgen_futures::spawn_local(GAME.with(|game| {
+        let game_rc = Rc::clone(&game);
+
+        let game_rc_2 = Rc::clone(&game);
+        game_rc.borrow().scene.borrow().add_before_render_observable(Closure::new(move || {
+            game_rc_2.borrow().models.borrow().iter().for_each(|m| {
+                let mut r = m.rotation();
+                r.set_y(r.y() + 0.1);
+                m.set_rotation(&r);
+            });
+        }));
+
         let game_rc = Rc::clone(&game);
         async move {
             let gltf = game_rc
