@@ -67,8 +67,13 @@
 		var element = createDialog('RoboScape Online');
 		const canvas = document.createElement('canvas');
 		canvas.id = 'roboscape-canvas';
+		canvas.style.width = 'calc(100% - 32px)';
 		element.querySelector('content').appendChild(canvas);
 		setupDialog(element);
+		const observer = new ResizeObserver(function () {
+		    BABYLON.Engine.LastCreatedEngine.resize();
+		});
+		observer.observe(element);
 		window.externalVariables['roboscapedialog'] = element;
 	};
 	scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');

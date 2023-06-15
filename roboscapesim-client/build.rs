@@ -51,8 +51,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\t\tvar element = createDialog('RoboScape Online');");
     lines.push("\t\tconst canvas = document.createElement('canvas');");
     lines.push("\t\tcanvas.id = 'roboscape-canvas';");
+    lines.push("\t\tcanvas.style.width = 'calc(100% - 32px)';");
     lines.push("\t\telement.querySelector('content').appendChild(canvas);");
     lines.push("\t\tsetupDialog(element);");
+    lines.push("\t\tconst observer = new ResizeObserver(function () {");
+    lines.push("\t\t    BABYLON.Engine.LastCreatedEngine.resize();");
+    lines.push("\t\t});");
+    lines.push("\t\tobserver.observe(element);");
     lines.push("\t\twindow.externalVariables['roboscapedialog'] = element;");
     lines.push("\t};");
 
