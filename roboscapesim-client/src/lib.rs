@@ -119,27 +119,33 @@ pub async fn connect() {
                 console::log_1(&format!("Deserialized: {:?}", roomdata).into());
 
                 GAME.with(|game| {
-                    for obj in roomdata {
-                        match obj.visual_info {
-                            roboscapesim_common::VisualInfo::None => {},
-                            roboscapesim_common::VisualInfo::Color(r, g, b) => {
-                                let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                                    depth: obj.transform.scaling.z.into(),
-                                    height: obj.transform.scaling.y.into(),
-                                    width: obj.transform.scaling.x.into(),
-                                    ..Default::default()
-                                }));
-                                game.borrow().models.borrow_mut().push(m.clone());
-                                console::log_1(&format!("Created box").into());
-                            },
-                            roboscapesim_common::VisualInfo::Texture(tex) => {
 
-                            },
-                            roboscapesim_common::VisualInfo::Mesh(mesh) => {
+                        for obj in roomdata {
+                            match obj.visual_info {
+                                roboscapesim_common::VisualInfo::None => {},
+                                roboscapesim_common::VisualInfo::Color(r, g, b) => {
+                                    let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
+                                        depth: obj.transform.scaling.z.into(),
+                                        height: obj.transform.scaling.y.into(),
+                                        width: obj.transform.scaling.x.into(),
+                                        ..Default::default()
+                                    }));
+                                    //m.set_position(obj.transform.position.into());
+                                    game.borrow().models.borrow_mut().push(m.clone());
+                                    console::log_1(&format!("Created box").into());
+                                },
+                                roboscapesim_common::VisualInfo::Texture(tex) => {
 
-                            },
+                                },
+                                roboscapesim_common::VisualInfo::Mesh(mesh) => {
+                                    let game_rc = game.clone();
+                                    wasm_bindgen_futures::spawn_local(async move {
+                                        let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                                        game_rc.borrow().models.borrow_mut().push(m.clone());
+                                    });
+                                },
+                            }
                         }
-                    }
                 });
             },
             Err(e) => console::log_1(&format!("Failed to deserialize: {}", e).into()),
