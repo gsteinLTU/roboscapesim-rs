@@ -1,13 +1,14 @@
 use nalgebra::{Vector3, Quaternion};
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
     pub position: Vector3<f64>,
     pub rotation: Orientation,
+    pub scaling: Vector3<f64>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Orientation {
     Euler(Vector3<f64>),
     Quaternion(Quaternion<f64>)
@@ -19,7 +20,7 @@ impl Default for Orientation {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VisualInfo {
     None,
     Color(f32,f32,f32),
@@ -33,9 +34,9 @@ impl Default for VisualInfo {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ObjectData {
     pub name: String,
-    pub transform: Option<Transform>,
+    pub transform: Transform,
     pub visual_info: VisualInfo
 }
