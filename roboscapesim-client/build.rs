@@ -25,6 +25,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut lines = content.split("\n").collect::<Vec<_>>();
 
     let end = lines.pop().unwrap();
+
+    let modstart = lines.iter().position(|s| { s.contains("var s = document.createElement('script');")}).unwrap();
+    let (lines, modlines) = lines.split_at(modstart);
+    let mut lines = lines.iter().map(|s| { s.to_owned() }).collect::<Vec<_>>();
+    let modlines = modlines.iter().map(|s| { "\t".to_owned() + s }).collect::<Vec<_>>();
+    let mut modlines = modlines.iter().map(|x| &**x).collect();
+
     lines.push("");
 
     // Add CSS
@@ -52,6 +59,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\tscriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');");
     lines.push("\tdocument.head.appendChild(scriptElement);");
 
+    lines.push("");
+    lines.push("\tvar scriptElement = document.createElement('script');");
+    lines.push("\tscriptElement.async = false;");
+    lines.push("");
+    
+    lines.push("\tscriptElement.onload = () => {");    
+    lines.push("\t\tvar loaderScriptElement = document.createElement('script');");
+    lines.push("\t\tloaderScriptElement.async = false;");
+    lines.push("\t\tloaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');");
+    lines.push("\t\tdocument.head.appendChild(loaderScriptElement);");
+
+    // Put module loading here to not init until Babylon loads
+    lines.append(&mut modlines);
+
+    lines.push("\t};");    
+
+    lines.push("\tscriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');");
+    lines.push("\tdocument.head.appendChild(scriptElement);");
+    lines.push("\tdisableRetinaSupport();");
 
 
     // Restore end of document
