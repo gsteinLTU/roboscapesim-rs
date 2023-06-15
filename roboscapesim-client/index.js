@@ -65,9 +65,12 @@
 
 	scriptElement.onload = () => {
 		var element = createDialog('RoboScape Online');
+		element.style.width = '400px';
+		element.style.height = '400px';
 		const canvas = document.createElement('canvas');
 		canvas.id = 'roboscape-canvas';
 		canvas.style.width = 'calc(100% - 32px)';
+		canvas.style.height = 'calc(100% - 64px)';
 		element.querySelector('content').appendChild(canvas);
 		setupDialog(element);
 		const observer = new ResizeObserver(function () {
@@ -85,19 +88,21 @@
 	scriptElement.onload = () => {
 		var loaderScriptElement = document.createElement('script');
 		loaderScriptElement.async = false;
+		loaderScriptElement.onload = () => {
+		    var s = document.createElement('script');
+		    s.type = "module";
+		    s.innerHTML = `import init, {show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    
+		    
+		        await init();
+		
+		        window.RoboScapeOnline_fns = {};
+				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+		        `;
+		    document.body.appendChild(s);
+		};
 		loaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');
 		document.head.appendChild(loaderScriptElement);
-	    var s = document.createElement('script');
-	    s.type = "module";
-	    s.innerHTML = `import init, {show_3d_view} from '${path}/pkg/roboscapesim_client.js';
-	    
-	    
-	        await init();
-	
-	        window.RoboScapeOnline_fns = {};
-			window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
-	        `;
-	    document.body.appendChild(s);
 	};
 	scriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');
 	document.head.appendChild(scriptElement);

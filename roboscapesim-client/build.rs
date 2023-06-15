@@ -1,3 +1,5 @@
+#[allow(unused_macros)]
+
 use std::{error::Error, fs::File, io::{Read, Write}};
 
 // Macro to allow build script to print output
@@ -29,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let modstart = lines.iter().position(|s| { s.contains("var s = document.createElement('script');")}).unwrap();
     let (lines, modlines) = lines.split_at(modstart);
     let mut lines = lines.iter().map(|s| { s.to_owned() }).collect::<Vec<_>>();
-    let modlines = modlines.iter().map(|s| { "\t".to_owned() + s }).collect::<Vec<_>>();
+    let modlines = modlines.iter().map(|s| { "\t\t".to_owned() + s }).collect::<Vec<_>>();
     let mut modlines = modlines.iter().map(|x| &**x).collect();
 
     lines.push("");
@@ -49,9 +51,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("");
     lines.push("\tscriptElement.onload = () => {");        
     lines.push("\t\tvar element = createDialog('RoboScape Online');");
+    lines.push("\t\telement.style.width = '400px';");
+    lines.push("\t\telement.style.height = '400px';");
     lines.push("\t\tconst canvas = document.createElement('canvas');");
     lines.push("\t\tcanvas.id = 'roboscape-canvas';");
     lines.push("\t\tcanvas.style.width = 'calc(100% - 32px)';");
+    lines.push("\t\tcanvas.style.height = 'calc(100% - 64px)';");
     lines.push("\t\telement.querySelector('content').appendChild(canvas);");
     lines.push("\t\tsetupDialog(element);");
     lines.push("\t\tconst observer = new ResizeObserver(function () {");
@@ -72,11 +77,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\tscriptElement.onload = () => {");    
     lines.push("\t\tvar loaderScriptElement = document.createElement('script');");
     lines.push("\t\tloaderScriptElement.async = false;");
-    lines.push("\t\tloaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');");
-    lines.push("\t\tdocument.head.appendChild(loaderScriptElement);");
+    
+    lines.push("\t\tloaderScriptElement.onload = () => {");
 
     // Put module loading here to not init until Babylon loads
     lines.append(&mut modlines);
+
+    lines.push("\t\t};");
+
+    lines.push("\t\tloaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');");
+    lines.push("\t\tdocument.head.appendChild(loaderScriptElement);");
 
     lines.push("\t};");    
 
