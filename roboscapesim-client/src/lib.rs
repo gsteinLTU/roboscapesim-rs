@@ -55,9 +55,9 @@ pub fn main() {
         let game_rc_2 = Rc::clone(&game);
         game_rc.borrow().scene.borrow().add_before_render_observable(Closure::new(move || {
             game_rc_2.borrow().models.borrow().iter().for_each(|m| {
-                let mut r = m.rotation();
+                /*let r = m.rotation();
                 r.set_y(r.y() + 0.1);
-                m.set_rotation(&r);
+                m.set_rotation(&r);*/
             });
         }));
 
