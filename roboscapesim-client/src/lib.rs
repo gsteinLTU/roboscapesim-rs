@@ -5,7 +5,7 @@ use js_sys::{Reflect, Function};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use roboscapesim_common::ObjectData;
-use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsCast, JsValue};
+use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsCast, JsValue, convert::IntoWasmAbi};
 use web_sys::{console, window, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
 use self::util::*;
@@ -28,8 +28,26 @@ thread_local! {
 
 impl Game {
     fn new() -> Self {
+        let scene = neo_babylon::api::create_scene("#roboscape-canvas");
+        
+        // Add a camera to the scene and attach it to the canvas
+        let camera = UniversalCamera::new(
+            "Camera",
+            Vector3::new(0.0, 1.0, -5.0),
+            Some(&scene.borrow())
+        );
+        camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
+        camera.set_min_z(0.01);
+        camera.set_max_z(300.0);
+        camera.set_speed(0.35);
+
+        // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions
+        // Add lights to the scene
+        HemisphericLight::new("light1", Vector3::new(1.0, 1.0, 0.0), &scene.borrow());
+        PointLight::new("light2", Vector3::new(0.0, 1.0, -1.0), &scene.borrow());
+
         Game {
-            scene: neo_babylon::api::create_basic_scene("#roboscape-canvas"),
+            scene,
             models: RefCell::new(vec![]),
         }
     }
@@ -130,8 +148,10 @@ pub async fn connect() {
                                         width: obj.transform.scaling.x.into(),
                                         ..Default::default()
                                     }));
-                                    let pos = obj.transform.position;
-                                    m.set_position(&Vector3::new(pos.x, pos.y, pos.z));
+                                    let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
+                                    material.set_diffuse_color(Color3::new(r.into(), g.into(), b.into()));
+                                    m.set_material(&material);
+                                    apply_transform(m.clone(), obj.transform);
                                     game.borrow().models.borrow_mut().push(m.clone());
                                     console::log_1(&format!("Created box").into());
                                 },
@@ -142,6 +162,7 @@ pub async fn connect() {
                                     let game_rc = game.clone();
                                     wasm_bindgen_futures::spawn_local(async move {
                                         let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                                        apply_transform(m.clone(), obj.transform);
                                         game_rc.borrow().models.borrow_mut().push(m.clone());
                                     });
                                 },
@@ -170,4 +191,15 @@ pub async fn connect() {
     });
     
     cyberdeck_client_web_sys::init_peer_connection(pc.clone(), "http://localhost:3000/connect".to_string().into(), oniceconnectionstatechange).await;
+}
+
+fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common::Transform) {
+    m.set_position(&Vector3::new(transform.position.x, transform.position.y, transform.position.z));
+
+    match transform.rotation {
+        roboscapesim_common::Orientation::Euler(angles) => m.set_rotation(&Vector3::new(angles.x, angles.y, angles.z)),
+        roboscapesim_common::Orientation::Quaternion(q) => m.set_rotation_quaternion(&Quaternion::new(q.i, q.j, q.k, q.w)),
+    }
+
+    m.set_scaling(&Vector3::new(transform.scaling.x, transform.scaling.y, transform.scaling.z));
 }

@@ -24,7 +24,7 @@ async fn main() {
     ROOM.insert("ground".into(), ObjectData { 
         name: "ground".into(),
         transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() }, 
-        visual_info: VisualInfo::Color(1.0, 1.0, 1.0) 
+        visual_info: VisualInfo::Color(0.8, 0.6, 0.45) 
     });
 
     // build our application with a route

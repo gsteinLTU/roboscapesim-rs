@@ -1,11 +1,17 @@
 use nalgebra::{Vector3, Quaternion};
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
     pub position: Vector3<f64>,
     pub rotation: Orientation,
     pub scaling: Vector3<f64>,
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self { position: Default::default(), rotation: Default::default(), scaling: Vector3::new(1.0, 1.0, 1.0) }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
