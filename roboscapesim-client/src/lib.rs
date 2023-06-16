@@ -130,7 +130,8 @@ pub async fn connect() {
                                         width: obj.transform.scaling.x.into(),
                                         ..Default::default()
                                     }));
-                                    //m.set_position(obj.transform.position.into());
+                                    let pos = obj.transform.position;
+                                    m.set_position(&Vector3::new(pos.x, pos.y, pos.z));
                                     game.borrow().models.borrow_mut().push(m.clone());
                                     console::log_1(&format!("Created box").into());
                                 },
