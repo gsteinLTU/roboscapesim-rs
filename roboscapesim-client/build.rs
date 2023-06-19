@@ -26,8 +26,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut lines = content.split("\n").collect::<Vec<_>>();
 
+    // Hold onto end for now
     let end = lines.pop().unwrap();
 
+    // Find js code running module
     let modstart = lines.iter().position(|s| { s.contains("var s = document.createElement('script');")}).unwrap();
     let (lines, modlines) = lines.split_at(modstart);
     let mut lines = lines.iter().map(|s| { s.to_owned() }).collect::<Vec<_>>();

@@ -3,29 +3,20 @@ use axum::{response::Html, response::IntoResponse, routing::get, routing::post, 
 use cyberdeck::*;
 use rapier3d::{na::Vector3, prelude::vector};
 use roboscapesim_common::*;
+mod room;
+use room::RoomData;
 use std::{net::SocketAddr, cell::RefCell, sync::Arc};
 use tokio::time::{sleep, Duration};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::{DashMap, DashSet};
 use once_cell::sync::Lazy;
 
-static ROOM: Lazy<DashMap<String, ObjectData>> = Lazy::new(|| {
+static ROOMS: Lazy<DashMap<String, RoomData>> = Lazy::new(|| {
     DashMap::new()
 });
 
 #[tokio::main]
 async fn main() {
-    // Setup test room
-    ROOM.insert("robot".into(), ObjectData { 
-        name: "robot".into(),
-        transform: Transform { ..Default::default() }, 
-        visual_info: VisualInfo::Mesh("parallax_robot.glb".into()) 
-    });
-    ROOM.insert("ground".into(), ObjectData { 
-        name: "ground".into(),
-        transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() }, 
-        visual_info: VisualInfo::Color(0.8, 0.6, 0.45) 
-    });
 
     // build our application with a route
     let app = Router::new()
