@@ -1,5 +1,6 @@
 use anyhow::Result;
 use axum::{response::Html, response::IntoResponse, routing::get, routing::post, Json, Router, http::{Method, header}};
+use chrono::Utc;
 use cyberdeck::*;
 use rapier3d::{na::Vector3, prelude::vector};
 use roboscapesim_common::*;
@@ -8,11 +9,11 @@ mod util;
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use std::{net::SocketAddr, cell::RefCell, sync::{Arc, RwLock, Mutex}};
-use tokio::time::{sleep, Duration};
+use tokio::{time::{sleep, Duration, self}, task};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
-use log::{info, trace};
+use log::{info, trace, error};
 
 static ROOMS: Lazy<DashMap<String, Arc<RwLock<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
@@ -37,10 +38,40 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     info!("Running server on http://localhost:3000 ...");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let server = axum::Server::bind(&addr)
+        .serve(app.into_make_service());
+
+    let update_fps = 10;
+
+    let updateLoop = task::spawn(async move {
+        let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
+
+        loop {
+            interval.tick().await;
+
+            let update_time = Utc::now();
+
+            // Perform updates
+            for kvp in ROOMS.iter() {
+                if !kvp.value().read().unwrap().hibernating {
+                    trace!("Updating {}", kvp.key());
+
+                    // Check timeout
+                    if update_time.timestamp() - kvp.value().read().unwrap().last_interaction_time > kvp.value().read().unwrap().timeout {
+                        kvp.value().write().unwrap().hibernating = true;
+                        info!("{} is now hibernating", kvp.key());
+                        continue;
+                    }
+
+                    // Perform update
+                }
+            }
+        }
+    });
+
+    if let Err(err) = server.await {
+        error!("server error: {}", err);
+    }
 }
 
 async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
@@ -51,10 +82,8 @@ async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
 }
 
 async fn start_peer_connection(offer: String) -> Result<String> {
-    let room = Arc::new(RwLock::new(RoomData::new(None, None)));
-    let room_id = room.read().unwrap().name.clone();
-    
-    ROOMS.insert(room_id.to_string(), room.clone());
+    // Temporarily, create a new room for each peer
+    let room_id = create_room(None);
 
     let mut peer = Peer::new(move |peer_id, e| {
         let room_id = room_id.clone();
@@ -110,4 +139,15 @@ async fn start_peer_connection(offer: String) -> Result<String> {
     });
 
     Ok(answer)
+}
+
+fn create_room(password: Option<String>) -> String {
+    let room = Arc::new(RwLock::new(RoomData::new(None, password)));
+    
+    // Set last interaction to creation time
+    room.write().unwrap().last_interaction_time = Utc::now().timestamp();
+
+    let room_id = room.read().unwrap().name.clone();
+    ROOMS.insert(room_id.to_string(), room.clone());
+    room_id
 }
