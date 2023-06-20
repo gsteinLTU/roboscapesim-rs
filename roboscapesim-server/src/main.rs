@@ -4,19 +4,25 @@ use cyberdeck::*;
 use rapier3d::{na::Vector3, prelude::vector};
 use roboscapesim_common::*;
 mod room;
+mod util;
 use room::RoomData;
-use std::{net::SocketAddr, cell::RefCell, sync::Arc};
+use simple_logger::SimpleLogger;
+use std::{net::SocketAddr, cell::RefCell, sync::{Arc, RwLock, Mutex}};
 use tokio::time::{sleep, Duration};
 use tower_http::cors::{Any, CorsLayer};
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
+use log::{info, trace};
 
-static ROOMS: Lazy<DashMap<String, RoomData>> = Lazy::new(|| {
+static ROOMS: Lazy<DashMap<String, Arc<RwLock<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
 });
 
 #[tokio::main]
 async fn main() {
+    // Setup logger
+    SimpleLogger::new().with_level(log::LevelFilter::Warn).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
+    info!("Starting RoboScape Online Server...");
 
     // build our application with a route
     let app = Router::new()
@@ -29,7 +35,8 @@ async fn main() {
 	.allow_headers([header::CONTENT_TYPE]));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Running server on http://localhost:3000 ...");
+    info!("Running server on http://localhost:3000 ...");
+
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -44,36 +51,46 @@ async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
 }
 
 async fn start_peer_connection(offer: String) -> Result<String> {
-    let mut peer = Peer::new(|peer_id, e| async move {
-        match e {
-            PeerEvent::DataChannelMessage(c, m) => {
-                println!(
-                    "{}::Recieved a message from channel {} with id {}!",
-                    peer_id,
-                    c.label(),
-                    c.id()
-                );
-                let msg_str = String::from_utf8(m.data.to_vec()).unwrap();
-                println!(
-                    "{}::Message from DataChannel '{}': {}",
-                    peer_id,
-                    c.label(),
-                    msg_str
-                );
-                //c.send_text(format!("Echo {}", msg_str)).await.unwrap();
-            }
-            PeerEvent::DataChannelStateChange(c) => {
-                if c.ready_state() == RTCDataChannelState::Open {
-                    println!("{}::DataChannel '{}'", peer_id, c.label());
-                    c.send_text(serde_json::to_string(&ROOM.iter().map(|e| e.value().to_owned()).collect::<Vec<_>>()).unwrap())
-                        .await
-                        .unwrap();
-                } else if c.ready_state() == RTCDataChannelState::Closed {
-                    println!("{}::DataChannel '{}'", peer_id, c.label());
+    let room = Arc::new(RwLock::new(RoomData::new(None, None)));
+    let room_id = room.read().unwrap().name.clone();
+    
+    ROOMS.insert(room_id.to_string(), room.clone());
+
+    let mut peer = Peer::new(move |peer_id, e| {
+        let room_id = room_id.clone();
+        async move {
+            let room = ROOMS.get(&(room_id.to_string())).unwrap();
+            match e {
+                PeerEvent::DataChannelMessage(c, m) => {
+                    trace!(
+                        "{}::Recieved a message from channel {} with id {}!",
+                        peer_id,
+                        c.label(),
+                        c.id()
+                    );
+                    let msg_str = String::from_utf8(m.data.to_vec()).unwrap();
+                    trace!(
+                        "{}::Message from DataChannel '{}': {}",
+                        peer_id,
+                        c.label(),
+                        msg_str
+                    );
+                    //c.send_text(format!("Echo {}", msg_str)).await.unwrap();
                 }
-            }
-            PeerEvent::PeerConnectionStateChange(s) => {
-                println!("{}::Peer connection state: {} ", peer_id, s)
+                PeerEvent::DataChannelStateChange(c) => {
+                    if c.ready_state() == RTCDataChannelState::Open {
+                        trace!("{}::DataChannel '{}'", peer_id, c.label());
+                        let msg = serde_json::to_string(&room.read().unwrap().objects.iter().map(|e| e.value().to_owned()).collect::<Vec<_>>()).unwrap();
+                        c.send_text(msg)
+                            .await
+                            .unwrap();
+                    } else if c.ready_state() == RTCDataChannelState::Closed {
+                        trace!("{}::DataChannel '{}'", peer_id, c.label());
+                    }
+                }
+                PeerEvent::PeerConnectionStateChange(s) => {
+                    trace!("{}::Peer connection state: {} ", peer_id, s)
+                }
             }
         }
     })
