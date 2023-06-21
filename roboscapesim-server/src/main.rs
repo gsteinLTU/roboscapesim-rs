@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::{response::Html, response::IntoResponse, routing::get, routing::post, Json, Router, http::{Method, header}};
+use axum::{response::IntoResponse, routing::post, Json, Router, http::{Method, header}};
 use chrono::Utc;
 use cyberdeck::*;
 use rapier3d::{na::Vector3, prelude::vector};
@@ -8,14 +8,18 @@ mod room;
 mod util;
 use room::RoomData;
 use simple_logger::SimpleLogger;
-use std::{net::SocketAddr, cell::RefCell, sync::{Arc, RwLock, Mutex}};
-use tokio::{time::{sleep, Duration, self}, task};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{time::{sleep, Duration, self}, task, sync::Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
-static ROOMS: Lazy<DashMap<String, Arc<RwLock<RoomData>>>> = Lazy::new(|| {
+static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
+    DashMap::new()
+});
+
+pub static CLIENTS: Lazy<DashMap<u128, Arc<RTCDataChannel>>> = Lazy::new(|| {
     DashMap::new()
 });
 
@@ -43,7 +47,7 @@ async fn main() {
 
     let update_fps = 10;
 
-    let updateLoop = task::spawn(async move {
+    let _update_loop = task::spawn(async move {
         let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
 
         loop {
@@ -53,17 +57,19 @@ async fn main() {
 
             // Perform updates
             for kvp in ROOMS.iter() {
-                if !kvp.value().read().unwrap().hibernating {
+                let mut lock = kvp.value().lock().await;
+                if !lock.hibernating {
                     trace!("Updating {}", kvp.key());
 
                     // Check timeout
-                    if update_time.timestamp() - kvp.value().read().unwrap().last_interaction_time > kvp.value().read().unwrap().timeout {
-                        kvp.value().write().unwrap().hibernating = true;
+                    if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
+                        lock.hibernating = true;
                         info!("{} is now hibernating", kvp.key());
-                        continue;
+                        return;
                     }
 
                     // Perform update
+                    lock.update().await;
                 }
             }
         }
@@ -83,7 +89,7 @@ async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
 
 async fn start_peer_connection(offer: String) -> Result<String> {
     // Temporarily, create a new room for each peer
-    let room_id = create_room(None);
+    let room_id = create_room(None).await;
 
     let mut peer = Peer::new(move |peer_id, e| {
         let room_id = room_id.clone();
@@ -108,17 +114,20 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                 }
                 PeerEvent::DataChannelStateChange(c) => {
                     if c.ready_state() == RTCDataChannelState::Open {
+                        CLIENTS.insert(peer_id, c.clone());
                         trace!("{}::DataChannel '{}'", peer_id, c.label());
-                        let msg = serde_json::to_string(&room.read().unwrap().objects.iter().map(|e| e.value().to_owned()).collect::<Vec<_>>()).unwrap();
-                        c.send_text(msg)
-                            .await
-                            .unwrap();
+                        room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
                     } else if c.ready_state() == RTCDataChannelState::Closed {
                         trace!("{}::DataChannel '{}'", peer_id, c.label());
                     }
                 }
                 PeerEvent::PeerConnectionStateChange(s) => {
-                    trace!("{}::Peer connection state: {} ", peer_id, s)
+                    trace!("{}::Peer connection state: {} ", peer_id, s);
+
+                    // Remove bad peers
+                    if s == RTCPeerConnectionState::Disconnected || s == RTCPeerConnectionState::Closed || s == RTCPeerConnectionState::Failed {
+                        
+                    }
                 }
             }
         }
@@ -141,13 +150,13 @@ async fn start_peer_connection(offer: String) -> Result<String> {
     Ok(answer)
 }
 
-fn create_room(password: Option<String>) -> String {
-    let room = Arc::new(RwLock::new(RoomData::new(None, password)));
+async fn create_room(password: Option<String>) -> String {
+    let room = Arc::new(Mutex::new(RoomData::new(None, password)));
     
     // Set last interaction to creation time
-    room.write().unwrap().last_interaction_time = Utc::now().timestamp();
+    room.lock().await.last_interaction_time = Utc::now().timestamp();
 
-    let room_id = room.read().unwrap().name.clone();
+    let room_id = room.lock().await.name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     room_id
 }

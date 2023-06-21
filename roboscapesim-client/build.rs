@@ -1,8 +1,8 @@
-#[allow(unused_macros)]
 
 use std::{error::Error, fs::File, io::{Read, Write}};
 
 // Macro to allow build script to print output
+#[allow(unused_macros)]
 macro_rules! warn {
     ($($tokens: tt)*) => {
         println!("cargo:warning={}", format!($($tokens)*))

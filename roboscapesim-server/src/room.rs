@@ -1,18 +1,19 @@
-use std::sync::Arc;
-
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use nalgebra::vector;
 use rand::{Rng};
 use roboscapesim_common::*;
-use cyberdeck::{RTCDataChannel};
 use log::info;
+use serde::Serialize;
 
 #[path ="./util/mod.rs"]
 mod util;
 use util::extra_rand::UpperHexadecimal;
 
+use crate::CLIENTS;
 
+
+#[derive(Debug)]
 /// Holds the data for a single room
 pub struct RoomData {
     pub objects: DashMap<String, ObjectData>,
@@ -21,13 +22,13 @@ pub struct RoomData {
     pub timeout: i64,
     pub last_interaction_time: i64,
     pub hibernating: bool,
-    pub sockets: DashMap<String, Arc<RTCDataChannel>>,
+    pub sockets: DashMap<String, u128>,
     pub visitors: DashSet<String>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>) -> RoomData {
-        let mut obj = RoomData {
+        let obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
@@ -45,15 +46,35 @@ impl RoomData {
         obj.objects.insert("robot".into(), ObjectData { 
             name: "robot".into(),
             transform: Transform { ..Default::default() }, 
-            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()) 
+            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
+            is_kinematic: false,
+            updated: true, 
         });
         obj.objects.insert("ground".into(), ObjectData { 
             name: "ground".into(),
             transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() }, 
-            visual_info: VisualInfo::Color(0.8, 0.6, 0.45) 
+            visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
+            is_kinematic: true,
+            updated: true, 
         });
 
         obj
+    }
+
+    /// Send a serialized object of type T to the client
+    pub async fn send_to_client<T: Serialize>(&self, val: &T, client: u128) -> usize {
+        let msg = serde_json::to_string(val).unwrap();
+        CLIENTS.get(&client).unwrap().value().send_text(msg).await.unwrap()
+    }
+
+    pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
+        self.send_to_client(&self.objects, client).await;
+    }
+    
+    pub async fn send_state_to_all_clients(&self, full_update: bool) {
+        for client in &self.sockets {
+            self.send_state_to_client(full_update, client.value().to_owned()).await;
+        }
     }
 
     fn generate_room_id(length: Option<usize>) -> String {
@@ -63,5 +84,9 @@ impl RoomData {
             .map(char::from)
             .collect();
         ("Room".to_owned() + &s).to_owned()
+    }
+
+    pub async fn update(&self) {
+        self.send_state_to_all_clients(false).await;
     }
 }

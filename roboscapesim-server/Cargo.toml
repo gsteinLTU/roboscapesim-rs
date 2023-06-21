@@ -19,9 +19,11 @@ bytes = "1.1.0"
 rand = "0.8.5"
 axum = {version = "0.6.18", features = ["headers"]}
 tower-http = { version = "0.4.0", features = ["cors"] }
-dashmap = { version = "5.4.0", features = ["serde"] }
+dashmap = { version = "5.4.0", features = ["serde", "rayon"] }
 once_cell = { version = "1.18.0", features = ["parking_lot"] }
 nalgebra = { version = "0.32.2", features = ["serde", "serde-serialize", "rand"] }
 chrono = { version = "0.4.26", features = ["serde"] }
 simple_logger = "4.2.0"
 log = "0.4.19"
+rayon = "1.7.0"
+webrtc = "0.8.0"

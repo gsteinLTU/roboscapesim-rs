@@ -1,5 +1,6 @@
 use rand::{prelude::Distribution, Rng};
 
+/// Allows for getting a random distribution of uppercase hex characters (0-9 and A-F)
 #[derive(Debug)]
 pub struct UpperHexadecimal;
 

@@ -44,5 +44,7 @@ impl Default for VisualInfo {
 pub struct ObjectData {
     pub name: String,
     pub transform: Transform,
-    pub visual_info: VisualInfo
+    pub visual_info: VisualInfo,
+    pub is_kinematic: bool,
+    pub updated: bool
 }
