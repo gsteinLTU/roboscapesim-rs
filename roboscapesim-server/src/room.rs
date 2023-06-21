@@ -86,7 +86,14 @@ impl RoomData {
         ("Room".to_owned() + &s).to_owned()
     }
 
-    pub async fn update(&self) {
+    pub async fn update(&self, delta_time: f64) {
+        for mut obj in self.objects.iter_mut() {
+            if let Orientation::Euler(mut angles) = obj.value().transform.rotation {
+                angles[1] = angles[1] + (1.0 * delta_time) % 360.0;
+                obj.value_mut().transform.rotation = Orientation::Euler(angles);
+            }
+        }
+
         self.send_state_to_all_clients(false).await;
     }
 }
