@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use js_sys::Reflect;
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::{ObjectData, UpdateMessage};
+use roboscapesim_common::UpdateMessage;
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
@@ -77,9 +77,9 @@ const INFO: ExtensionInfo = ExtensionInfo {
 #[wasm_bindgen(start)]
 async fn main() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    GAME.with(|game| {
+    /*GAME.with(|game| {
         // Init game
-    });
+    });*/
     console::log_1(&"RoboScape Online loaded!".to_owned().into());
     connect().await;
 }

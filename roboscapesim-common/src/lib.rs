@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use dashmap::DashMap;
-use nalgebra::{Vector3, Quaternion};
-use serde::{Serialize, Deserialize};
+use nalgebra::{Quaternion, Vector3};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
@@ -13,14 +11,18 @@ pub struct Transform {
 
 impl Default for Transform {
     fn default() -> Self {
-        Self { position: Default::default(), rotation: Default::default(), scaling: Vector3::new(1.0, 1.0, 1.0) }
+        Self {
+            position: Default::default(),
+            rotation: Default::default(),
+            scaling: Vector3::new(1.0, 1.0, 1.0),
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Orientation {
     Euler(Vector3<f64>),
-    Quaternion(Quaternion<f64>)
+    Quaternion(Quaternion<f64>),
 }
 
 impl Default for Orientation {
@@ -32,14 +34,14 @@ impl Default for Orientation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VisualInfo {
     None,
-    Color(f32,f32,f32),
+    Color(f32, f32, f32),
     Texture(String),
-    Mesh(String)
+    Mesh(String),
 }
 
 impl Default for VisualInfo {
     fn default() -> Self {
-        Self::Color(1.0,1.0,1.0)
+        Self::Color(1.0, 1.0, 1.0)
     }
 }
 
@@ -49,13 +51,13 @@ pub struct ObjectData {
     pub transform: Transform,
     pub visual_info: VisualInfo,
     pub is_kinematic: bool,
-    pub updated: bool
+    pub updated: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct RoomState {
-    pub name: String,   
-    pub roomtime: f64, 
+    pub name: String,
+    pub roomtime: f64,
 }
 
 /// Struct containing possible message types sent to the client
