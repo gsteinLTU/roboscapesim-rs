@@ -5,13 +5,13 @@ use dashmap::DashMap;
 use js_sys::Reflect;
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::ObjectData;
+use roboscapesim_common::{ObjectData, UpdateMessage};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
 use self::util::*;
 extern crate console_error_panic_hook;
-use std::{panic, cell::RefCell, rc::Rc, collections::HashMap};
+use std::{panic, cell::RefCell, rc::Rc, collections::HashMap, sync::Arc};
 
 struct Game {
     scene: Rc<RefCell<Scene>>,
@@ -104,70 +104,81 @@ pub async fn connect() {
     });
     
     let send_channel_clone = send_channel.clone();
+
     let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
         let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
 
         console::log_1(&format!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload).into());
 
-        match serde_json::from_str::<HashMap<String, ObjectData>>(payload.as_str()) {
-            Ok(roomdata) => {
-                console::log_1(&format!("Deserialized: {:?}", roomdata).into());
-                
-                let roomdata = roomdata.clone();
+        GAME.with(move |game| {
+        match serde_json::from_str::<UpdateMessage>(payload.as_str()) {
+            Ok(msg) => {
+                console::log_1(&format!("Deserialized: {:?}", msg).into());
+                match msg {
+                    UpdateMessage::Heartbeat => {},
+                    UpdateMessage::RoomInfo(_) => {
 
-                GAME.with(move |game| {
+                    },
+                    UpdateMessage::Update(t, full_update, roomdata) => {
+                        let view = roomdata.to_owned();
+                                for obj in view.into_read_only().iter() {
+                                    let obj = obj.1;
+                                    if game.borrow().models.contains_key(&obj.name) {
+                                        // Update existing mesh
+                                        let ref_cell = &game.clone();
+                                        let g = ref_cell.borrow();
 
-                        for obj in roomdata.into_values() {
-                            if game.borrow().models.contains_key(&obj.name) {
-                                // Update existing mesh
-                                let ref_cell = &game.clone();
-                                let g = ref_cell.borrow();
-                                // Guaranteed to exist
-                                let existing = g.models.get(&obj.name).unwrap();
-                                existing.set_position(&(obj.transform.position[0], obj.transform.position[1], obj.transform.position[2]).into());
-                                existing.set_scaling(&(obj.transform.scaling[0], obj.transform.scaling[1], obj.transform.scaling[2]).into());
-                                
-                                match obj.transform.rotation {
-                                    roboscapesim_common::Orientation::Euler(angles) => { existing.set_rotation(&(angles[0], angles[1], angles[2]).into()); },
-                                    roboscapesim_common::Orientation::Quaternion(q) => { existing.set_rotation_quaternion(&Quaternion::new(q.i, q.j, q.k, q.w)); },
-                                }
-
-                            } else {
-                                // Create new mesh
-                                match obj.visual_info {
-                                    roboscapesim_common::VisualInfo::None => {},
-                                    roboscapesim_common::VisualInfo::Color(r, g, b) => {
-                                        let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                                            depth: obj.transform.scaling.z.into(),
-                                            height: obj.transform.scaling.y.into(),
-                                            width: obj.transform.scaling.x.into(),
-                                            ..Default::default()
-                                        }));
-                                        let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
-                                        material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
-                                        m.set_material(&material);
-                                        apply_transform(m.clone(), obj.transform);
-                                        game.borrow().models.insert(obj.name, m.clone());
-                                        console::log_1(&format!("Created box").into());
-                                    },
-                                    roboscapesim_common::VisualInfo::Texture(tex) => {
-
-                                    },
-                                    roboscapesim_common::VisualInfo::Mesh(mesh) => {
-                                        let game_rc = game.clone();
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
-                                            apply_transform(m.clone(), obj.transform);
-                                            game_rc.borrow().models.insert(obj.name, m.clone());
-                                        });
-                                    },
-                                }
-                            }
+                                        // Guaranteed to exist
+                                        let existing = g.models.get(&obj.name).unwrap();
+                                        existing.set_position(&(obj.transform.position[0], obj.transform.position[1], obj.transform.position[2]).into());
+                                        existing.set_scaling(&(obj.transform.scaling[0], obj.transform.scaling[1], obj.transform.scaling[2]).into());
+                                        
+                                        match obj.transform.rotation {
+                                            roboscapesim_common::Orientation::Euler(angles) => { existing.set_rotation(&(angles[0], angles[1], angles[2]).into()); },
+                                            roboscapesim_common::Orientation::Quaternion(q) => { existing.set_rotation_quaternion(&Quaternion::new(q.i, q.j, q.k, q.w)); },
+                                        }
+        
+                                    } else {
+                                        // Create new mesh
+                                        match &obj.visual_info {
+                                            roboscapesim_common::VisualInfo::None => {},
+                                            roboscapesim_common::VisualInfo::Color(r, g, b) => {
+                                                let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
+                                                    depth: obj.transform.scaling.z.into(),
+                                                    height: obj.transform.scaling.y.into(),
+                                                    width: obj.transform.scaling.x.into(),
+                                                    ..Default::default()
+                                                }));
+                                                let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
+                                                material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
+                                                m.set_material(&material);
+                                                apply_transform(m.clone(), obj.transform);
+                                                game.borrow().models.insert(obj.name.to_owned(), m.clone());
+                                                console::log_1(&format!("Created box").into());
+                                            },
+                                            roboscapesim_common::VisualInfo::Texture(tex) => {
+        
+                                            },
+                                            roboscapesim_common::VisualInfo::Mesh(mesh) => {
+                                                let game_rc = game.clone();
+                                                let mesh = Arc::new(mesh.clone());
+                                                let obj = Arc::new(obj.clone());
+                                                wasm_bindgen_futures::spawn_local(async move {
+                                                    let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                                                    apply_transform(m.clone(), obj.transform);
+                                                    game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
+                                                });
+                                            },
+                                        }
+                                    }
+                                }                                
+                            },
+                            UpdateMessage::DisplayText(_) => {},
                         }
-                });
-            },
-            Err(e) => console::log_1(&format!("Failed to deserialize: {}", e).into()),
-        }
+                    },
+                    Err(e) => console::log_1(&format!("Failed to deserialize: {}", e).into()),
+                }
+            });
         
     });
 

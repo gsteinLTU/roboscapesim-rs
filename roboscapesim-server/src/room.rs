@@ -1,9 +1,11 @@
+use std::collections::{HashMap, hash_map::RandomState};
+
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use nalgebra::vector;
 use rand::{Rng};
 use roboscapesim_common::*;
-use log::info;
+use log::{info, error};
 use serde::Serialize;
 
 #[path ="./util/mod.rs"]
@@ -24,6 +26,8 @@ pub struct RoomData {
     pub hibernating: bool,
     pub sockets: DashMap<String, u128>,
     pub visitors: DashSet<String>,
+    pub last_full_update: i64,
+    pub roomtime: f64,
 }
 
 impl RoomData {
@@ -37,6 +41,8 @@ impl RoomData {
             hibernating: false,
             sockets: DashMap::new(),
             visitors: DashSet::new(),
+            last_full_update: 0,
+            roomtime: 0.0
         };
 
         info!("Room {} created", obj.name);
@@ -62,13 +68,24 @@ impl RoomData {
     }
 
     /// Send a serialized object of type T to the client
-    pub async fn send_to_client<T: Serialize>(&self, val: &T, client: u128) -> usize {
+    pub async fn send_to_client<T: Serialize>(&self, val: &T, client_id: u128) -> usize {
         let msg = serde_json::to_string(val).unwrap();
-        CLIENTS.get(&client).unwrap().value().send_text(msg).await.unwrap()
+        let client = CLIENTS.get(&client_id);
+
+        if let Some(client) = client { 
+            return client.value().send_text(msg).await.unwrap_or_default();
+        } else {
+            error!("Client {} not found!", client_id);
+            return 0;
+        }
     }
 
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
-        self.send_to_client(&self.objects, client).await;
+        if full_update {
+            self.send_to_client(&UpdateMessage::Update(self.roomtime, true, self.objects.clone()), client).await;
+        } else {
+            self.send_to_client(&UpdateMessage::Update(self.roomtime, false, self.objects.iter().filter(|mvp| mvp.value().updated).map(|mvp| (mvp.key().clone(), mvp.value().clone())).collect::<DashMap<String, ObjectData>>()), client).await;
+        }
     }
     
     pub async fn send_state_to_all_clients(&self, full_update: bool) {
@@ -86,14 +103,23 @@ impl RoomData {
         ("Room".to_owned() + &s).to_owned()
     }
 
-    pub async fn update(&self, delta_time: f64) {
+    pub async fn update(&mut self, delta_time: f64) {
         for mut obj in self.objects.iter_mut() {
             if let Orientation::Euler(mut angles) = obj.value().transform.rotation {
                 angles[1] = angles[1] + (1.0 * delta_time) % 360.0;
                 obj.value_mut().transform.rotation = Orientation::Euler(angles);
+                obj.updated = true;
             }
         }
 
-        self.send_state_to_all_clients(false).await;
+        let time = Utc::now().timestamp();
+
+        self.roomtime += delta_time;
+
+        if time - self.last_full_update < 60 {
+            self.send_state_to_all_clients(false).await;
+        } else {
+            self.send_state_to_all_clients(true).await;
+        }
     }
 }

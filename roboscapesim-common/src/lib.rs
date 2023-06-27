@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use dashmap::DashMap;
 use nalgebra::{Vector3, Quaternion};
 use serde::{Serialize, Deserialize};
 
@@ -47,4 +50,19 @@ pub struct ObjectData {
     pub visual_info: VisualInfo,
     pub is_kinematic: bool,
     pub updated: bool
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct RoomState {
+    pub name: String,   
+    pub roomtime: f64, 
+}
+
+/// Struct containing possible message types sent to the client
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateMessage {
+    Heartbeat,
+    RoomInfo(RoomState),
+    Update(f64, bool, DashMap<String, ObjectData>),
+    DisplayText(String),
 }
