@@ -2,11 +2,10 @@
 mod util;
 mod game;
 
-use dashmap::DashMap;
 use js_sys::Reflect;
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::{UpdateMessage, ObjectData};
+use roboscapesim_common::UpdateMessage;
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
@@ -42,6 +41,9 @@ async fn main() {
         let before_render = Closure::new(move || {
             let next_state = &game_clone.borrow().state;
             let last_state = &game_clone.borrow().last_state;
+            let now = instant::now();
+            let t = (now - *game_clone.borrow().state_time.borrow()) / (*game_clone.borrow().state_time.borrow() - *game_clone.borrow().last_state_time.borrow());
+            //console::log_1(&format!("t = {}, now = {}, last_state_time = {}, state_time = {}", t, now, *game_clone.borrow().last_state_time.borrow(), *game_clone.borrow().state_time.borrow()).into());
 
             for update_obj in next_state.iter() {
                 let name = update_obj.key();
@@ -51,16 +53,19 @@ async fn main() {
                     continue;
                 }
 
+                // Don't update objects not loaded yet
                 if last_state.contains_key(name) {
-                    // TODO: Interpolate
-                    apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), update_obj.transform);
+                    // Interpolate
+                    let last_transform = last_state.get(name).unwrap().transform;
+                    let interpolated_transform = last_transform.interpolate(&update_obj.transform, t);
+                    //console::log_1(&format!("{}: last_transform: {:?} \n next_transform: {:?} \ninterpolated_transform = {:?}", name, last_transform, update_obj.transform, interpolated_transform).into());
+
+                    apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), interpolated_transform);
                 } else {
                     // Assign directly
                     apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), update_obj.transform);
                 }
             }
-
-            console::log_1(&format!("{:?}", game_clone.borrow().state).into());
         });
         game.borrow().scene.borrow().add_before_render_observable(before_render);
     });
@@ -98,7 +103,6 @@ pub async fn connect() {
         GAME.with(move |game| {
         match serde_json::from_str::<UpdateMessage>(payload.as_str()) {
             Ok(msg) => {
-                console::log_1(&format!("Deserialized: {:?}", msg).into());
                 match msg {
                     UpdateMessage::Heartbeat => {},
                     UpdateMessage::RoomInfo(_) => {
@@ -139,26 +143,27 @@ pub async fn connect() {
                                                 let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
                                                 apply_transform(m.clone(), obj.transform);
                                                 game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
+                                                console::log_1(&format!("Created mesh").into());
                                             });
                                         },
                                     }
                                 }
+                            }
 
-                                // Update state vars
-                                for entry in &game.borrow().state {
-                                    game.borrow().last_state.insert(entry.key().to_owned(), entry.value().clone());
-                                }
-                                for entry in &roomdata {
-                                    game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
-                                }
-                                // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
-                                
-                                // Update time
-                                *game.borrow().last_state_server_time.borrow_mut() = *game.borrow().state_server_time.borrow();
-                                *game.borrow().last_state_time.borrow_mut() = *game.borrow().state_time.borrow();
-                                *game.borrow().state_server_time.borrow_mut() = t;
-                                *game.borrow().state_time.borrow_mut() = performance_now();
-                            }                                
+                            // Update state vars
+                            for entry in &game.borrow().state {
+                                game.borrow().last_state.insert(entry.key().to_owned(), entry.value().clone());
+                            }
+                            for entry in &roomdata {
+                                game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
+                            }
+                            // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
+                            
+                            // Update times
+                            game.borrow().last_state_server_time.replace(game.borrow().state_server_time.borrow().clone());
+                            game.borrow().last_state_time.replace(game.borrow().state_time.borrow().clone());
+                            game.borrow().state_server_time.replace(t);
+                            game.borrow().state_time.replace(instant::now());
                         },
                         UpdateMessage::DisplayText(_) => {},
                     }
@@ -166,7 +171,6 @@ pub async fn connect() {
                 Err(e) => console::log_1(&format!("Failed to deserialize: {}", e).into()),
             }
         });
-        
     });
 
     cyberdeck_client_web_sys::init_data_channel(send_channel.clone(), onclose, onopen, onmessage);

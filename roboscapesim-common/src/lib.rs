@@ -20,7 +20,7 @@ impl Default for Transform {
 }
 
 impl Transform {
-    fn interpolate(&self, other: &Transform, t: f64) -> Transform {
+    pub fn interpolate(&self, other: &Transform, t: f64) -> Transform {
         Transform { position: self.position.lerp(&other.position, t), rotation: self.rotation.interpolate(&other.rotation, t), scaling: self.scaling.lerp(&other.scaling, t) }
     }
 }
@@ -32,11 +32,11 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    fn interpolate(&self, other: &Orientation, t: f64) -> Orientation {
+    pub fn interpolate(&self, other: &Orientation, t: f64) -> Orientation {
         match self {
             Orientation::Euler(e) => {
                 if let Orientation::Euler(o) = other {
-                    return Orientation::Euler(e.slerp(&o, t));
+                    return Orientation::Euler(e.lerp(&o, t));
                 } else {
                     panic!("Interpolation between Euler and quaternion Orientations not supported");                    
                 }
