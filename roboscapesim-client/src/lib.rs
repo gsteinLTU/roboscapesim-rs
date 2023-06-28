@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod util;
+mod game;
 
 use dashmap::DashMap;
 use js_sys::Reflect;
@@ -10,16 +11,9 @@ use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
 use self::util::*;
+use self::game::*;
 extern crate console_error_panic_hook;
 use std::{cell::RefCell, rc::Rc, collections::HashMap, sync::Arc};
-
-/// Stores information relevant to the current state
-struct Game {
-    scene: Rc<RefCell<Scene>>,
-    models: DashMap<String, Rc<BabylonMesh>>,
-    state: DashMap<String, ObjectData>,
-    last_state: DashMap<String, ObjectData>,
-}
 
 thread_local! {
     static PEER_CONNECTION: RefCell<Option<Rc<RefCell<RtcPeerConnection>>>> = RefCell::new(None);
@@ -29,49 +23,9 @@ thread_local! {
     static DATA_CHANNELS: RefCell<HashMap<String, Rc<RefCell<RtcDataChannel>>>> = RefCell::new(HashMap::new());
 }
 
-impl Game {
-    fn new() -> Self {
-        let scene = neo_babylon::api::create_scene("#roboscape-canvas");
-        
-        // Add a camera to the scene and attach it to the canvas
-        let camera = UniversalCamera::new(
-            "Camera",
-            Vector3::new(0.0, 1.0, -5.0),
-            Some(&scene.borrow())
-        );
-        camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
-        camera.set_min_z(0.01);
-        camera.set_max_z(300.0);
-        camera.set_speed(0.35);
-
-        // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions
-        // Add lights to the scene
-        HemisphericLight::new("light1", Vector3::new(1.0, 1.0, 0.0), &scene.borrow());
-        PointLight::new("light2", Vector3::new(0.0, 1.0, -1.0), &scene.borrow());
-
-        neo_babylon::api::setup_vr_experience(&scene.borrow());
-        Game {
-            scene,
-            models: DashMap::new(),
-            state: DashMap::new(),
-            last_state: DashMap::new(),
-        }
-    }
-
-    async fn load_model(&self, name: &str, url: &str) -> Result<Rc<BabylonMesh>, JsValue> {
-        let model = BabylonMesh::create_gltf(&self.scene.borrow(), name, url).await;
-
-        let model = Rc::new(model);
-        self.models.insert(name.to_owned(), model.clone());
-
-        Ok(model)
-    }
-}
-
 thread_local! {
     static GAME: Rc<RefCell<Game>> = Rc::new(RefCell::new(Game::new()));
 }
-
 
 #[netsblox_extension_info]
 const INFO: ExtensionInfo = ExtensionInfo { 
@@ -155,7 +109,7 @@ pub async fn connect() {
                             for obj in view.into_read_only().iter() {
                                 let name = obj.0;
                                 let obj = obj.1;
-                                
+
                                 if !game.borrow().models.contains_key(name) {
                                     // Create new mesh
                                     match &obj.visual_info {
@@ -198,6 +152,12 @@ pub async fn connect() {
                                     game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
                                 }
                                 // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
+                                
+                                // Update time
+                                *game.borrow().last_state_server_time.borrow_mut() = *game.borrow().state_server_time.borrow();
+                                *game.borrow().last_state_time.borrow_mut() = *game.borrow().state_time.borrow();
+                                *game.borrow().state_server_time.borrow_mut() = t;
+                                *game.borrow().state_time.borrow_mut() = performance_now();
                             }                                
                         },
                         UpdateMessage::DisplayText(_) => {},

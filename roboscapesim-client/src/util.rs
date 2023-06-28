@@ -21,3 +21,8 @@ pub(crate) fn get_window_fn(name: &str) -> Result<Function, JsValue>
         Err(e) => Err(e),
     }
 }
+
+/// Gets performance.now()
+pub(crate) fn performance_now() -> f64 {
+    window().unwrap().performance().unwrap().now()
+}
