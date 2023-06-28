@@ -68,3 +68,9 @@ pub enum UpdateMessage {
     Update(f64, bool, DashMap<String, ObjectData>),
     DisplayText(String),
 }
+
+/// Struct containing possible message types sent to the server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClientMessage {
+    Heartbeat
+}
