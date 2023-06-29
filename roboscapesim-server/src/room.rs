@@ -6,7 +6,7 @@ use nalgebra::{vector, Vector3};
 use rand::Rng;
 use rapier3d::prelude::{
     BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
-    IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, RigidBodyHandle, QueryPipeline,
+    IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, QueryPipeline, RigidBodyHandle,
 };
 use roboscapesim_common::*;
 use serde::Serialize;
@@ -50,6 +50,7 @@ pub struct Simulation {
     pub query_pipeline: QueryPipeline,
     pub physics_hooks: (),
     pub event_handler: (),
+    pub rigid_body_labels: DashMap<String, RigidBodyHandle>,
 }
 
 impl Simulation {
@@ -69,6 +70,7 @@ impl Simulation {
             query_pipeline: QueryPipeline::new(),
             physics_hooks: (),
             event_handler: (),
+            rigid_body_labels: DashMap::new(),
         }
     }
 
@@ -126,22 +128,31 @@ impl RoomData {
         let collider = ColliderBuilder::ball(0.5).restitution(0.7).build();
         let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
         obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
+        obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
+        // Setup test room
+        /*obj.objects.insert("robot".into(), ObjectData {
+            name: "robot".into(),
+            transform: Transform { ..Default::default() },
+            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
+            is_kinematic: false,
+            updated: true,
+        });*/
 
-        // // Setup test room
-        // obj.objects.insert("robot".into(), ObjectData {
-        //     name: "robot".into(),
-        //     transform: Transform { ..Default::default() },
-        //     visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
-        //     is_kinematic: false,
-        //     updated: true,
-        // });
-        // obj.objects.insert("ground".into(), ObjectData {
-        //     name: "ground".into(),
-        //     transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() },
-        //     visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
-        //     is_kinematic: true,
-        //     updated: true,
-        // });
+        let ball_body = &obj.sim.rigid_body_set[ball_body_handle];
+        obj.objects.insert("ball".into(), ObjectData {
+            name: "ball".into(),
+            transform: Transform { position: ball_body.translation().to_owned(), ..Default::default() },
+            visual_info: VisualInfo::Mesh("sphere.glb".into()),
+            is_kinematic: false,
+            updated: true,
+        });
+        obj.objects.insert("ground".into(), ObjectData {
+            name: "ground".into(),
+            transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: vector![0.0, -0.05, 0.0], ..Default::default() },
+            visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
+            is_kinematic: false,
+            updated: true,
+        });
 
         obj
     }
@@ -200,23 +211,20 @@ impl RoomData {
     }
 
     pub async fn update(&mut self, delta_time: f64) {
-        for mut obj in self.objects.iter_mut() {
-            if let Orientation::Euler(mut angles) = obj.value().transform.rotation {
-                angles[1] = angles[1] + (1.0 * delta_time) % 360.0;
-                obj.value_mut().transform.rotation = Orientation::Euler(angles);
-                obj.updated = true;
-            }
-        }
-
         let time = Utc::now().timestamp();
 
         self.sim.update(delta_time);
 
-        let ball_body = self.sim.rigid_body_set.get_unknown_gen(0).unwrap().0;
-        println!(
-          "Ball altitude: {}",
-          ball_body.translation().y
-        );
+        // Update data before send
+        for mut o in self.objects.iter_mut()  {
+            if self.sim.rigid_body_labels.contains_key(o.key()) {
+                let get = &self.sim.rigid_body_labels.get(o.key()).unwrap();
+                let handle = get.value();
+                let body = self.sim.rigid_body_set.get(*handle).unwrap();
+                let old_transform = o.value().transform;
+                o.value_mut().transform = Transform { position: body.translation().clone(), rotation: body.rotation().euler_angles().into(), scaling: old_transform.scaling };
+            }
+        }
 
         self.roomtime += delta_time;
 

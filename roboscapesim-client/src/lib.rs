@@ -57,7 +57,7 @@ async fn main() {
                 if last_state.contains_key(name) {
                     // Interpolate
                     let last_transform = last_state.get(name).unwrap().transform;
-                    let interpolated_transform = last_transform.interpolate(&update_obj.transform, t);
+                    let interpolated_transform = last_transform.interpolate(&update_obj.transform, t as f32);
                     //console::log_1(&format!("{}: last_transform: {:?} \n next_transform: {:?} \ninterpolated_transform = {:?}", name, last_transform, update_obj.transform, interpolated_transform).into());
 
                     apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), interpolated_transform);
@@ -120,9 +120,9 @@ pub async fn connect() {
                                         roboscapesim_common::VisualInfo::None => {},
                                         roboscapesim_common::VisualInfo::Color(r, g, b) => {
                                             let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                                                depth: obj.transform.scaling.z.into(),
-                                                height: obj.transform.scaling.y.into(),
-                                                width: obj.transform.scaling.x.into(),
+                                                depth: Some(obj.transform.scaling.z.into()),
+                                                height: Some(obj.transform.scaling.y.into()),
+                                                width: Some(obj.transform.scaling.x.into()),
                                                 ..Default::default()
                                             }));
                                             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
@@ -192,12 +192,12 @@ pub async fn connect() {
 }
 
 fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common::Transform) {
-    m.set_position(&Vector3::new(transform.position.x, transform.position.y, transform.position.z));
+    m.set_position(&Vector3::new(transform.position.x.into(), transform.position.y.into(), transform.position.z.into()));
 
     match transform.rotation {
-        roboscapesim_common::Orientation::Euler(angles) => m.set_rotation(&Vector3::new(angles.x, angles.y, angles.z)),
-        roboscapesim_common::Orientation::Quaternion(q) => m.set_rotation_quaternion(&Quaternion::new(q.i, q.j, q.k, q.w)),
+        roboscapesim_common::Orientation::Euler(angles) => m.set_rotation(&Vector3::new(angles.x.into(), angles.y.into(), angles.z.into())),
+        roboscapesim_common::Orientation::Quaternion(q) => m.set_rotation_quaternion(&Quaternion::new(q.i.into(), q.j.into(), q.k.into(), q.w.into())),
     }
 
-    m.set_scaling(&Vector3::new(transform.scaling.x, transform.scaling.y, transform.scaling.z));
+    m.set_scaling(&Vector3::new(transform.scaling.x.into(), transform.scaling.y.into(), transform.scaling.z.into()));
 }

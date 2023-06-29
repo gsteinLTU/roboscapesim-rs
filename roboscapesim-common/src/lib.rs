@@ -1,12 +1,12 @@
 use dashmap::DashMap;
-use nalgebra::{Quaternion, Vector3};
+use nalgebra::{Quaternion, Vector3, vector};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
-    pub position: Vector3<f64>,
+    pub position: Vector3<f32>,
     pub rotation: Orientation,
-    pub scaling: Vector3<f64>,
+    pub scaling: Vector3<f32>,
 }
 
 impl Default for Transform {
@@ -20,19 +20,19 @@ impl Default for Transform {
 }
 
 impl Transform {
-    pub fn interpolate(&self, other: &Transform, t: f64) -> Transform {
+    pub fn interpolate(&self, other: &Transform, t: f32) -> Transform {
         Transform { position: self.position.lerp(&other.position, t), rotation: self.rotation.interpolate(&other.rotation, t), scaling: self.scaling.lerp(&other.scaling, t) }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Orientation {
-    Euler(Vector3<f64>),
-    Quaternion(Quaternion<f64>),
+    Euler(Vector3<f32>),
+    Quaternion(Quaternion<f32>),
 }
 
 impl Orientation {
-    pub fn interpolate(&self, other: &Orientation, t: f64) -> Orientation {
+    pub fn interpolate(&self, other: &Orientation, t: f32) -> Orientation {
         match self {
             Orientation::Euler(e) => {
                 if let Orientation::Euler(o) = other {
@@ -55,6 +55,12 @@ impl Orientation {
 impl Default for Orientation {
     fn default() -> Self {
         Self::Euler(Vector3::default())
+    }
+}
+
+impl From<(f32, f32, f32)> for Orientation {
+    fn from(value: (f32, f32, f32)) -> Self {
+        Self::Euler(vector![value.0, value.1, value.2])
     }
 }
 
