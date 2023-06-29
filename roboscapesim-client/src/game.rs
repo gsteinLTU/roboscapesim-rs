@@ -16,6 +16,7 @@ pub(crate) struct Game {
     pub(crate) last_state_server_time: Rc<RefCell<f64>>,
     pub(crate) state_time: Rc<RefCell<f64>>,
     pub(crate) last_state_time: Rc<RefCell<f64>>,
+    pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
 }
 
 impl Game {
@@ -35,10 +36,21 @@ impl Game {
 
         // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions
         // Add lights to the scene
-        HemisphericLight::new("light1", Vector3::new(1.0, 1.0, 0.0), &scene.borrow());
+        let sun = DirectionalLight::new("light", Vector3::new(0.25, -1.0, 0.1), &scene.borrow());
         PointLight::new("light2", Vector3::new(0.0, 1.0, -1.0), &scene.borrow());
 
+        let shadow_generator = Rc::new(CascadedShadowGenerator::new(1024.0, &sun));
+        shadow_generator.set_bias(0.007);
+        shadow_generator.set_cascade_blend_percentage(0.15);
+        shadow_generator.set_lambda(0.9);
+        shadow_generator.set_stabilize_cascades(true);
+        shadow_generator.set_filtering_quality(1.0);
+        shadow_generator.set_filter(6.0);
+        shadow_generator.set_frustum_edge_falloff(1.0);
+        shadow_generator.set_shadow_max_z(50.0);
+        
         neo_babylon::api::setup_vr_experience(&scene.borrow());
+
         Game {
             scene,
             models: DashMap::new(),
@@ -48,6 +60,7 @@ impl Game {
             last_state_time: Rc::new(RefCell::new(0.0)),
             state_server_time: Rc::new(RefCell::new(0.0)),
             last_state_server_time: Rc::new(RefCell::new(0.0)),
+            shadow_generator,
         }
     }
 

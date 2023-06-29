@@ -128,6 +128,8 @@ pub async fn connect() {
                                             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
                                             material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
                                             m.set_material(&material);
+                                            m.set_receive_shadows(true);
+                                            game.borrow().shadow_generator.add_shadow_caster(&m, true);
                                             apply_transform(m.clone(), obj.transform);
                                             game.borrow().models.insert(obj.name.to_owned(), m.clone());
                                             console::log_1(&format!("Created box").into());
@@ -141,6 +143,7 @@ pub async fn connect() {
                                             let obj = Arc::new(obj.clone());
                                             wasm_bindgen_futures::spawn_local(async move {
                                                 let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                                                game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                                                 apply_transform(m.clone(), obj.transform);
                                                 game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
                                                 console::log_1(&format!("Created mesh").into());

@@ -14,7 +14,7 @@ js-sys = "0.3.63"
 web-sys = { version = "0.3.64", features = ["console", "Performance", "PerformanceTiming"] }
 getrandom = { version = "0.2", features = ["js"] }
 roboscapesim-common = { path = "../roboscapesim-common" }
-neo-babylon = "0.1.6"
+neo-babylon = "0.1.7"
 cyberdeck-client-web-sys = { version = "0.1.0" }
 netsblox-extension-macro = "0.1"
 netsblox-extension-util = "^0.1.2"

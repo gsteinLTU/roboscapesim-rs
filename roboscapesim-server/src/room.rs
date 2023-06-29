@@ -122,13 +122,22 @@ impl RoomData {
 
         /* Create the bounding ball. */
         let rigid_body = RigidBodyBuilder::dynamic()
-            .ccd_enabled(true)
-            .translation(vector![0.0, 10.0, 0.0])
-            .build();
-        let collider = ColliderBuilder::ball(0.5).restitution(0.7).build();
+        .ccd_enabled(true)
+        .translation(vector![0.0, 10.0, 0.0])
+        .build();
+        let collider = ColliderBuilder::ball(0.5).restitution(0.4).build();
         let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
         obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
         obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
+        
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .ccd_enabled(true)
+            .translation(vector![0.1, 1.5, 0.0])
+            .build();
+        let collider = ColliderBuilder::ball(0.5).restitution(0.6).build();
+        let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
+        obj.sim.rigid_body_labels.insert("ball2".into(), ball_body_handle);
         // Setup test room
         /*obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
@@ -138,10 +147,16 @@ impl RoomData {
             updated: true,
         });*/
 
-        let ball_body = &obj.sim.rigid_body_set[ball_body_handle];
         obj.objects.insert("ball".into(), ObjectData {
             name: "ball".into(),
-            transform: Transform { position: ball_body.translation().to_owned(), ..Default::default() },
+            transform: Transform { ..Default::default() },
+            visual_info: VisualInfo::Mesh("sphere.glb".into()),
+            is_kinematic: false,
+            updated: true,
+        });
+        obj.objects.insert("ball2".into(), ObjectData {
+            name: "ball2".into(),
+            transform: Transform { ..Default::default() },
             visual_info: VisualInfo::Mesh("sphere.glb".into()),
             is_kinematic: false,
             updated: true,
