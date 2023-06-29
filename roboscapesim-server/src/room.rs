@@ -1,19 +1,24 @@
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
-use nalgebra::vector;
-use rand::{Rng};
+use derivative::Derivative;
+use log::{error, info};
+use nalgebra::{vector, Vector3};
+use rand::Rng;
+use rapier3d::prelude::{
+    BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
+    IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, RigidBodyHandle, QueryPipeline,
+};
 use roboscapesim_common::*;
-use log::{info, error};
 use serde::Serialize;
 
-#[path ="./util/mod.rs"]
+#[path = "./util/mod.rs"]
 mod util;
 use util::extra_rand::UpperHexadecimal;
 
 use crate::CLIENTS;
 
-
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 /// Holds the data for a single room
 pub struct RoomData {
     pub objects: DashMap<String, ObjectData>,
@@ -26,11 +31,74 @@ pub struct RoomData {
     pub visitors: DashSet<String>,
     pub last_full_update: i64,
     pub roomtime: f64,
+    #[derivative(Debug = "ignore")]
+    pub sim: Simulation,
+}
+
+pub struct Simulation {
+    pub rigid_body_set: RigidBodySet,
+    pub collider_set: ColliderSet,
+    pub gravity: Vector3<f32>,
+    pub integration_parameters: IntegrationParameters,
+    pub physics_pipeline: PhysicsPipeline,
+    pub island_manager: IslandManager,
+    pub broad_phase: BroadPhase,
+    pub narrow_phase: NarrowPhase,
+    pub impulse_joint_set: ImpulseJointSet,
+    pub multibody_joint_set: MultibodyJointSet,
+    pub ccd_solver: CCDSolver,
+    pub query_pipeline: QueryPipeline,
+    pub physics_hooks: (),
+    pub event_handler: (),
+}
+
+impl Simulation {
+    fn new() -> Simulation {
+        Simulation {
+            rigid_body_set: RigidBodySet::new(),
+            collider_set: ColliderSet::new(),
+            gravity: vector![0.0, -9.81, 0.0],
+            integration_parameters: IntegrationParameters { max_ccd_substeps: 4, ..Default::default() },
+            physics_pipeline: PhysicsPipeline::new(),
+            island_manager: IslandManager::new(),
+            broad_phase: BroadPhase::new(),
+            narrow_phase: NarrowPhase::new(),
+            impulse_joint_set: ImpulseJointSet::new(),
+            multibody_joint_set: MultibodyJointSet::new(),
+            ccd_solver: CCDSolver::new(),
+            query_pipeline: QueryPipeline::new(),
+            physics_hooks: (),
+            event_handler: (),
+        }
+    }
+
+    fn update(&mut self, delta_time: f64) {
+        // Update dt
+        self.integration_parameters.dt = delta_time as f32;
+        
+        // Run physics
+        self.physics_pipeline.step(
+            &self.gravity,
+            &self.integration_parameters,
+            &mut self.island_manager,
+            &mut self.broad_phase,
+            &mut self.narrow_phase,
+            &mut self.rigid_body_set,
+            &mut self.collider_set,
+            &mut self.impulse_joint_set,
+            &mut self.multibody_joint_set,
+            &mut self.ccd_solver,
+            None,
+            &self.physics_hooks,
+            &self.event_handler,
+          );    
+          self.query_pipeline.update(&self.rigid_body_set, &self.collider_set);
+    }
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>) -> RoomData {
-        let obj = RoomData {
+        let mut obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
@@ -40,27 +108,40 @@ impl RoomData {
             sockets: DashMap::new(),
             visitors: DashSet::new(),
             last_full_update: 0,
-            roomtime: 0.0
+            roomtime: 0.0,
+            sim: Simulation::new(),
         };
 
         info!("Room {} created", obj.name);
 
+        /* Create the ground. */
+        let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
+        obj.sim.collider_set.insert(collider);
 
-        // Setup test room
-        obj.objects.insert("robot".into(), ObjectData { 
-            name: "robot".into(),
-            transform: Transform { ..Default::default() }, 
-            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
-            is_kinematic: false,
-            updated: true, 
-        });
-        obj.objects.insert("ground".into(), ObjectData { 
-            name: "ground".into(),
-            transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() }, 
-            visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
-            is_kinematic: true,
-            updated: true, 
-        });
+        /* Create the bounding ball. */
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .ccd_enabled(true)
+            .translation(vector![0.0, 10.0, 0.0])
+            .build();
+        let collider = ColliderBuilder::ball(0.5).restitution(0.7).build();
+        let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
+
+        // // Setup test room
+        // obj.objects.insert("robot".into(), ObjectData {
+        //     name: "robot".into(),
+        //     transform: Transform { ..Default::default() },
+        //     visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
+        //     is_kinematic: false,
+        //     updated: true,
+        // });
+        // obj.objects.insert("ground".into(), ObjectData {
+        //     name: "ground".into(),
+        //     transform: Transform { scaling: vector![100.0, 0.05, 100.0], position: vector![0.0, -0.095, 0.0], ..Default::default() },
+        //     visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
+        //     is_kinematic: true,
+        //     updated: true,
+        // });
 
         obj
     }
@@ -70,7 +151,7 @@ impl RoomData {
         let msg = serde_json::to_string(val).unwrap();
         let client = CLIENTS.get(&client_id);
 
-        if let Some(client) = client { 
+        if let Some(client) = client {
             return client.value().send_text(msg).await.unwrap_or_default();
         } else {
             error!("Client {} not found!", client_id);
@@ -80,15 +161,32 @@ impl RoomData {
 
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
-            self.send_to_client(&UpdateMessage::Update(self.roomtime, true, self.objects.clone()), client).await;
+            self.send_to_client(
+                &UpdateMessage::Update(self.roomtime, true, self.objects.clone()),
+                client,
+            )
+            .await;
         } else {
-            self.send_to_client(&UpdateMessage::Update(self.roomtime, false, self.objects.iter().filter(|mvp| mvp.value().updated).map(|mvp| (mvp.key().clone(), mvp.value().clone())).collect::<DashMap<String, ObjectData>>()), client).await;
+            self.send_to_client(
+                &UpdateMessage::Update(
+                    self.roomtime,
+                    false,
+                    self.objects
+                        .iter()
+                        .filter(|mvp| mvp.value().updated)
+                        .map(|mvp| (mvp.key().clone(), mvp.value().clone()))
+                        .collect::<DashMap<String, ObjectData>>(),
+                ),
+                client,
+            )
+            .await;
         }
     }
-    
+
     pub async fn send_state_to_all_clients(&self, full_update: bool) {
         for client in &self.sockets {
-            self.send_state_to_client(full_update, client.value().to_owned()).await;
+            self.send_state_to_client(full_update, client.value().to_owned())
+                .await;
         }
     }
 
@@ -111,6 +209,14 @@ impl RoomData {
         }
 
         let time = Utc::now().timestamp();
+
+        self.sim.update(delta_time);
+
+        let ball_body = self.sim.rigid_body_set.get_unknown_gen(0).unwrap().0;
+        println!(
+          "Ball altitude: {}",
+          ball_body.translation().y
+        );
 
         self.roomtime += delta_time;
 
