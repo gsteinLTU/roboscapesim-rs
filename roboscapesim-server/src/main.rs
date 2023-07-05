@@ -43,7 +43,7 @@ async fn main() {
     let server = axum::Server::bind(&addr)
         .serve(app.into_make_service());
 
-    let update_fps = 5;
+    let update_fps = 30;
 
     let _update_loop = task::spawn(async move {
         let mut interval = time::interval(Duration::from_millis(1000 / update_fps));

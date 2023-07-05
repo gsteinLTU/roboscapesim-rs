@@ -1,3 +1,6 @@
+use std::time::Duration;
+use std::time::Instant;
+
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
@@ -31,6 +34,7 @@ pub struct RoomData {
     pub hibernating: bool,
     pub sockets: DashMap<String, u128>,
     pub visitors: DashSet<String>,
+    pub last_update: Instant,
     pub last_full_update: i64,
     pub roomtime: f64,
     #[derivative(Debug = "ignore")]
@@ -61,7 +65,7 @@ impl Simulation {
             rigid_body_set: RigidBodySet::new(),
             collider_set: ColliderSet::new(),
             gravity: vector![0.0, -9.81, 0.0],
-            integration_parameters: IntegrationParameters { max_ccd_substeps: 4, ..Default::default() },
+            integration_parameters: IntegrationParameters { max_ccd_substeps: 8, max_stabilization_iterations: 2, ..Default::default() },
             physics_pipeline: PhysicsPipeline::new(),
             island_manager: IslandManager::new(),
             broad_phase: BroadPhase::new(),
@@ -114,13 +118,19 @@ impl RoomData {
             last_full_update: 0,
             roomtime: 0.0,
             sim: Simulation::new(),
+            last_update: Instant::now(),
         };
 
         info!("Room {} created", obj.name);
 
         /* Create the ground. */
-        let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
-        obj.sim.collider_set.insert(collider);
+        // let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
+        // obj.sim.collider_set.insert(collider);
+
+        let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
+        let floor_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0);
+        obj.sim.collider_set.insert_with_parent(collider, floor_handle, &mut obj.sim.rigid_body_set);
 
         // /* Create the bounding ball. */
         // let rigid_body = RigidBodyBuilder::dynamic()
@@ -257,9 +267,14 @@ impl RoomData {
         self.roomtime += delta_time;
 
         if time - self.last_full_update < 60 {
-            self.send_state_to_all_clients(false).await;
+            if (Instant::now() - self.last_update) > Duration::from_millis(100) {
+                self.send_state_to_all_clients(false).await;
+                self.last_update = Instant::now();
+            }
         } else {
             self.send_state_to_all_clients(true).await;
+            self.last_update = Instant::now();
+            self.last_full_update = time;
         }
     }
 }

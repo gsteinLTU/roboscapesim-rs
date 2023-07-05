@@ -38,11 +38,12 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
     let hh = 0.03 * scale;
     let hd = 0.04 * scale;
 
-    let box_center: Point3<f32> = Point3::new(0.0, 1.1 + hh * 2.0, 0.0);
+    let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
     let rigid_body = RigidBodyBuilder::dynamic()
         .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
         .linear_damping(2.0)
-        .angular_damping(2.0);
+        .angular_damping(2.0)
+        .ccd_enabled(true);
     
     let vehicle_handle = sim.rigid_body_set.insert(rigid_body);
     
@@ -74,7 +75,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
                     wheel_pos_in_world.x,
                     wheel_pos_in_world.y,
                     wheel_pos_in_world.z
-                ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0])
+                ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0]).ccd_enabled(true)
         );
 
         let collider = ColliderBuilder::cylinder(0.01  * scale, 0.03  * scale).friction(0.8).density(10.0);
@@ -115,7 +116,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
                     wheel_pos_in_world.x,
                     wheel_pos_in_world.y,
                     wheel_pos_in_world.z
-                ])
+                ]).ccd_enabled(true)
         );
 
         let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.2);
