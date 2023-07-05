@@ -15,7 +15,9 @@ use serde::Serialize;
 mod util;
 use util::extra_rand::UpperHexadecimal;
 
+use crate::robot;
 use crate::CLIENTS;
+use crate::robot::create_robot_body;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -120,24 +122,24 @@ impl RoomData {
         let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
         obj.sim.collider_set.insert(collider);
 
-        /* Create the bounding ball. */
-        let rigid_body = RigidBodyBuilder::dynamic()
-        .ccd_enabled(true)
-        .translation(vector![0.0, 10.0, 0.0])
-        .build();
-        let collider = ColliderBuilder::ball(0.5).restitution(0.4).build();
-        let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
-        obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
+        // /* Create the bounding ball. */
+        // let rigid_body = RigidBodyBuilder::dynamic()
+        // .ccd_enabled(true)
+        // .translation(vector![0.0, 10.0, 0.0])
+        // .build();
+        // let collider = ColliderBuilder::ball(0.5).restitution(0.4).build();
+        // let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        // obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
+        // obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
         
-        let rigid_body = RigidBodyBuilder::dynamic()
-            .ccd_enabled(true)
-            .translation(vector![0.1, 1.5, 0.0])
-            .build();
-        let collider = ColliderBuilder::ball(0.5).restitution(0.6).build();
-        let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
-        obj.sim.rigid_body_labels.insert("ball2".into(), ball_body_handle);
+        // let rigid_body = RigidBodyBuilder::dynamic()
+        //     .ccd_enabled(true)
+        //     .translation(vector![0.1, 1.5, 0.0])
+        //     .build();
+        // let collider = ColliderBuilder::ball(0.5).restitution(0.6).build();
+        // let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        // obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
+        // obj.sim.rigid_body_labels.insert("ball2".into(), ball_body_handle);
         // Setup test room
         /*obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
@@ -147,20 +149,31 @@ impl RoomData {
             updated: true,
         });*/
 
-        obj.objects.insert("ball".into(), ObjectData {
-            name: "ball".into(),
+        // Create robot
+        let robot = create_robot_body(&mut obj.sim);
+        obj.sim.rigid_body_labels.insert("robot".into(), robot.body_handle);
+        obj.objects.insert("robot".into(), ObjectData {
+            name: "robot".into(),
             transform: Transform { ..Default::default() },
-            visual_info: VisualInfo::Mesh("sphere.glb".into()),
+            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
             is_kinematic: false,
             updated: true,
         });
-        obj.objects.insert("ball2".into(), ObjectData {
-            name: "ball2".into(),
-            transform: Transform { ..Default::default() },
-            visual_info: VisualInfo::Mesh("sphere.glb".into()),
-            is_kinematic: false,
-            updated: true,
-        });
+
+        // obj.objects.insert("ball".into(), ObjectData {
+        //     name: "ball".into(),
+        //     transform: Transform { ..Default::default() },
+        //     visual_info: VisualInfo::Mesh("sphere.glb".into()),
+        //     is_kinematic: false,
+        //     updated: true,
+        // });
+        // obj.objects.insert("ball2".into(), ObjectData {
+        //     name: "ball2".into(),
+        //     transform: Transform { ..Default::default() },
+        //     visual_info: VisualInfo::Mesh("sphere.glb".into()),
+        //     is_kinematic: false,
+        //     updated: true,
+        // });
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
             transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: vector![0.0, -0.05, 0.0], ..Default::default() },

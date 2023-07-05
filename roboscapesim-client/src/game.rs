@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::{RefCell, Cell}, rc::Rc};
 
 use dashmap::DashMap;
 use neo_babylon::prelude::*;
@@ -12,10 +12,10 @@ pub(crate) struct Game {
     pub(crate) models: DashMap<String, Rc<BabylonMesh>>,
     pub(crate) state: DashMap<String, ObjectData>,
     pub(crate) last_state: DashMap<String, ObjectData>,
-    pub(crate) state_server_time: Rc<RefCell<f64>>,
-    pub(crate) last_state_server_time: Rc<RefCell<f64>>,
-    pub(crate) state_time: Rc<RefCell<f64>>,
-    pub(crate) last_state_time: Rc<RefCell<f64>>,
+    pub(crate) state_server_time: Rc<Cell<f64>>,
+    pub(crate) last_state_server_time: Rc<Cell<f64>>,
+    pub(crate) state_time: Rc<Cell<f64>>,
+    pub(crate) last_state_time: Rc<Cell<f64>>,
     pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
 }
 
@@ -48,7 +48,7 @@ impl Game {
         shadow_generator.set_filter(6.0);
         shadow_generator.set_frustum_edge_falloff(1.0);
         shadow_generator.set_shadow_max_z(50.0);
-        
+
         neo_babylon::api::setup_vr_experience(&scene.borrow());
 
         Game {
@@ -56,10 +56,10 @@ impl Game {
             models: DashMap::new(),
             state: DashMap::new(),
             last_state: DashMap::new(),
-            state_time: Rc::new(RefCell::new(0.0)),
-            last_state_time: Rc::new(RefCell::new(0.0)),
-            state_server_time: Rc::new(RefCell::new(0.0)),
-            last_state_server_time: Rc::new(RefCell::new(0.0)),
+            state_time: Rc::new(Cell::new(0.0)),
+            last_state_time: Rc::new(Cell::new(0.0)),
+            state_server_time: Rc::new(Cell::new(0.0)),
+            last_state_server_time: Rc::new(Cell::new(0.0)),
             shadow_generator,
         }
     }

@@ -4,6 +4,7 @@ use chrono::Utc;
 use cyberdeck::*;
 mod room;
 use room::RoomData;
+mod robot;
 use simple_logger::SimpleLogger;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{time::{sleep, Duration, self}, task, sync::Mutex};
