@@ -5,8 +5,10 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info};
+use nalgebra::Quaternion;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
+use rapier3d::prelude::Isometry;
 use rapier3d::prelude::{
     BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, QueryPipeline, RigidBodyHandle,
@@ -18,7 +20,6 @@ use serde::Serialize;
 mod util;
 use util::extra_rand::UpperHexadecimal;
 
-use crate::robot;
 use crate::CLIENTS;
 use crate::robot::RobotData;
 use crate::robot::create_robot_body;
@@ -149,12 +150,21 @@ impl RoomData {
         
         // let rigid_body = RigidBodyBuilder::dynamic()
         //     .ccd_enabled(true)
-        //     .translation(vector![0.1, 1.5, 0.0])
+        //     .translation(vector![0.2, 2.5, 0.0])
+        //     .rotation(vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0])
         //     .build();
-        // let collider = ColliderBuilder::ball(0.5).restitution(0.6).build();
-        // let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        // obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
-        // obj.sim.rigid_body_labels.insert("ball2".into(), ball_body_handle);
+        // let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5).restitution(0.3).build();
+        // let cube_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        // obj.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut obj.sim.rigid_body_set);
+        // obj.sim.rigid_body_labels.insert("cube".into(), cube_body_handle);
+        // obj.objects.insert("cube".into(), ObjectData {
+        //     name: "cube".into(),
+        //     transform: Transform { ..Default::default() },
+        //     visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
+        //     is_kinematic: false,
+        //     updated: true,
+        // });
+
         // Setup test room
         /*obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
@@ -175,6 +185,20 @@ impl RoomData {
             updated: true,
         });
         setup_robot_socket(&mut robot);
+        
+        let mut i = 0;
+        for wheel in &robot.wheel_bodies {
+            obj.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
+            obj.objects.insert(format!("wheel_{}", i).into(), ObjectData {
+                name: format!("wheel_{}", i).into(),
+                transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
+                visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
+                is_kinematic: false,
+                updated: true,
+            });
+            i += 1;
+        }
+
         obj.robots.insert("robot".to_string(), robot);
 
         // obj.objects.insert("ball".into(), ObjectData {

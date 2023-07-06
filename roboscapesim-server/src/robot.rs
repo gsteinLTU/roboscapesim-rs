@@ -13,6 +13,7 @@ use crate::room::Simulation;
 pub struct RobotData {
     pub body_handle: RigidBodyHandle,
     pub wheel_joints: Vec<MultibodyJointHandle>,
+    pub wheel_bodies: Vec<RigidBodyHandle>,
     pub socket: Option<UdpSocket>,
     pub speed_l: f32,
     pub speed_r: f32,
@@ -50,7 +51,8 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
         .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
         .linear_damping(2.0)
         .angular_damping(2.0)
-        .ccd_enabled(true);
+        .ccd_enabled(true)
+        .can_sleep(false);
     
     let vehicle_handle = sim.rigid_body_set.insert(rigid_body);
     
@@ -69,6 +71,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
     ];
 
 
+    let mut wheel_bodies: Vec<RigidBodyHandle> = vec![];
     let mut wheel_joints: Vec<MultibodyJointHandle> = vec![];
 
     for pos in wheel_positions {
@@ -82,14 +85,14 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
                     wheel_pos_in_world.x,
                     wheel_pos_in_world.y,
                     wheel_pos_in_world.z
-                ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0]).ccd_enabled(true)
+                ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
         );
 
         let collider = ColliderBuilder::cylinder(0.01  * scale, 0.03  * scale).friction(0.8).density(10.0);
         //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
         sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set);
 
-        let mut joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
+        let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
             .local_anchor1(pos)
             .local_anchor2(point![0.0, 0.01 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
             .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![3.14159 / 2.0, 0.0, 0.0]))
@@ -109,6 +112,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
             
         //impulse_joints.insert(vehicle_handle, wheel_rb, joint, true);
         wheel_joints.push(sim.multibody_joint_set.insert(vehicle_handle, wheel_rb, joint, true).unwrap());
+        wheel_bodies.push(wheel_rb);
     }
 
 
@@ -124,6 +128,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
                     wheel_pos_in_world.y,
                     wheel_pos_in_world.z
                 ]).ccd_enabled(true)
+                .can_sleep(false)
         );
 
         let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.2);
@@ -140,6 +145,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
     RobotData { 
         body_handle: vehicle_handle,
         wheel_joints,
+        wheel_bodies,
         socket: None,
         speed_l: 0.0,
         speed_r: 0.0,
@@ -151,10 +157,10 @@ pub fn setup_robot_socket(robot: &mut RobotData) {
     let server = "52.73.65.98";
     let mut socket = UdpSocket::bind("0.0.0.0:0").unwrap();
 
-    socket.connect(server.to_owned() + ":1973");
+    socket.connect(server.to_owned() + ":1973").expect("Failed to connect");
 
-    socket.set_read_timeout(Some(Duration::from_millis(1)));
-    socket.set_write_timeout(Some(Duration::from_millis(1)));
+    socket.set_read_timeout(Some(Duration::from_millis(1))).expect("Failed to set timeout");
+    socket.set_write_timeout(Some(Duration::from_millis(1))).expect("Failed to set timeout");
     
     if let Err(e) = send_roboscape_message(&mut socket, b"I") {
         panic!("{}", e);
@@ -168,7 +174,7 @@ pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, dt: f64){
         return;
     }
 
-    let body = sim.rigid_body_set.get_mut(robot.body_handle).unwrap();
+    //let body = sim.rigid_body_set.get_mut(robot.body_handle).unwrap();
     let mut buf = [0 as u8; 512];
     
     //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_l,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,1.0]), true);
