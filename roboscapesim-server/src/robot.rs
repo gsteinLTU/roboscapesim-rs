@@ -116,9 +116,7 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
     }
 
 
-    for pos in ball_wheel_positions {
-        //vehicle.add_wheel(pos, -Vector::y(), Vector::z(), hh, hh / 4.0, &tuning);
-        
+    for pos in ball_wheel_positions {        
         let wheel_pos_in_world = Point3::new(box_center.x + pos.x, box_center.y + pos.y, box_center.z + pos.z);
 
         let wheel_rb = sim.rigid_body_set.insert(
@@ -174,18 +172,12 @@ pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, dt: f64){
         return;
     }
 
-    //let body = sim.rigid_body_set.get_mut(robot.body_handle).unwrap();
-    let mut buf = [0 as u8; 512];
-    
-    //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_l,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,1.0]), true);
-    //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_r,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,-1.0]), true);
-    
-    //body.set_translation(body.translation() + vector![1.0,0.0,0.0], true)
-    //body.apply_impulse_at_point(body.position().transform_vector(&vector!(10.0,0.0,0.0)), Point3::from(body.position().transform_point(&point!(0.0,0.0,0.1))), true);
+    // TODO: Send heartbeat periodically
+
+    let mut buf = [0u8; 512];
     let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
 
     if size > 0 {
-        //dbg!(&buf);
         match &buf[0] {
             b'D' => { 
                 info!("OnDrive");

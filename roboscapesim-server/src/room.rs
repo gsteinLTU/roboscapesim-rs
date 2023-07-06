@@ -5,10 +5,8 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info};
-use nalgebra::Quaternion;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
-use rapier3d::prelude::Isometry;
 use rapier3d::prelude::{
     BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, QueryPipeline, RigidBodyHandle,
@@ -295,7 +293,7 @@ impl RoomData {
                 let handle = get.value();
                 let body = self.sim.rigid_body_set.get(*handle).unwrap();
                 let old_transform = o.value().transform;
-                o.value_mut().transform = Transform { position: body.translation().clone(), rotation: body.rotation().euler_angles().into(), scaling: old_transform.scaling };
+                o.value_mut().transform = Transform { position: body.translation().clone(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
             }
         }
 
