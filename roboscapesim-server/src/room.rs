@@ -20,7 +20,10 @@ use util::extra_rand::UpperHexadecimal;
 
 use crate::robot;
 use crate::CLIENTS;
+use crate::robot::RobotData;
 use crate::robot::create_robot_body;
+use crate::robot::robot_update;
+use crate::robot::setup_robot_socket;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -37,6 +40,7 @@ pub struct RoomData {
     pub last_update: Instant,
     pub last_full_update: i64,
     pub roomtime: f64,
+    pub robots: DashMap<String, RobotData>,
     #[derivative(Debug = "ignore")]
     pub sim: Simulation,
 }
@@ -119,6 +123,7 @@ impl RoomData {
             roomtime: 0.0,
             sim: Simulation::new(),
             last_update: Instant::now(),
+            robots: DashMap::new(),
         };
 
         info!("Room {} created", obj.name);
@@ -160,7 +165,7 @@ impl RoomData {
         });*/
 
         // Create robot
-        let robot = create_robot_body(&mut obj.sim);
+        let mut robot = create_robot_body(&mut obj.sim);
         obj.sim.rigid_body_labels.insert("robot".into(), robot.body_handle);
         obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
@@ -169,6 +174,8 @@ impl RoomData {
             is_kinematic: false,
             updated: true,
         });
+        setup_robot_socket(&mut robot);
+        obj.robots.insert("robot".to_string(), robot);
 
         // obj.objects.insert("ball".into(), ObjectData {
         //     name: "ball".into(),
@@ -250,6 +257,10 @@ impl RoomData {
 
     pub async fn update(&mut self, delta_time: f64) {
         let time = Utc::now().timestamp();
+
+        for mut robot in self.robots.iter_mut() {
+            robot_update(robot.value_mut(), &mut self.sim, delta_time);
+        }
 
         self.sim.update(delta_time);
 

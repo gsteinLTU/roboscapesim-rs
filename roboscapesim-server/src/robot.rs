@@ -1,14 +1,21 @@
 use std::net::UdpSocket;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
+use derivative::Derivative;
+use log::info;
 use nalgebra::Point3;
 use rapier3d::prelude::*;
 
 use crate::room::Simulation;
 
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct RobotData {
     pub body_handle: RigidBodyHandle,
     pub wheel_joints: Vec<MultibodyJointHandle>,
+    pub socket: Option<UdpSocket>,
+    pub speed_l: f32,
+    pub speed_r: f32,
 }
 
 pub fn send_roboscape_message(socket: &mut UdpSocket, message: &[u8]) -> Result<usize, std::io::Error> {
@@ -133,13 +140,16 @@ pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
     RobotData { 
         body_handle: vehicle_handle,
         wheel_joints,
+        socket: None,
+        speed_l: 0.0,
+        speed_r: 0.0,
     }
 }
 
-pub fn setup_robot_socket(robot: &RobotData) {
-    let server = "127.0.0.1";
-    //let server = "52.73.65.98";
-    let mut socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+pub fn setup_robot_socket(robot: &mut RobotData) {
+    //let server = "127.0.0.1";
+    let server = "52.73.65.98";
+    let mut socket = UdpSocket::bind("0.0.0.0:0").unwrap();
 
     socket.connect(server.to_owned() + ":1973");
 
@@ -150,65 +160,63 @@ pub fn setup_robot_socket(robot: &RobotData) {
         panic!("{}", e);
     }
 
-    let mut speed_l = 0.0;
-    let mut speed_r = 0.0;
+    robot.socket = Some(socket);
+}
 
+pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, dt: f64){
+    if robot.socket.is_none() {
+        return;
+    }
+
+    let body = sim.rigid_body_set.get_mut(robot.body_handle).unwrap();
     let mut buf = [0 as u8; 512];
+    
+    //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_l,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,1.0]), true);
+    //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_r,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,-1.0]), true);
+    
+    //body.set_translation(body.translation() + vector![1.0,0.0,0.0], true)
+    //body.apply_impulse_at_point(body.position().transform_vector(&vector!(10.0,0.0,0.0)), Point3::from(body.position().transform_point(&point!(0.0,0.0,0.1))), true);
+    let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
 
-    let update_callback = |sim: &mut Simulation, dt: f64| {
-        let body = sim.rigid_body_set.get_mut(robot.body_handle).unwrap();
-        
-        //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_l,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,1.0]), true);
-        //body.add_force_at_point(physics_state.integration_parameters.dt * (body.rotation() * vector![speed_r,0.0,0.0]), body.position().transform_point(&point![0.0,0.0,-1.0]), true);
-        
-        //body.set_translation(body.translation() + vector![1.0,0.0,0.0], true)
-        //body.apply_impulse_at_point(body.position().transform_vector(&vector!(10.0,0.0,0.0)), Point3::from(body.position().transform_point(&point!(0.0,0.0,0.1))), true);
-        let size = socket.recv(&mut buf).unwrap_or_default();
+    if size > 0 {
+        //dbg!(&buf);
+        match &buf[0] {
+            b'D' => { 
+                info!("OnDrive");
+            },
+            b'S' => { 
+                info!("OnSetSpeed");
+                let left = i16::from_le_bytes([buf[1], buf[2]]);
+                let right = i16::from_le_bytes([buf[3], buf[4]]);
 
-        if size > 0 {
-            //dbg!(&buf);
-            match &buf[0] {
-                b'D' => { 
-                    println!("OnDrive");
-                },
-                b'S' => { 
-                    println!("OnSetSpeed");
-                    let left = i16::from_le_bytes([buf[1], buf[2]]);
-                    let right = i16::from_le_bytes([buf[3], buf[4]]);
-
-                    speed_l = -left as f32 / 32.0;
-                    speed_r = -right as f32 / 32.0;
-                     
-
-                    // for link in physics_state.multibody_joints.get_mut(wheeljoints[0]).unwrap().0.links() {
-                    //     dbg!(link.joint);
-                    // }
-                    
-                    let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
-                    joint1.joint.data.set_motor_velocity(JointAxis::AngZ, speed_l, 4.0);
-                    
-                    let joint2 = sim.multibody_joint_set.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
-                    joint2.joint.data.set_motor_velocity(JointAxis::AngZ, speed_r, 4.0);
-                    
-                },
-                b'B' => { 
-                    println!("OnBeep");
-                },
-                b'L' => { 
-                    println!("OnSetLED");
-                },
-                b'R' => { 
-                    println!("OnGetRange");
-                },
-                b'T' => { 
-                    println!("OnGetTicks");
-                },
-                b'n' => { 
-                    println!("OnSetNumeric");
-                },
-                _ => {}
-            }
-            
+                robot.speed_l = -left as f32 / 32.0;
+                robot.speed_r = -right as f32 / 32.0;
+                
+                info!("{:?}", robot);
+                
+                let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
+                joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
+                
+                let joint2 = sim.multibody_joint_set.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
+                joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_r, 4.0);
+                
+            },
+            b'B' => { 
+                info!("OnBeep");
+            },
+            b'L' => { 
+                info!("OnSetLED");
+            },
+            b'R' => { 
+                info!("OnGetRange");
+            },
+            b'T' => { 
+                info!("OnGetTicks");
+            },
+            b'n' => { 
+                info!("OnSetNumeric");
+            },
+            _ => {}
         }
-    };
+    }
 }
