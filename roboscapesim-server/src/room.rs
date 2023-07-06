@@ -177,13 +177,14 @@ impl RoomData {
         obj.sim.rigid_body_labels.insert("robot".into(), robot.body_handle);
         obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
-            transform: Transform { ..Default::default() },
+            transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
             visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
             is_kinematic: false,
             updated: true,
         });
         setup_robot_socket(&mut robot);
         
+        // Wheel debug
         let mut i = 0;
         for wheel in &robot.wheel_bodies {
             obj.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());

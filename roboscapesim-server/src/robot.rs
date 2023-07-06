@@ -184,11 +184,11 @@ pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, dt: f64){
             },
             b'S' => { 
                 info!("OnSetSpeed");
-                let left = i16::from_le_bytes([buf[1], buf[2]]);
-                let right = i16::from_le_bytes([buf[3], buf[4]]);
+                let s1 = i16::from_le_bytes([buf[1], buf[2]]);
+                let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                robot.speed_l = -left as f32 / 32.0;
-                robot.speed_r = -right as f32 / 32.0;
+                robot.speed_l = -s2 as f32 / 32.0;
+                robot.speed_r = -s1 as f32 / 32.0;
                 
                 info!("{:?}", robot);
                 

@@ -6,7 +6,7 @@ use js_sys::Reflect;
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use roboscapesim_common::UpdateMessage;
-use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue};
+use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel};
 use neo_babylon::prelude::*;
 use self::util::*;
