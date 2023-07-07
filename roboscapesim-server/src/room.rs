@@ -20,9 +20,6 @@ use util::extra_rand::UpperHexadecimal;
 
 use crate::CLIENTS;
 use crate::robot::RobotData;
-use crate::robot::create_robot_body;
-use crate::robot::robot_update;
-use crate::robot::setup_robot_socket;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -173,7 +170,7 @@ impl RoomData {
         });*/
 
         // Create robot
-        let mut robot = create_robot_body(&mut obj.sim);
+        let mut robot = RobotData::create_robot_body(&mut obj.sim);
         obj.sim.rigid_body_labels.insert("robot".into(), robot.body_handle);
         obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
@@ -182,21 +179,21 @@ impl RoomData {
             is_kinematic: false,
             updated: true,
         });
-        setup_robot_socket(&mut robot);
+        RobotData::setup_robot_socket(&mut robot);
         
         // Wheel debug
-        let mut i = 0;
-        for wheel in &robot.wheel_bodies {
-            obj.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
-            obj.objects.insert(format!("wheel_{}", i).into(), ObjectData {
-                name: format!("wheel_{}", i).into(),
-                transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
-                visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
-                is_kinematic: false,
-                updated: true,
-            });
-            i += 1;
-        }
+        // let mut i = 0;
+        // for wheel in &robot.wheel_bodies {
+        //     obj.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
+        //     obj.objects.insert(format!("wheel_{}", i).into(), ObjectData {
+        //         name: format!("wheel_{}", i).into(),
+        //         transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
+        //         visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
+        //         is_kinematic: false,
+        //         updated: true,
+        //     });
+        //     i += 1;
+        // }
 
         obj.robots.insert("robot".to_string(), robot);
 
@@ -282,7 +279,7 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for mut robot in self.robots.iter_mut() {
-            robot_update(robot.value_mut(), &mut self.sim, delta_time);
+            RobotData::robot_update(robot.value_mut(), &mut self.sim, delta_time);
         }
 
         self.sim.update(delta_time);
