@@ -143,22 +143,22 @@ impl RoomData {
         // obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
         // obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
         
-        // let rigid_body = RigidBodyBuilder::dynamic()
-        //     .ccd_enabled(true)
-        //     .translation(vector![0.2, 2.5, 0.0])
-        //     .rotation(vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0])
-        //     .build();
-        // let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5).restitution(0.3).build();
-        // let cube_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        // obj.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut obj.sim.rigid_body_set);
-        // obj.sim.rigid_body_labels.insert("cube".into(), cube_body_handle);
-        // obj.objects.insert("cube".into(), ObjectData {
-        //     name: "cube".into(),
-        //     transform: Transform { ..Default::default() },
-        //     visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
-        //     is_kinematic: false,
-        //     updated: true,
-        // });
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .ccd_enabled(true)
+            .translation(vector![1.2, 2.5, 0.0])
+            .rotation(vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0])
+            .build();
+        let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5).restitution(0.3).density(0.1).build();
+        let cube_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
+        obj.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut obj.sim.rigid_body_set);
+        obj.sim.rigid_body_labels.insert("cube".into(), cube_body_handle);
+        obj.objects.insert("cube".into(), ObjectData {
+            name: "cube".into(),
+            transform: Transform { ..Default::default() },
+            visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
+            is_kinematic: false,
+            updated: true,
+        });
 
         // Setup test room
         /*obj.objects.insert("robot".into(), ObjectData {
