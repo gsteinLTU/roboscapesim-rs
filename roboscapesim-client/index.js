@@ -14,6 +14,7 @@
 
         getSettings() {
             return [
+				Extension.ExtensionSetting.createFromLocalStorage('Beeps Enabled', 'roboscape_beep', true, 'Robots can beep', 'Robots cannot beep', false)
 
             ];
         }

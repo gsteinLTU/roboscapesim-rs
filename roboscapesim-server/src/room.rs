@@ -223,7 +223,7 @@ impl RoomData {
     }
 
     /// Send a serialized object of type T to the client
-    pub async fn send_to_client<T: Serialize>(&self, val: &T, client_id: u128) -> usize {
+    pub async fn send_to_client<T: Serialize>(val: &T, client_id: u128) -> usize {
         let msg = serde_json::to_string(val).unwrap();
         let client = CLIENTS.get(&client_id);
 
@@ -235,15 +235,29 @@ impl RoomData {
         }
     }
 
+    pub async fn send_to_clients<T: Serialize>(val: &T, clients: impl Iterator<Item = u128>) {
+        let msg = serde_json::to_string(val).unwrap();
+
+        for client_id in clients {
+            let client = CLIENTS.get(&client_id);
+            
+            if let Some(client) = client {
+                client.value().send_text(&msg).await.unwrap_or_default();
+            } else {
+                error!("Client {} not found!", client_id);
+            }
+        }
+    }
+
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
-            self.send_to_client(
+            Self::send_to_client(
                 &UpdateMessage::Update(self.roomtime, true, self.objects.clone()),
                 client,
             )
             .await;
         } else {
-            self.send_to_client(
+            Self::send_to_client(
                 &UpdateMessage::Update(
                     self.roomtime,
                     false,
@@ -279,7 +293,7 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for mut robot in self.robots.iter_mut() {
-            RobotData::robot_update(robot.value_mut(), &mut self.sim, delta_time);
+            RobotData::robot_update(robot.value_mut(), &mut self.sim, &self.sockets, delta_time).await;
         }
 
         self.sim.update(delta_time);

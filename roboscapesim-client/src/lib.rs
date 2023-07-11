@@ -2,12 +2,12 @@
 mod util;
 mod game;
 
-use js_sys::Reflect;
+use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use roboscapesim_common::UpdateMessage;
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{console, RtcPeerConnection, RtcDataChannel};
+use web_sys::{console, RtcPeerConnection, RtcDataChannel, window};
 use neo_babylon::prelude::*;
 use self::util::*;
 use self::game::*;
@@ -70,7 +70,7 @@ async fn main() {
         game.borrow().scene.borrow().add_before_render_observable(before_render);
     });
     
-    console::log_1(&"RoboScape Online loaded!".to_owned().into());
+    console_log!("RoboScape Online loaded!");
     connect().await;
 }
 
@@ -82,15 +82,25 @@ pub fn show_3d_view() {
     f.call1(&JsValue::NULL, &dialog).unwrap();
 }
 
+#[netsblox_extension_setting]
+const BEEPS_ENABLED: ExtensionSetting = ExtensionSetting { 
+    name: "Beeps Enabled", 
+    id: "roboscape_beep", 
+    default_value: true,
+    on_hint: "Robots can beep", 
+    off_hint: "Robots cannot beep", 
+    hidden: false
+};
+
 pub async fn connect() {
     let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
     let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
     
     let onclose = Closure::<dyn Fn()>::new(|| {
-        console::log_1(&"sendChannel has closed".into());
+        console_log!("sendChannel has closed");
     });
     let onopen = Closure::<dyn Fn()>::new(|| {
-        console::log_1(&"sendChannel has opened".into());
+        console_log!("sendChannel has opened");
     });
     
     let send_channel_clone = send_channel.clone();
@@ -98,78 +108,9 @@ pub async fn connect() {
     let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
         let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
 
-        console::log_1(&format!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload).into());
+        //console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
 
-        GAME.with(move |game| match serde_json::from_str::<UpdateMessage>(payload.as_str()) {
-            Ok(UpdateMessage::Heartbeat) => {},
-            Ok(UpdateMessage::RoomInfo(_)) => {
-
-            },
-            Ok(UpdateMessage::Update(t, full_update, roomdata)) => {
-                let view = roomdata.to_owned();
-                for obj in view.into_read_only().iter() {
-                    let name = obj.0;
-                    let obj = obj.1;
-
-                    if !game.borrow().models.contains_key(name) {
-                        // Create new mesh
-                        match &obj.visual_info {
-                            roboscapesim_common::VisualInfo::None => {},
-                            roboscapesim_common::VisualInfo::Color(r, g, b) => {
-                                let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                                    depth: Some(obj.transform.scaling.z.into()),
-                                    height: Some(obj.transform.scaling.y.into()),
-                                    width: Some(obj.transform.scaling.x.into()),
-                                    ..Default::default()
-                                }));
-                                let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
-                                material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
-                                m.set_material(&material);
-                                m.set_receive_shadows(true);
-                                game.borrow().shadow_generator.add_shadow_caster(&m, true);
-                                apply_transform(m.clone(), obj.transform);
-                                game.borrow().models.insert(obj.name.to_owned(), m.clone());
-                                console::log_1(&format!("Created box").into());
-                            },
-                            roboscapesim_common::VisualInfo::Texture(tex) => {
-
-                            },
-                            roboscapesim_common::VisualInfo::Mesh(mesh) => {
-                                let game_rc = game.clone();
-                                let mesh = Arc::new(mesh.clone());
-                                let obj = Arc::new(obj.clone());
-                                wasm_bindgen_futures::spawn_local(async move {
-                                    // TODO: detect assets dir
-                                    let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
-                                    game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
-                                    apply_transform(m.clone(), obj.transform);
-                                    game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
-                                    console::log_1(&format!("Created mesh").into());
-                                });
-                            },
-                        }
-                    }
-                }
-
-                // Update state vars
-                for entry in &game.borrow().state {
-                    game.borrow().last_state.insert(entry.key().to_owned(), entry.value().clone());
-                }
-                for entry in &roomdata {
-                    game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
-                }
-
-                // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
-                
-                // Update times
-                game.borrow().last_state_server_time.replace(game.borrow().state_server_time.get().clone());
-                game.borrow().last_state_time.replace(game.borrow().state_time.get().clone());
-                game.borrow().state_server_time.replace(t);
-                game.borrow().state_time.replace(instant::now());
-            },
-            Ok(UpdateMessage::DisplayText(_)) => {},
-            Err(e) => console::log_1(&format!("Failed to deserialize: {}", e).into()),
-        });
+        GAME.with(move |game| { handle_update_message(serde_json::from_str::<UpdateMessage>(payload.as_str()), game); });
     });
 
     cyberdeck_client_web_sys::init_data_channel(send_channel.clone(), onclose, onopen, onmessage);
@@ -186,17 +127,117 @@ pub async fn connect() {
     let oniceconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |_e: JsValue| {
         console::log_1(&Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap().into());
     });
-    
+
     cyberdeck_client_web_sys::init_peer_connection(pc.clone(), "http://localhost:3000/connect".to_string().into(), oniceconnectionstatechange).await;
 }
 
-fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common::Transform) {
-    m.set_position(&Vector3::new(transform.position.x.into(), transform.position.y.into(), transform.position.z.into()));
+fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
+    match msg {
+        Ok(UpdateMessage::Heartbeat) => {},
+        Ok(UpdateMessage::RoomInfo(_)) => {
 
-    match transform.rotation {
-        roboscapesim_common::Orientation::Euler(angles) => m.set_rotation(&Vector3::new(angles.x.into(), angles.y.into(), angles.z.into())),
-        roboscapesim_common::Orientation::Quaternion(q) => m.set_rotation_quaternion(&Quaternion::new(q.i.into(), q.j.into(), q.k.into(), q.w.into())),
+        },
+        Ok(UpdateMessage::Update(t, full_update, roomdata)) => {
+            let view = roomdata.to_owned();
+            for obj in view.into_read_only().iter() {
+                let name = obj.0;
+                let obj = obj.1;
+
+                if !game.borrow().models.contains_key(name) {
+                    // Create new mesh
+                    match &obj.visual_info {
+                        roboscapesim_common::VisualInfo::None => {},
+                        roboscapesim_common::VisualInfo::Color(r, g, b) => {
+                            let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
+                                depth: Some(obj.transform.scaling.z.into()),
+                                height: Some(obj.transform.scaling.y.into()),
+                                width: Some(obj.transform.scaling.x.into()),
+                                ..Default::default()
+                            }));
+                            let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
+                            material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
+                            m.set_material(&material);
+                            m.set_receive_shadows(true);
+                            game.borrow().shadow_generator.add_shadow_caster(&m, true);
+                            apply_transform(m.clone(), obj.transform);
+                            game.borrow().models.insert(obj.name.to_owned(), m.clone());
+                            console_log!("Created box");
+                        },
+                        roboscapesim_common::VisualInfo::Texture(tex) => {
+
+                        },
+                        roboscapesim_common::VisualInfo::Mesh(mesh) => {
+                            let game_rc = game.clone();
+                            let mesh = Arc::new(mesh.clone());
+                            let obj = Arc::new(obj.clone());
+                            wasm_bindgen_futures::spawn_local(async move {
+                                // TODO: detect assets dir
+                                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                                game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
+                                apply_transform(m.clone(), obj.transform);
+                                game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
+                                console_log!("Created mesh");
+                            });
+                        },
+                    }
+                }
+            }
+
+            // Update state vars
+            for entry in &game.borrow().state {
+                game.borrow().last_state.insert(entry.key().to_owned(), entry.value().clone());
+            }
+            for entry in &roomdata {
+                game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
+            }
+
+            // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
+        
+            // Update times
+            game.borrow().last_state_server_time.replace(game.borrow().state_server_time.get().clone());
+            game.borrow().last_state_time.replace(game.borrow().state_time.get().clone());
+            game.borrow().state_server_time.replace(t);
+            game.borrow().state_time.replace(instant::now());
+        },
+        Ok(UpdateMessage::DisplayText(id, text, duration)) => {},
+        Ok(UpdateMessage::Beep(id, freq, duration)) => {
+            if BEEPS_ENABLED.get() {
+                // TODO: change volume based on distance to location
+                console_log!("Beep {} {}", freq, duration);
+
+                let beeps = &game.borrow().beeps;
+                if beeps.contains_key(&id) {
+                    // Stop existing beep
+                    let beep = &beeps.get(&id).unwrap();
+                    if let Ok(stop_fn) = Reflect::get(beep, &"stop".into()) {
+                        match Reflect::apply(&stop_fn.unchecked_into(), &beep, &Array::new()) {
+                            Ok(_) => {},
+                            Err(e) => console_log!("{:?}", e),
+                        }
+                    }
+                    beeps.remove(&id);
+                }
+
+                let n = Rc::new(Reflect::construct(&Reflect::get(&window().unwrap(), &"Note".into()).unwrap().unchecked_into(), &Array::from_iter([&JsValue::from_f64(69.0)].into_iter())).unwrap());
+                js_set(&n, "frequency", freq as f64).unwrap();
+            
+                let audio_context = Reflect::get(&n, &"audioContext".into()).unwrap();
+                let gain_node = Reflect::apply(Reflect::get(&audio_context, &"createGain".into()).unwrap().unchecked_ref(), &audio_context, &Array::new()).unwrap();
+                let gain_node_gain = Reflect::get(&gain_node, &"gain".into()).unwrap();
+                js_set(&gain_node_gain, "value", 0.05).unwrap();
+            
+                Reflect::apply(Reflect::get(&n, &"play".into()).unwrap().unchecked_ref(), &n, &Array::from_iter([&JsValue::from_f64(2.0), &gain_node].iter())).unwrap();
+
+                let n_clone = n.clone();
+                window().unwrap().set_timeout_with_callback_and_timeout_and_arguments_0(&Closure::once_into_js(move || {
+                    Reflect::apply(Reflect::get(&n_clone, &"stop".into()).unwrap().unchecked_ref(), &n_clone, &Array::new()).unwrap();
+                }).unchecked_into(), duration as i32).unwrap();
+
+                beeps.insert(id, n);
+            } else {
+                console_log!("Beep received, but beeps are disabled");
+            }
+        },
+        Err(e) => console_log!("Failed to deserialize: {}", e),
     }
-
-    m.set_scaling(&Vector3::new(transform.scaling.x.into(), transform.scaling.y.into(), transform.scaling.z.into()));
 }

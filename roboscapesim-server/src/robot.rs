@@ -2,12 +2,14 @@ use std::net::UdpSocket;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 use chrono::Utc;
+use dashmap::DashMap;
 use derivative::Derivative;
 use log::{info, error};
 use nalgebra::Point3;
 use rapier3d::prelude::*;
+use roboscapesim_common::UpdateMessage;
 
-use crate::room::Simulation;
+use crate::room::{Simulation, RoomData};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -19,6 +21,7 @@ pub struct RobotData {
     pub speed_l: f32,
     pub speed_r: f32,
     pub last_heartbeat: i64,
+    pub id: String,
 }
 
 impl RobotData {
@@ -155,13 +158,14 @@ impl RobotData {
             speed_l: 0.0,
             speed_r: 0.0,
             last_heartbeat: 0,
+            id: "010203040506".into(),
         }
     }
 
     pub fn setup_robot_socket(robot: &mut RobotData) {
         //let server = "127.0.0.1";
         let server = "52.73.65.98";
-        let mut socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+        let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
 
         socket.connect(server.to_owned() + ":1973").expect("Failed to connect");
 
@@ -177,7 +181,7 @@ impl RobotData {
         }
     }
 
-    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, dt: f64){
+    pub async fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64){
         if robot.socket.is_none() {
             return;
         }
@@ -215,6 +219,9 @@ impl RobotData {
                 },
                 b'B' => { 
                     info!("OnBeep");
+                    let freq = u16::from_le_bytes([buf[1], buf[2]]);
+                    let duration = u16::from_le_bytes([buf[3], buf[4]]);
+                    RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone())).await;
                 },
                 b'L' => { 
                     info!("OnSetLED");

@@ -1,4 +1,7 @@
+use std::rc::Rc;
+
 use js_sys::{Function, Reflect};
+use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::window;
 
@@ -25,4 +28,28 @@ pub(crate) fn get_window_fn(name: &str) -> Result<Function, JsValue>
 /// Gets performance.now()
 pub(crate) fn performance_now() -> f64 {
     window().unwrap().performance().unwrap().now()
+}
+
+/// Apply a transform to a BabylonMesh 
+pub(crate) fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common::Transform) {
+    m.set_position(&Vector3::new(transform.position.x.into(), transform.position.y.into(), transform.position.z.into()));
+
+    match transform.rotation {
+        roboscapesim_common::Orientation::Euler(angles) => m.set_rotation(&Vector3::new(angles.x.into(), angles.y.into(), angles.z.into())),
+        roboscapesim_common::Orientation::Quaternion(q) => m.set_rotation_quaternion(&Quaternion::new(q.i.into(), q.j.into(), q.k.into(), q.w.into())),
+    }
+
+    m.set_scaling(&Vector3::new(transform.scaling.x.into(), transform.scaling.y.into(), transform.scaling.z.into()));
+}
+
+pub(crate) fn js_set<T>(target: &JsValue, prop: &str, val: T) -> Result<bool, JsValue>
+where JsValue: From<T> {
+    Reflect::set(target, &prop.into(), &JsValue::from(val))
+}
+
+#[macro_export]
+macro_rules! console_log {
+    ($($tokens: tt)*) => {
+        console::log_1(&format!($($tokens)*).into())
+    }
 }
