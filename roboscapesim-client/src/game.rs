@@ -1,6 +1,5 @@
-use std::{cell::{RefCell, Cell}, rc::Rc};
+use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
 
-use dashmap::DashMap;
 use neo_babylon::prelude::*;
 use roboscapesim_common::ObjectData;
 use wasm_bindgen::JsValue;
@@ -9,15 +8,15 @@ use wasm_bindgen::JsValue;
 /// Stores information relevant to the current state
 pub(crate) struct Game {
     pub(crate) scene: Rc<RefCell<Scene>>,
-    pub(crate) models: DashMap<String, Rc<BabylonMesh>>,
-    pub(crate) state: DashMap<String, ObjectData>,
-    pub(crate) last_state: DashMap<String, ObjectData>,
+    pub(crate) models: Rc<RefCell<HashMap<String, Rc<BabylonMesh>>>>,
+    pub(crate) state: Rc<RefCell<HashMap<String, ObjectData>>>,
+    pub(crate) last_state: Rc<RefCell<HashMap<String, ObjectData>>>,
     pub(crate) state_server_time: Rc<Cell<f64>>,
     pub(crate) last_state_server_time: Rc<Cell<f64>>,
     pub(crate) state_time: Rc<Cell<f64>>,
     pub(crate) last_state_time: Rc<Cell<f64>>,
     pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
-    pub(crate) beeps: DashMap<String, Rc<JsValue>>,
+    pub(crate) beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
 }
 
 impl Game {
@@ -54,15 +53,15 @@ impl Game {
 
         Game {
             scene,
-            models: DashMap::new(),
-            state: DashMap::new(),
-            last_state: DashMap::new(),
+            models: Rc::new(RefCell::new(HashMap::new())),
+            state: Rc::new(RefCell::new(HashMap::new())),
+            last_state: Rc::new(RefCell::new(HashMap::new())),
             state_time: Rc::new(Cell::new(0.0)),
             last_state_time: Rc::new(Cell::new(0.0)),
             state_server_time: Rc::new(Cell::new(0.0)),
             last_state_server_time: Rc::new(Cell::new(0.0)),
             shadow_generator,
-            beeps: DashMap::new(),            
+            beeps: Rc::new(RefCell::new(HashMap::new())),            
         }
     }
 
@@ -70,7 +69,7 @@ impl Game {
         let model = BabylonMesh::create_gltf(&self.scene.borrow(), name, url).await;
 
         let model = Rc::new(model);
-        self.models.insert(name.to_owned(), model.clone());
+        self.models.borrow_mut().insert(name.to_owned(), model.clone());
 
         Ok(model)
     }

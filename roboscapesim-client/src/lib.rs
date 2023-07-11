@@ -45,25 +45,25 @@ async fn main() {
             let t = (now - game_clone.borrow().state_time.get()) / (game_clone.borrow().state_time.get() - game_clone.borrow().last_state_time.get());
             //console::log_1(&format!("t = {}, now = {}, last_state_time = {}, state_time = {}", t, now, *game_clone.borrow().last_state_time.borrow(), *game_clone.borrow().state_time.borrow()).into());
 
-            for update_obj in next_state.iter() {
-                let name = update_obj.key();
-                let update_obj = update_obj.value();
+            for update_obj in next_state.borrow().iter() {
+                let name = update_obj.0;
+                let update_obj = update_obj.1;
                 
-                if !game_clone.borrow().models.contains_key(name) {
+                if !game_clone.borrow().models.borrow().contains_key(name) {
                     continue;
                 }
 
                 // Don't update objects not loaded yet
-                if last_state.contains_key(name) {
+                if last_state.borrow().contains_key(name) {
                     // Interpolate
-                    let last_transform = last_state.get(name).unwrap().transform;
+                    let last_transform = last_state.borrow().get(name).unwrap().transform;
                     let interpolated_transform = last_transform.interpolate(&update_obj.transform, t as f32);
                     //console::log_1(&format!("{}: last_transform: {:?} \n next_transform: {:?} \ninterpolated_transform = {:?}", name, last_transform, update_obj.transform, interpolated_transform).into());
 
-                    apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), interpolated_transform);
+                    apply_transform(game_clone.borrow().models.borrow().get(name).unwrap().clone(), interpolated_transform);
                 } else {
                     // Assign directly
-                    apply_transform(game_clone.borrow().models.get(name).unwrap().value().clone(), update_obj.transform);
+                    apply_transform(game_clone.borrow().models.borrow().get(name).unwrap().clone(), update_obj.transform);
                 }
             }
         });
@@ -143,7 +143,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 let name = obj.0;
                 let obj = obj.1;
 
-                if !game.borrow().models.contains_key(name) {
+                if !game.borrow().models.borrow().contains_key(name) {
                     // Create new mesh
                     match &obj.visual_info {
                         roboscapesim_common::VisualInfo::None => {},
@@ -160,7 +160,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                             m.set_receive_shadows(true);
                             game.borrow().shadow_generator.add_shadow_caster(&m, true);
                             apply_transform(m.clone(), obj.transform);
-                            game.borrow().models.insert(obj.name.to_owned(), m.clone());
+                            game.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
                             console_log!("Created box");
                         },
                         roboscapesim_common::VisualInfo::Texture(tex) => {
@@ -175,7 +175,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                                 let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
                                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                                 apply_transform(m.clone(), obj.transform);
-                                game_rc.borrow().models.insert(obj.name.to_owned(), m.clone());
+                                game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
                                 console_log!("Created mesh");
                             });
                         },
@@ -184,11 +184,11 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
             }
 
             // Update state vars
-            for entry in &game.borrow().state {
-                game.borrow().last_state.insert(entry.key().to_owned(), entry.value().clone());
+            for entry in game.borrow().state.borrow().iter() {
+                game.borrow().last_state.borrow_mut().insert(entry.0.to_owned(), entry.1.clone());
             }
             for entry in &roomdata {
-                game.borrow().state.insert(entry.key().to_owned(), entry.value().clone());
+                game.borrow().state.borrow_mut().insert(entry.key().to_owned(), entry.value().clone());
             }
 
             // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)
@@ -206,16 +206,17 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 console_log!("Beep {} {}", freq, duration);
 
                 let beeps = &game.borrow().beeps;
-                if beeps.contains_key(&id) {
+                if beeps.borrow().contains_key(&id) {
                     // Stop existing beep
-                    let beep = &beeps.get(&id).unwrap();
+                    let mut beeps_mut = beeps.borrow_mut();
+                    let beep = beeps_mut.get(&id).unwrap();
                     if let Ok(stop_fn) = Reflect::get(beep, &"stop".into()) {
                         match Reflect::apply(&stop_fn.unchecked_into(), &beep, &Array::new()) {
                             Ok(_) => {},
                             Err(e) => console_log!("{:?}", e),
                         }
                     }
-                    beeps.remove(&id);
+                    beeps_mut.remove(&id);
                 }
 
                 let n = Rc::new(Reflect::construct(&Reflect::get(&window().unwrap(), &"Note".into()).unwrap().unchecked_into(), &Array::from_iter([&JsValue::from_f64(69.0)].into_iter())).unwrap());
@@ -233,7 +234,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                     Reflect::apply(Reflect::get(&n_clone, &"stop".into()).unwrap().unchecked_ref(), &n_clone, &Array::new()).unwrap();
                 }).unchecked_into(), duration as i32).unwrap();
 
-                beeps.insert(id, n);
+                beeps.borrow_mut().insert(id, n);
             } else {
                 console_log!("Beep received, but beeps are disabled");
             }
