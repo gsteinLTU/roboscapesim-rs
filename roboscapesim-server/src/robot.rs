@@ -52,7 +52,7 @@ impl RobotData {
         * Vehicle we will control manually.
         */
         let scale = 3.0;
-        let hw = 0.06 * scale;
+        let hw = 0.07 * scale;
         let hh = 0.027 * scale;
         let hd = 0.03 * scale;
 
