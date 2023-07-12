@@ -71,8 +71,8 @@ impl RobotData {
 
         //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
         let wheel_positions = [
-            point![hw * 0.5, -hh + 0.015 * scale, hw],
-            point![hw * 0.5, -hh + 0.015 * scale, -hw],
+            point![hw * 0.5, -hh + 0.015 * scale, hd + 0.01  * scale],
+            point![hw * 0.5, -hh + 0.015 * scale, -hd - 0.01  * scale],
         ];
 
         let ball_wheel_radius = 0.015 * scale;
