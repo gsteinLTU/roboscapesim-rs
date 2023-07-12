@@ -219,19 +219,18 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                     beeps_mut.remove(&id);
                 }
 
-                let n = Rc::new(Reflect::construct(&Reflect::get(&window().unwrap(), &"Note".into()).unwrap().unchecked_into(), &Array::from_iter([&JsValue::from_f64(69.0)].into_iter())).unwrap());
+                let n = Rc::new(js_construct("Note", &[&JsValue::from_f64(69.0)]).unwrap());
                 js_set(&n, "frequency", freq as f64).unwrap();
             
-                let audio_context = Reflect::get(&n, &"audioContext".into()).unwrap();
-                let gain_node = Reflect::apply(Reflect::get(&audio_context, &"createGain".into()).unwrap().unchecked_ref(), &audio_context, &Array::new()).unwrap();
-                let gain_node_gain = Reflect::get(&gain_node, &"gain".into()).unwrap();
+                let audio_context = js_get(&n, "audioContext").unwrap();
+                let gain_node = js_call_member(&audio_context, "createGain", &[]).unwrap();
+                let gain_node_gain = js_get(&gain_node, "gain").unwrap();
                 js_set(&gain_node_gain, "value", 0.05).unwrap();
-            
-                Reflect::apply(Reflect::get(&n, &"play".into()).unwrap().unchecked_ref(), &n, &Array::from_iter([&JsValue::from_f64(2.0), &gain_node].iter())).unwrap();
+                js_call_member(&n, "play", &[&JsValue::from_f64(2.0), &gain_node]).unwrap();
 
                 let n_clone = n.clone();
                 window().unwrap().set_timeout_with_callback_and_timeout_and_arguments_0(&Closure::once_into_js(move || {
-                    Reflect::apply(Reflect::get(&n_clone, &"stop".into()).unwrap().unchecked_ref(), &n_clone, &Array::new()).unwrap();
+                    js_call_member(&n_clone, "stop", &[]).unwrap();
                 }).unchecked_into(), duration as i32).unwrap();
 
                 beeps.borrow_mut().insert(id, n);

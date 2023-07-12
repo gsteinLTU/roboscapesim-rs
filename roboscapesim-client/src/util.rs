@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use js_sys::{Function, Reflect};
+use js_sys::{Function, Reflect, Array};
 use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::window;
@@ -45,6 +45,18 @@ pub(crate) fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common
 pub(crate) fn js_set<T>(target: &JsValue, prop: &str, val: T) -> Result<bool, JsValue>
 where JsValue: From<T> {
     Reflect::set(target, &prop.into(), &JsValue::from(val))
+}
+
+pub(crate) fn js_get(target: &JsValue, prop: &str) -> Result<JsValue, JsValue> {
+    Reflect::get(target, &prop.into())
+}
+
+pub(crate) fn js_construct(type_name: &str, arguments_list: &[&JsValue]) -> Result<JsValue, JsValue> {
+    Reflect::construct(&Reflect::get(&window().unwrap(), &type_name.into()).unwrap().unchecked_into(), &Array::from_iter(arguments_list.into_iter()))
+}
+
+pub(crate) fn js_call_member(target: &JsValue, fn_name: &str, arguments_list: &[&JsValue]) -> Result<JsValue, JsValue> {
+    Reflect::apply(Reflect::get(&target, &fn_name.into()).unwrap().unchecked_ref(), &target, &Array::from_iter(arguments_list.into_iter()))
 }
 
 #[macro_export]
