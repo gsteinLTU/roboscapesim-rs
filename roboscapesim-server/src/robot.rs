@@ -52,9 +52,9 @@ impl RobotData {
         * Vehicle we will control manually.
         */
         let scale = 3.0;
-        let hw = 0.05 * scale;
-        let hh = 0.03 * scale;
-        let hd = 0.04 * scale;
+        let hw = 0.06 * scale;
+        let hh = 0.027 * scale;
+        let hd = 0.03 * scale;
 
         let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
         let rigid_body = RigidBodyBuilder::dynamic()
@@ -228,6 +228,32 @@ impl RobotData {
                 },
                 b'R' => { 
                     info!("OnGetRange");
+                    let body = sim.rigid_body_set.get(robot.body_handle).unwrap();
+                    let body_pos = body.translation();
+                    let offset = body.rotation() * vector![0.18, 0.05, 0.0];
+                    let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
+                    let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
+                    let max_toi = 3.0;
+                    let solid = true;
+                    let filter = QueryFilter::default();
+
+                    let mut distance = 0u16;
+                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set,
+                        &sim.collider_set, &ray, max_toi, solid, filter
+                    ) {
+                        // The first collider hit has the handle `handle` and it hit after
+                        // the ray travelled a distance equal to `ray.dir * toi`.
+                        let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+                        distance = (toi * 100.0) as u16;
+                        println!("Collider {:?} hit at point {}", handle, hit_point);
+                    }
+
+
+                    // Send result message
+                    let dist_bytes = u16::to_le_bytes(distance);
+                    if let Err(e) = robot.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
+                        error!("{}", e);
+                    }
                 },
                 b'T' => { 
                     info!("OnGetTicks");
