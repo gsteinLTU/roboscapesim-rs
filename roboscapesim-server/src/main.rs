@@ -115,6 +115,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                         CLIENTS.insert(peer_id, c.clone());
                         trace!("{}::DataChannel '{}'", peer_id, c.label());
                         room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
+                        room.lock().await.send_state_to_client(true, peer_id).await;
                     } else if c.ready_state() == RTCDataChannelState::Closed {
                         trace!("{}::DataChannel '{}'", peer_id, c.label());
                     }

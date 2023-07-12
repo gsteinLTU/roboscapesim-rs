@@ -83,7 +83,7 @@ impl Default for VisualInfo {
 pub struct ObjectData {
     pub name: String,
     pub transform: Transform,
-    pub visual_info: VisualInfo,
+    pub visual_info: Option<VisualInfo>,
     /// If true, the object should be assumed to not move through physics
     pub is_kinematic: bool,
     /// If true, the object has been modified since last send

@@ -155,7 +155,7 @@ impl RoomData {
         obj.objects.insert("cube".into(), ObjectData {
             name: "cube".into(),
             transform: Transform { ..Default::default() },
-            visual_info: VisualInfo::Color(1.0, 1.0, 1.0),
+            visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
             is_kinematic: false,
             updated: true,
         });
@@ -175,7 +175,7 @@ impl RoomData {
         obj.objects.insert("robot".into(), ObjectData {
             name: "robot".into(),
             transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
-            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
+            visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
             is_kinematic: false,
             updated: true,
         });
@@ -214,7 +214,7 @@ impl RoomData {
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
             transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: vector![0.0, -0.05, 0.0], ..Default::default() },
-            visual_info: VisualInfo::Color(0.8, 0.6, 0.45) ,
+            visual_info: Some(VisualInfo::Color(0.8, 0.6, 0.45)),
             is_kinematic: false,
             updated: true,
         });
@@ -264,7 +264,11 @@ impl RoomData {
                     self.objects
                         .iter()
                         .filter(|mvp| mvp.value().updated)
-                        .map(|mvp| (mvp.key().clone(), mvp.value().clone()))
+                        .map(|mvp| {
+                            let mut val = mvp.value().clone();
+                            val.visual_info = None;
+                            (mvp.key().clone(), val)
+                        })
                         .collect::<DashMap<String, ObjectData>>(),
                 ),
                 client,
@@ -277,6 +281,10 @@ impl RoomData {
         for client in &self.sockets {
             self.send_state_to_client(full_update, client.value().to_owned())
                 .await;
+        }
+
+        for mut obj in self.objects.iter_mut() {
+            obj.value_mut().updated = false;
         }
     }
 
@@ -306,6 +314,10 @@ impl RoomData {
                 let body = self.sim.rigid_body_set.get(*handle).unwrap();
                 let old_transform = o.value().transform;
                 o.value_mut().transform = Transform { position: body.translation().clone(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
+
+                if old_transform != o.value().transform {
+                    o.value_mut().updated = true;
+                }
             }
         }
 

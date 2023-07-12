@@ -144,8 +144,12 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 let obj = obj.1;
 
                 if !game.borrow().models.borrow().contains_key(name) {
+                    if obj.visual_info.is_none() {
+                        continue;
+                    }
+
                     // Create new mesh
-                    match &obj.visual_info {
+                    match obj.visual_info.as_ref().unwrap() {
                         roboscapesim_common::VisualInfo::None => {},
                         roboscapesim_common::VisualInfo::Color(r, g, b) => {
                             let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
