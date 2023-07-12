@@ -132,6 +132,7 @@ impl RoomData {
         let floor_handle = obj.sim.rigid_body_set.insert(rigid_body);
         let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0);
         obj.sim.collider_set.insert_with_parent(collider, floor_handle, &mut obj.sim.rigid_body_set);
+        obj.sim.rigid_body_labels.insert("ground".into(), floor_handle);
 
         // /* Create the bounding ball. */
         // let rigid_body = RigidBodyBuilder::dynamic()

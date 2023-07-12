@@ -22,6 +22,9 @@ pub struct RobotData {
     pub speed_r: f32,
     pub last_heartbeat: i64,
     pub id: String,
+    pub whisker_l: ColliderHandle,
+    pub whisker_r: ColliderHandle,
+    pub whisker_states: [bool; 2],
 }
 
 impl RobotData {
@@ -150,6 +153,13 @@ impl RobotData {
             sim.multibody_joint_set.insert(vehicle_handle, wheel_rb, joint, true);
         }
 
+        // Create whiskers
+
+        let whisker_l = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * -0.4]);
+        let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set);
+        let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
+        let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set);
+
         RobotData { 
             body_handle: vehicle_handle,
             wheel_joints,
@@ -159,6 +169,9 @@ impl RobotData {
             speed_r: 0.0,
             last_heartbeat: 0,
             id: "010203040506".into(),
+            whisker_l,
+            whisker_r,
+            whisker_states: [false, false],
         }
     }
 
@@ -235,7 +248,7 @@ impl RobotData {
                     let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
                     let max_toi = 3.0;
                     let solid = true;
-                    let filter = QueryFilter::default();
+                    let filter = QueryFilter::default().exclude_sensors();
 
                     let mut distance = 0u16;
                     if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set,
@@ -263,6 +276,38 @@ impl RobotData {
                 },
                 _ => {}
             }
+        }
+
+        let mut new_whisker_states = [false, false];
+
+        // Check whiskers
+        if sim.narrow_phase.intersections_with(robot.whisker_l).count() > 0 {
+            for c in sim.narrow_phase.intersections_with(robot.whisker_l) {
+                // Ignore non-intersections 
+                if !c.2 {
+                    continue;
+                } 
+
+                new_whisker_states[0] = true;
+            }
+        }
+
+        if sim.narrow_phase.intersections_with(robot.whisker_r).count() > 0 {
+            for c in sim.narrow_phase.intersections_with(robot.whisker_r) {
+                // Ignore non-intersections 
+                if !c.2 {
+                    continue;
+                } 
+
+                new_whisker_states[1] = true;
+            }
+        }
+
+        // Send message if whisker changed
+        if new_whisker_states != robot.whisker_states {
+            robot.whisker_states = new_whisker_states;
+
+            // TODO: Send message
         }
     }
 }
