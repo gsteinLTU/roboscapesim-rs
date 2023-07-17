@@ -25,6 +25,14 @@ pub struct RobotData {
     pub whisker_l: ColliderHandle,
     pub whisker_r: ColliderHandle,
     pub whisker_states: [bool; 2],
+    pub ticks: [i32; 2],
+    pub drive_state: DriveState,
+}
+
+#[derive(Debug)]
+pub enum DriveState {
+    SetSpeed,
+    SetDistance
 }
 
 impl RobotData {
@@ -172,6 +180,8 @@ impl RobotData {
             whisker_l,
             whisker_r,
             whisker_states: [false, false],
+            ticks: [0, 0],
+            drive_state: DriveState::SetSpeed,
         }
     }
 
@@ -212,9 +222,12 @@ impl RobotData {
             match &buf[0] {
                 b'D' => { 
                     info!("OnDrive");
+                    robot.drive_state = DriveState::SetDistance;
                 },
                 b'S' => { 
                     info!("OnSetSpeed");
+                    robot.drive_state = DriveState::SetSpeed;
+
                     let s1 = i16::from_le_bytes([buf[1], buf[2]]);
                     let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
@@ -223,6 +236,7 @@ impl RobotData {
                     
                     info!("{:?}", robot);
                     
+                    // Apply calculated speeds to wheels
                     let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
                     joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
                     
@@ -234,6 +248,8 @@ impl RobotData {
                     info!("OnBeep");
                     let freq = u16::from_le_bytes([buf[1], buf[2]]);
                     let duration = u16::from_le_bytes([buf[3], buf[4]]);
+
+                    // Beep is only on client-side
                     RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone())).await;
                 },
                 b'L' => { 
@@ -270,9 +286,24 @@ impl RobotData {
                 },
                 b'T' => { 
                     info!("OnGetTicks");
+                    let left_ticks = robot.ticks[0].to_le_bytes();
+                    let right_ticks = robot.ticks[1].to_le_bytes();
+                    let mut message: [u8; 9] = [0; 9];
+
+                    // Create message
+                    message[0] = b'T';
+                    message[1..5].copy_from_slice(&left_ticks);
+                    message[5..9].copy_from_slice(&right_ticks);
+
+                    if let Err(e) = robot.send_roboscape_message(&message) {
+                        error!("{}", e);
+                    }
                 },
                 b'n' => { 
                     info!("OnSetNumeric");
+                },
+                b'P' => {
+                    info!("OnButtonPress");                    
                 },
                 _ => {}
             }
@@ -308,7 +339,27 @@ impl RobotData {
             robot.whisker_states = new_whisker_states;
             // Whiskers in message are inverted
             let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
-            robot.send_roboscape_message(&message).unwrap();
+            
+            if let Err(e) = robot.send_roboscape_message(&message) {
+                error!("{}", e);
+            }
+        }
+    }
+
+    pub fn reset(&mut self) {
+        // TODO: reset transform
+
+        self.drive_state = DriveState::SetSpeed;
+        self.speed_l = 0.0;
+        self.speed_r = 0.0;
+        self.whisker_states = [false, false];
+        self.ticks = [0, 0];
+
+        self.last_heartbeat = Utc::now().timestamp();
+        
+        // Send initial message
+        if let Err(e) = self.send_roboscape_message(b"I") {
+            error!("{}", e);
         }
     }
 }
