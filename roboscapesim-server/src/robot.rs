@@ -25,7 +25,7 @@ pub struct RobotData {
     pub whisker_l: ColliderHandle,
     pub whisker_r: ColliderHandle,
     pub whisker_states: [bool; 2],
-    pub ticks: [i32; 2],
+    pub ticks: [f64; 2],
     pub drive_state: DriveState,
 }
 
@@ -180,7 +180,7 @@ impl RobotData {
             whisker_l,
             whisker_r,
             whisker_states: [false, false],
-            ticks: [0, 0],
+            ticks: [0.0, 0.0],
             drive_state: DriveState::SetSpeed,
         }
     }
@@ -214,6 +214,10 @@ impl RobotData {
                 panic!("{}", e);
             }
         }
+
+        // Update ticks
+        robot.ticks[0] += (robot.speed_l * -32.0) as f64 * dt;
+        robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
 
         let mut buf = [0u8; 512];
         let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
@@ -286,8 +290,8 @@ impl RobotData {
                 },
                 b'T' => { 
                     info!("OnGetTicks");
-                    let left_ticks = robot.ticks[0].to_le_bytes();
-                    let right_ticks = robot.ticks[1].to_le_bytes();
+                    let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
+                    let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
                     let mut message: [u8; 9] = [0; 9];
 
                     // Create message
@@ -353,7 +357,7 @@ impl RobotData {
         self.speed_l = 0.0;
         self.speed_r = 0.0;
         self.whisker_states = [false, false];
-        self.ticks = [0, 0];
+        self.ticks = [0.0, 0.0];
 
         self.last_heartbeat = Utc::now().timestamp();
         
