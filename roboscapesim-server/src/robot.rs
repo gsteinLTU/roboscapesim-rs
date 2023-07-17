@@ -306,8 +306,9 @@ impl RobotData {
         // Send message if whisker changed
         if new_whisker_states != robot.whisker_states {
             robot.whisker_states = new_whisker_states;
-
-            // TODO: Send message
+            // Whiskers in message are inverted
+            let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
+            robot.send_roboscape_message(&message).unwrap();
         }
     }
 }
