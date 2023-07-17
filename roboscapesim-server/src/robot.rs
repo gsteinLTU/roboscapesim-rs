@@ -27,13 +27,17 @@ pub struct RobotData {
     pub whisker_states: [bool; 2],
     pub ticks: [f64; 2],
     pub drive_state: DriveState,
+    pub distance_l: f64,
+    pub distance_r: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DriveState {
     SetSpeed,
     SetDistance
 }
+
+const SET_DISTANCE_DRIVE_SPEED: f32 = 75.0 / -32.0;
 
 impl RobotData {
     pub fn send_roboscape_message(&mut self, message: &[u8]) -> Result<usize, std::io::Error> {
@@ -182,6 +186,8 @@ impl RobotData {
             whisker_states: [false, false],
             ticks: [0.0, 0.0],
             drive_state: DriveState::SetSpeed,
+            distance_l: 0.0,
+            distance_r: 0.0
         }
     }
 
@@ -219,6 +225,21 @@ impl RobotData {
         robot.ticks[0] += (robot.speed_l * -32.0) as f64 * dt;
         robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
 
+        if robot.drive_state == DriveState::SetDistance {
+            robot.distance_l -= (robot.speed_l * 32.0) as f64 * dt;
+            robot.distance_r -= (robot.speed_r * 32.0) as f64 * dt;
+
+            // Stop robot if distance reached
+            if f64::abs(robot.distance_l) < f32::abs(robot.speed_l * -32.0) as f64 {
+                info!("Distance reached L");
+                robot.speed_l = 0.0;
+            }
+            if f64::abs(robot.distance_r) < f32::abs(robot.speed_r * -32.0) as f64 {
+                info!("Distance reached R");
+                robot.speed_r = 0.0;
+            }
+        }
+
         let mut buf = [0u8; 512];
         let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
 
@@ -227,6 +248,17 @@ impl RobotData {
                 b'D' => { 
                     info!("OnDrive");
                     robot.drive_state = DriveState::SetDistance;
+
+                    let d1 = i16::from_le_bytes([buf[1], buf[2]]);
+                    let d2 = i16::from_le_bytes([buf[3], buf[4]]);
+
+                    robot.distance_l = d2 as f64;
+                    robot.distance_r = d1 as f64;
+
+                    info!("OnDrive {} {}", d1, d2);
+
+                    robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                    robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;                    
                 },
                 b'S' => { 
                     info!("OnSetSpeed");
@@ -237,16 +269,6 @@ impl RobotData {
 
                     robot.speed_l = -s2 as f32 / 32.0;
                     robot.speed_r = -s1 as f32 / 32.0;
-                    
-                    info!("{:?}", robot);
-                    
-                    // Apply calculated speeds to wheels
-                    let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
-                    joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
-                    
-                    let joint2 = sim.multibody_joint_set.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
-                    joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_r, 4.0);
-                    
                 },
                 b'B' => { 
                     info!("OnBeep");
@@ -313,6 +335,13 @@ impl RobotData {
             }
         }
 
+        // Apply calculated speeds to wheels
+        let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
+        joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
+        
+        let joint2 = sim.multibody_joint_set.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
+        joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_r, 4.0);
+        
         let mut new_whisker_states = [false, false];
 
         // Check whiskers
