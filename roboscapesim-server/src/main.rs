@@ -13,6 +13,9 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
+#[path = "./util/mod.rs"]
+mod util;
+
 static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
 });

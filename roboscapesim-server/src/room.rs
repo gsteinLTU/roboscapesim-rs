@@ -5,6 +5,7 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info};
+use nalgebra::point;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
 use rapier3d::prelude::{
@@ -14,9 +15,7 @@ use rapier3d::prelude::{
 use roboscapesim_common::*;
 use serde::Serialize;
 
-#[path = "./util/mod.rs"]
-mod util;
-use util::extra_rand::UpperHexadecimal;
+use crate::util::extra_rand::UpperHexadecimal;
 
 use crate::CLIENTS;
 use crate::robot::RobotData;
@@ -214,7 +213,7 @@ impl RoomData {
         // });
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
-            transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: vector![0.0, -0.05, 0.0], ..Default::default() },
+            transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: point![0.0, -0.05, 0.0], ..Default::default() },
             visual_info: Some(VisualInfo::Color(0.8, 0.6, 0.45)),
             is_kinematic: false,
             updated: true,
@@ -314,7 +313,7 @@ impl RoomData {
                 let handle = get.value();
                 let body = self.sim.rigid_body_set.get(*handle).unwrap();
                 let old_transform = o.value().transform;
-                o.value_mut().transform = Transform { position: body.translation().clone(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
+                o.value_mut().transform = Transform { position: body.translation().clone().into(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
 
                 if old_transform != o.value().transform {
                     o.value_mut().updated = true;

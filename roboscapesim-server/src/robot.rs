@@ -5,11 +5,12 @@ use chrono::Utc;
 use dashmap::DashMap;
 use derivative::Derivative;
 use log::{info, error};
-use nalgebra::Point3;
+use nalgebra::{Point3, Quaternion, Rotation3, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
-use roboscapesim_common::UpdateMessage;
+use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 
 use crate::room::{Simulation, RoomData};
+use crate::util::traits::{Resettable};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -29,6 +30,7 @@ pub struct RobotData {
     pub drive_state: DriveState,
     pub distance_l: f64,
     pub distance_r: f64,
+    pub initial_transform: Transform,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -72,6 +74,9 @@ impl RobotData {
         let hd = 0.03 * scale;
 
         let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
+        let box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
+        // TODO: use rotation
+
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
             .linear_damping(2.0)
@@ -124,18 +129,8 @@ impl RobotData {
                 .motor_max_force(JointAxis::AngZ, 1000.0)
                 .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
                 .motor_velocity(JointAxis::AngZ, 0.0, 4.0)
-                //.motor_velocity(JointAxis::AngZ, -25.0 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 4.0)
                 .build();
 
-            // let joint = rapier3d::dynamics::RevoluteJointBuilder::new(UnitVector3::new_normalize(vector![0.0,1.0,0.0]))
-            //     .local_anchor1(pos)
-            //     .local_anchor2(point![0.0, 0.01 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
-                // .motor_max_force(1000.0)
-                // .motor_model(MotorModel::ForceBased)
-                // .motor_velocity(-25.0 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 4.0)
-                // .build();
-                
-            //impulse_joints.insert(vehicle_handle, wheel_rb, joint, true);
             wheel_joints.push(sim.multibody_joint_set.insert(vehicle_handle, wheel_rb, joint, true).unwrap());
             wheel_bodies.push(wheel_rb);
         }
@@ -166,7 +161,6 @@ impl RobotData {
         }
 
         // Create whiskers
-
         let whisker_l = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * -0.4]);
         let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set);
         let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
@@ -187,7 +181,8 @@ impl RobotData {
             ticks: [0.0, 0.0],
             drive_state: DriveState::SetSpeed,
             distance_l: 0.0,
-            distance_r: 0.0
+            distance_r: 0.0,
+            initial_transform: Transform { position: box_center.to_owned(), rotation: roboscapesim_common::Orientation::Quaternion(box_rotation.quaternion().to_owned()), ..Default::default() },
         }
     }
 
@@ -318,7 +313,6 @@ impl RobotData {
                         println!("Collider {:?} hit at point {}", handle, hit_point);
                     }
 
-
                     // Send result message
                     let dist_bytes = u16::to_le_bytes(distance);
                     if let Err(e) = robot.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
@@ -393,10 +387,24 @@ impl RobotData {
             }
         }
     }
+}
 
-    pub fn reset(&mut self) {
-        // TODO: reset transform
+impl Resettable for RobotData {
+    fn reset(&mut self, sim: &mut Simulation) {
+        // Reset position
+        let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
+        body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], true);
 
+        match self.initial_transform.rotation {
+            Orientation::Quaternion(q) => {
+                body.set_rotation(UnitQuaternion::new_unchecked(q), true);
+            }
+            Orientation::Euler(e) => {
+                body.set_rotation(UnitQuaternion::from_euler_angles(e.x, e.y, e.z), true);
+            }
+        }
+
+        // Reset state
         self.drive_state = DriveState::SetSpeed;
         self.speed_l = 0.0;
         self.speed_r = 0.0;

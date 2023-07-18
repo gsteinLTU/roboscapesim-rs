@@ -1,10 +1,10 @@
 use dashmap::DashMap;
-use nalgebra::{Quaternion, Vector3, vector};
+use nalgebra::{Quaternion, Vector3, vector, Point3};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
-    pub position: Vector3<f32>,
+    pub position: Point3<f32>,
     pub rotation: Orientation,
     pub scaling: Vector3<f32>,
 }
@@ -21,7 +21,13 @@ impl Default for Transform {
 
 impl Transform {
     pub fn interpolate(&self, other: &Transform, t: f32) -> Transform {
-        Transform { position: self.position.lerp(&other.position, t), rotation: self.rotation.interpolate(&other.rotation, t), scaling: self.scaling.lerp(&other.scaling, t) }
+        // Point does not have lerp currently
+        let mut lerped_pos = self.position * (1.0 - t);
+        lerped_pos.x += other.position.x * t;
+        lerped_pos.y += other.position.y * t;
+        lerped_pos.z += other.position.z * t;
+        
+        Transform { position: lerped_pos, rotation: self.rotation.interpolate(&other.rotation, t), scaling: self.scaling.lerp(&other.scaling, t) }
     }
 }
 
