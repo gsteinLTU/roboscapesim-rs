@@ -226,17 +226,22 @@ impl RobotData {
         robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
 
         if robot.drive_state == DriveState::SetDistance {
-            robot.distance_l -= (robot.speed_l * 32.0) as f64 * dt;
-            robot.distance_r -= (robot.speed_r * 32.0) as f64 * dt;
+            robot.distance_l -= (robot.speed_l * -32.0) as f64 * dt;
+            robot.distance_r -= (robot.speed_r * -32.0) as f64 * dt;
+            info!("{} {}", robot.distance_l, robot.distance_r);
 
             // Stop robot if distance reached
-            if f64::abs(robot.distance_l) < f32::abs(robot.speed_l * -32.0) as f64 {
+            if f64::abs(robot.distance_l) < f64::abs(robot.speed_l as f64 * -32.0 * dt) {
                 info!("Distance reached L");
                 robot.speed_l = 0.0;
             }
-            if f64::abs(robot.distance_r) < f32::abs(robot.speed_r * -32.0) as f64 {
+            if f64::abs(robot.distance_r) < f64::abs(robot.speed_r as f64 * -32.0 * dt) {
                 info!("Distance reached R");
                 robot.speed_r = 0.0;
+            }
+
+            if robot.speed_l == 0.0 && robot.speed_r == 0.0 {
+                robot.drive_state = DriveState::SetSpeed;
             }
         }
 
@@ -247,42 +252,52 @@ impl RobotData {
             match &buf[0] {
                 b'D' => { 
                     info!("OnDrive");
-                    robot.drive_state = DriveState::SetDistance;
 
-                    let d1 = i16::from_le_bytes([buf[1], buf[2]]);
-                    let d2 = i16::from_le_bytes([buf[3], buf[4]]);
+                    if buf.len() > 4 {
+                        robot.drive_state = DriveState::SetDistance;
 
-                    robot.distance_l = d2 as f64;
-                    robot.distance_r = d1 as f64;
+                        let d1 = i16::from_le_bytes([buf[1], buf[2]]);
+                        let d2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                    info!("OnDrive {} {}", d1, d2);
+                        robot.distance_l = d2 as f64;
+                        robot.distance_r = d1 as f64;
 
-                    robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
-                    robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;                    
+                        info!("OnDrive {} {}", d1, d2);
+
+                        robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                        robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;                    
+                    }
                 },
                 b'S' => { 
                     info!("OnSetSpeed");
                     robot.drive_state = DriveState::SetSpeed;
 
-                    let s1 = i16::from_le_bytes([buf[1], buf[2]]);
-                    let s2 = i16::from_le_bytes([buf[3], buf[4]]);
+                    if buf.len() > 4 {
+                        let s1 = i16::from_le_bytes([buf[1], buf[2]]);
+                        let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                    robot.speed_l = -s2 as f32 / 32.0;
-                    robot.speed_r = -s1 as f32 / 32.0;
+                        robot.speed_l = -s2 as f32 / 32.0;
+                        robot.speed_r = -s1 as f32 / 32.0;
+                    }
                 },
                 b'B' => { 
                     info!("OnBeep");
-                    let freq = u16::from_le_bytes([buf[1], buf[2]]);
-                    let duration = u16::from_le_bytes([buf[3], buf[4]]);
+                    
+                    if buf.len() > 4 {
+                        let freq = u16::from_le_bytes([buf[1], buf[2]]);
+                        let duration = u16::from_le_bytes([buf[3], buf[4]]);
 
-                    // Beep is only on client-side
-                    RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone())).await;
+                        // Beep is only on client-side
+                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone())).await;
+                    }
                 },
                 b'L' => { 
                     info!("OnSetLED");
                 },
                 b'R' => { 
                     info!("OnGetRange");
+
+                    // Setup raycast
                     let body = sim.rigid_body_set.get(robot.body_handle).unwrap();
                     let body_pos = body.translation();
                     let offset = body.rotation() * vector![0.18, 0.05, 0.0];
