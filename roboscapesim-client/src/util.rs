@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use js_sys::{Function, Reflect, Array};
 use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
-use wasm_bindgen::{JsValue, JsCast};
-use web_sys::window;
+use wasm_bindgen::{JsValue, JsCast, prelude::Closure, closure::WasmClosure};
+use web_sys::{window, Document};
 
 
 // Try to get a value from window.externalVariables
@@ -57,6 +57,19 @@ pub(crate) fn js_construct(type_name: &str, arguments_list: &[&JsValue]) -> Resu
 
 pub(crate) fn js_call_member(target: &JsValue, fn_name: &str, arguments_list: &[&JsValue]) -> Result<JsValue, JsValue> {
     Reflect::apply(Reflect::get(&target, &fn_name.into()).unwrap().unchecked_ref(), &target, &Array::from_iter(arguments_list.into_iter()))
+}
+
+pub(crate) fn document() -> Document {
+    window().unwrap().document().unwrap()
+}
+
+pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys::Element {
+    let document = document();
+    let button = document.create_element("button").unwrap();
+    button.set_text_content(Some(text));
+    button.add_event_listener_with_callback("click", &callback.into_js_value().into()).unwrap();
+    document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&button).unwrap();
+    button
 }
 
 #[macro_export]

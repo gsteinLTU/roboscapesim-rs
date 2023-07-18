@@ -122,5 +122,11 @@ pub enum UpdateMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     /// Responding to a Heartbeat request
-    Heartbeat
+    Heartbeat,
+    /// Requesting reset
+    ResetAll,
+    /// Requesting robot reset
+    ResetRobot(String),
+    /// Claiming robot
+    ClaimRobot(String),
 }

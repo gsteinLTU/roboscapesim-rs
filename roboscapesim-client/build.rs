@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\t\tconst canvas = document.createElement('canvas');");
     lines.push("\t\tcanvas.id = 'roboscape-canvas';");
     lines.push("\t\tcanvas.style.width = 'calc(100% - 32px)';");
-    lines.push("\t\tcanvas.style.height = 'calc(100% - 64px)';");
+    lines.push("\t\tcanvas.style.height = 'calc(100% - 32px)';");
     lines.push("\t\telement.querySelector('content').appendChild(canvas);");
     lines.push("\t\tsetupDialog(element);");
     lines.push("\t\tconst observer = new ResizeObserver(function () {");
@@ -66,6 +66,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\t\t});");
     lines.push("\t\tobserver.observe(element);");
     lines.push("\t\twindow.externalVariables['roboscapedialog'] = element;");
+
+    lines.push("\t\tconst buttonbar = document.createElement('div');");
+    lines.push("\t\tbuttonbar.id = 'roboscapebuttonbar';");
+    lines.push("\t\telement.querySelector('content').appendChild(buttonbar);");
+
     lines.push("\t};");
 
     lines.push("\tscriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');");

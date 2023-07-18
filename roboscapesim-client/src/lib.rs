@@ -68,6 +68,7 @@ async fn main() {
             }
         });
         game.borrow().scene.borrow().add_before_render_observable(before_render);
+        create_button("Reset", Closure::new(|| { console_log!("Reset") }));
     });
     
     console_log!("RoboScape Online loaded!");

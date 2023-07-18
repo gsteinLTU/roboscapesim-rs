@@ -71,7 +71,7 @@
 		const canvas = document.createElement('canvas');
 		canvas.id = 'roboscape-canvas';
 		canvas.style.width = 'calc(100% - 32px)';
-		canvas.style.height = 'calc(100% - 64px)';
+		canvas.style.height = 'calc(100% - 32px)';
 		element.querySelector('content').appendChild(canvas);
 		setupDialog(element);
 		const observer = new ResizeObserver(function () {
@@ -79,6 +79,9 @@
 		});
 		observer.observe(element);
 		window.externalVariables['roboscapedialog'] = element;
+		const buttonbar = document.createElement('div');
+		buttonbar.id = 'roboscapebuttonbar';
+		element.querySelector('content').appendChild(buttonbar);
 	};
 	scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
 	document.head.appendChild(scriptElement);
