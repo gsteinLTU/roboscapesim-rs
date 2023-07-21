@@ -213,7 +213,7 @@ impl RoomData {
         // });
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
-            transform: Transform { scaling: vector![100.0, 0.1, 100.0], position: point![0.0, -0.05, 0.0], ..Default::default() },
+            transform: Transform { scaling: vector![100.0, 0.4, 100.0], position: point![0.0, 0.1, 0.0], ..Default::default() },
             visual_info: Some(VisualInfo::Color(0.8, 0.6, 0.45)),
             is_kinematic: false,
             updated: true,
