@@ -307,6 +307,7 @@ impl RoomData {
         }
     }
 
+    /// Reset entire room
     pub fn reset(&mut self){
         // Reset robots
         for mut r in self.robots.iter_mut() {
@@ -314,5 +315,14 @@ impl RoomData {
         }
 
         // TODO: reset others
+    }
+
+    /// Reset single robot
+    pub fn reset_robot(&mut self, id: &str){
+        if self.robots.contains_key(&id.to_string()) {
+            self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim);
+        } else {
+            info!("Request to reset non-existing robot {}", id);
+        }
     }
 }

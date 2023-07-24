@@ -121,7 +121,9 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                             ClientMessage::ResetAll => {
                                 room.lock().await.reset();
                             },
-                            ClientMessage::ResetRobot(_) => todo!(),
+                            ClientMessage::ResetRobot(r) => {
+                                room.lock().await.reset_robot(r.as_str());
+                            },
                             ClientMessage::ClaimRobot(_) => todo!(),
                         }
                     }
