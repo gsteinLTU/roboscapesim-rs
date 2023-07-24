@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -8,6 +11,8 @@ use log::{error, info};
 use nalgebra::point;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
+use rapier3d::prelude::Isometry;
+use rapier3d::prelude::Real;
 use rapier3d::prelude::{
     BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, QueryPipeline, RigidBodyHandle,
@@ -39,6 +44,8 @@ pub struct RoomData {
     pub robots: DashMap<String, RobotData>,
     #[derivative(Debug = "ignore")]
     pub sim: Simulation,
+    #[derivative(Debug = "ignore")]
+    pub reseters: Vec<Arc<Mutex<dyn Resettable>>>,
 }
 
 /// Holds rapier-related structs together
@@ -123,9 +130,12 @@ impl RoomData {
             sim: Simulation::new(),
             last_update: Instant::now(),
             robots: DashMap::new(),
+            reseters: Vec::new(),
         };
 
         info!("Room {} created", obj.name);
+
+        // Setup test room
 
         /* Create the ground. */
         let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
@@ -134,6 +144,8 @@ impl RoomData {
         obj.sim.collider_set.insert_with_parent(collider, floor_handle, &mut obj.sim.rigid_body_set);
         obj.sim.rigid_body_labels.insert("ground".into(), floor_handle);
         
+
+        // Test cube
         let rigid_body = RigidBodyBuilder::dynamic()
             .ccd_enabled(true)
             .translation(vector![1.2, 2.5, 0.0])
@@ -150,8 +162,8 @@ impl RoomData {
             is_kinematic: false,
             updated: true,
         });
+        obj.reseters.push(Arc::new(Mutex::new(RigidBodyResetter::new(cube_body_handle, &obj.sim))));
 
-        // Setup test room
 
         // Create robot
         let mut robot = RobotData::create_robot_body(&mut obj.sim);
@@ -314,7 +326,9 @@ impl RoomData {
             r.reset(&mut self.sim);
         }
 
-        // TODO: reset others
+        for resetter in self.reseters.iter() {
+            resetter.lock().unwrap().reset(&mut self.sim);
+        }
     }
 
     /// Reset single robot
@@ -323,6 +337,33 @@ impl RoomData {
             self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim);
         } else {
             info!("Request to reset non-existing robot {}", id);
+        }
+    }
+}
+
+
+/// Resets a rigid body to its initial conditions
+pub(crate) struct RigidBodyResetter {
+    pub body_handle: RigidBodyHandle,
+    initial_position: Isometry<Real>,
+    initial_angvel: nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>>,
+    initial_linvel: nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>>,
+}
+
+impl RigidBodyResetter {
+    pub(crate) fn new(body_handle: RigidBodyHandle, sim: &Simulation) -> RigidBodyResetter {
+        let body = sim.rigid_body_set.get(body_handle).unwrap();
+        RigidBodyResetter { body_handle, initial_position: body.position().to_owned(), initial_angvel: body.angvel().to_owned(), initial_linvel: body.linvel().to_owned()}
+    }
+}
+
+impl Resettable for RigidBodyResetter {
+    fn reset(&mut self, sim: &mut Simulation) {
+        if sim.rigid_body_set.contains(self.body_handle){
+            let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
+            body.set_position(self.initial_position, true);
+            body.set_angvel(self.initial_angvel, true);
+            body.set_linvel(self.initial_linvel, true);
         }
     }
 }

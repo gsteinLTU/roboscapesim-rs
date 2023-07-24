@@ -1,5 +1,5 @@
 use crate::room::Simulation;
 
-pub(crate) trait Resettable {
+pub trait Resettable : Send + Sync {
     fn reset(&mut self, sim: &mut Simulation);
 }
