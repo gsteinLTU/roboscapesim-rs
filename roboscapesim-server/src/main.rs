@@ -3,6 +3,7 @@ use axum::{response::IntoResponse, routing::post, Json, Router, http::{Method, h
 use chrono::Utc;
 use cyberdeck::*;
 mod room;
+use roboscapesim_common::ClientMessage;
 use room::RoomData;
 mod robot;
 use simple_logger::SimpleLogger;
@@ -94,6 +95,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
 
     let mut peer = Peer::new(move |peer_id, e| {
         let room_id = room_id.clone();
+        
         async move {
             let room = ROOMS.get(&(room_id.to_string())).unwrap();
             match e {
@@ -111,6 +113,18 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                         c.label(),
                         msg_str
                     );
+
+                    if let Ok(c) = serde_json::from_str::<ClientMessage>(&msg_str) {
+                        trace!("Client message: {:?}", c);
+                        match c {
+                            ClientMessage::Heartbeat => {},
+                            ClientMessage::ResetAll => {
+                                room.lock().await.reset();
+                            },
+                            ClientMessage::ResetRobot(_) => todo!(),
+                            ClientMessage::ClaimRobot(_) => todo!(),
+                        }
+                    }
                     //c.send_text(format!("Echo {}", msg_str)).await.unwrap();
                 }
                 PeerEvent::DataChannelStateChange(c) => {

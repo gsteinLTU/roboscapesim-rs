@@ -19,6 +19,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 
 use crate::CLIENTS;
 use crate::robot::RobotData;
+use crate::util::traits::Resettable;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -40,6 +41,7 @@ pub struct RoomData {
     pub sim: Simulation,
 }
 
+/// Holds rapier-related structs together
 pub struct Simulation {
     pub rigid_body_set: RigidBodySet,
     pub collider_set: ColliderSet,
@@ -59,6 +61,7 @@ pub struct Simulation {
 }
 
 impl Simulation {
+    /// Instantiate the simulation objects with default settings
     fn new() -> Simulation {
         Simulation {
             rigid_body_set: RigidBodySet::new(),
@@ -79,6 +82,7 @@ impl Simulation {
         }
     }
 
+    /// Run an update of the simulation with the given delta time (in seconds)
     fn update(&mut self, delta_time: f64) {
         // Update dt
         self.integration_parameters.dt = delta_time as f32;
@@ -124,24 +128,11 @@ impl RoomData {
         info!("Room {} created", obj.name);
 
         /* Create the ground. */
-        // let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
-        // obj.sim.collider_set.insert(collider);
-
         let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
         let floor_handle = obj.sim.rigid_body_set.insert(rigid_body);
         let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0);
         obj.sim.collider_set.insert_with_parent(collider, floor_handle, &mut obj.sim.rigid_body_set);
         obj.sim.rigid_body_labels.insert("ground".into(), floor_handle);
-
-        // /* Create the bounding ball. */
-        // let rigid_body = RigidBodyBuilder::dynamic()
-        // .ccd_enabled(true)
-        // .translation(vector![0.0, 10.0, 0.0])
-        // .build();
-        // let collider = ColliderBuilder::ball(0.5).restitution(0.4).build();
-        // let ball_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        // obj.sim.collider_set.insert_with_parent(collider, ball_body_handle, &mut obj.sim.rigid_body_set);
-        // obj.sim.rigid_body_labels.insert("ball".into(), ball_body_handle);
         
         let rigid_body = RigidBodyBuilder::dynamic()
             .ccd_enabled(true)
@@ -161,13 +152,6 @@ impl RoomData {
         });
 
         // Setup test room
-        /*obj.objects.insert("robot".into(), ObjectData {
-            name: "robot".into(),
-            transform: Transform { ..Default::default() },
-            visual_info: VisualInfo::Mesh("parallax_robot.glb".into()),
-            is_kinematic: false,
-            updated: true,
-        });*/
 
         // Create robot
         let mut robot = RobotData::create_robot_body(&mut obj.sim);
@@ -197,20 +181,6 @@ impl RoomData {
 
         obj.robots.insert("robot".to_string(), robot);
 
-        // obj.objects.insert("ball".into(), ObjectData {
-        //     name: "ball".into(),
-        //     transform: Transform { ..Default::default() },
-        //     visual_info: VisualInfo::Mesh("sphere.glb".into()),
-        //     is_kinematic: false,
-        //     updated: true,
-        // });
-        // obj.objects.insert("ball2".into(), ObjectData {
-        //     name: "ball2".into(),
-        //     transform: Transform { ..Default::default() },
-        //     visual_info: VisualInfo::Mesh("sphere.glb".into()),
-        //     is_kinematic: false,
-        //     updated: true,
-        // });
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
             transform: Transform { scaling: vector![100.0, 0.4, 100.0], position: point![0.0, 0.1, 0.0], ..Default::default() },
@@ -235,6 +205,7 @@ impl RoomData {
         }
     }
 
+    /// Send a serialized object of type T to all clients in list
     pub async fn send_to_clients<T: Serialize>(val: &T, clients: impl Iterator<Item = u128>) {
         let msg = serde_json::to_string(val).unwrap();
 
@@ -249,6 +220,7 @@ impl RoomData {
         }
     }
 
+    /// Send the room's current state data to a specific client
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
             Self::send_to_client(
@@ -333,5 +305,14 @@ impl RoomData {
             self.last_update = Instant::now();
             self.last_full_update = time;
         }
+    }
+
+    pub fn reset(&mut self){
+        // Reset robots
+        for mut r in self.robots.iter_mut() {
+            r.reset(&mut self.sim);
+        }
+
+        // TODO: reset others
     }
 }

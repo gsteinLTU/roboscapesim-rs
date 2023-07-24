@@ -5,7 +5,7 @@ mod game;
 use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::UpdateMessage;
+use roboscapesim_common::{UpdateMessage, ClientMessage};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel, window};
 use neo_babylon::prelude::*;
@@ -68,7 +68,17 @@ async fn main() {
             }
         });
         game.borrow().scene.borrow().add_before_render_observable(before_render);
-        create_button("Reset", Closure::new(|| { console_log!("Reset") }));
+        create_button("Reset", Closure::new(|| { 
+            console_log!("Reset");
+            
+            DATA_CHANNELS.with(|dcs| {
+                // Send reset message
+                // TODO: Allow robot reset requests too
+                let message = serde_json::to_string(&ClientMessage::ResetAll).unwrap();
+                let message = message.as_str();
+                dcs.borrow().get("foo").unwrap().borrow().send_with_str(message).unwrap();
+            });
+        }));
     });
     
     console_log!("RoboScape Online loaded!");
