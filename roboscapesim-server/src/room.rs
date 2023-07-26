@@ -1,6 +1,3 @@
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -45,7 +42,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub sim: Simulation,
     #[derivative(Debug = "ignore")]
-    pub reseters: Vec<Arc<Mutex<dyn Resettable>>>,
+    pub reseters: Vec<Box<dyn Resettable + Send + Sync>>,
 }
 
 /// Holds rapier-related structs together
@@ -162,14 +159,15 @@ impl RoomData {
             is_kinematic: false,
             updated: true,
         });
-        obj.reseters.push(Arc::new(Mutex::new(RigidBodyResetter::new(cube_body_handle, &obj.sim))));
+        obj.reseters.push(Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
 
 
         // Create robot
         let mut robot = RobotData::create_robot_body(&mut obj.sim);
-        obj.sim.rigid_body_labels.insert("robot".into(), robot.body_handle);
-        obj.objects.insert("robot".into(), ObjectData {
-            name: "robot".into(),
+        let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
+        obj.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
+        obj.objects.insert(robot_id.clone(), ObjectData {
+            name: robot_id.clone(),
             transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
             visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
             is_kinematic: false,
@@ -326,8 +324,8 @@ impl RoomData {
             r.reset(&mut self.sim);
         }
 
-        for resetter in self.reseters.iter() {
-            resetter.lock().unwrap().reset(&mut self.sim);
+        for resetter in self.reseters.iter_mut() {
+            resetter.reset(&mut self.sim);
         }
     }
 

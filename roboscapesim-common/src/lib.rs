@@ -101,6 +101,8 @@ pub struct RoomState {
     pub name: String,
     /// The current time of the room, in seconds since the room started
     pub roomtime: f64,
+    /// List of users in room
+    pub users: Vec<String>,
 }
 
 /// Struct containing possible message types sent to the client

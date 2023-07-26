@@ -85,24 +85,6 @@ async fn main() {
     connect().await;
 }
 
-#[netsblox_extension_menu_item("Show 3D View")]
-#[wasm_bindgen()]
-pub fn show_3d_view() {
-    let dialog = get_nb_externalvar("roboscapedialog").unwrap();
-    let f = get_window_fn("showDialog").unwrap();
-    f.call1(&JsValue::NULL, &dialog).unwrap();
-}
-
-#[netsblox_extension_setting]
-const BEEPS_ENABLED: ExtensionSetting = ExtensionSetting { 
-    name: "Beeps Enabled", 
-    id: "roboscape_beep", 
-    default_value: true,
-    on_hint: "Robots can beep", 
-    off_hint: "Robots cannot beep", 
-    hidden: false
-};
-
 pub async fn connect() {
     let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
     let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
@@ -255,4 +237,33 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
         },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
+}
+
+
+
+#[netsblox_extension_setting]
+const BEEPS_ENABLED: ExtensionSetting = ExtensionSetting { 
+    name: "Beeps Enabled", 
+    id: "roboscape_beep", 
+    default_value: true,
+    on_hint: "Robots can beep", 
+    off_hint: "Robots cannot beep", 
+    hidden: false
+};
+
+#[netsblox_extension_menu_item("Show 3D View")]
+#[wasm_bindgen]
+pub fn show_3d_view() {
+    let dialog = get_nb_externalvar("roboscapedialog").unwrap();
+    let f = get_window_fn("showDialog").unwrap();
+    f.call1(&JsValue::NULL, &dialog).unwrap();
+}
+
+#[netsblox_extension_block(name = "robotsInRoom", category = "network", spec = "robots in room", target = netsblox_extension_util::TargetObject::Both)]
+#[wasm_bindgen]
+pub fn robots_in_room() -> JsValue {
+    let list = GAME.with(|game| {
+        game.borrow().state.borrow().keys().filter(|k| k.starts_with("robot_")).map(|k| k[6..].to_owned()).collect::<Vec<_>>()
+    });
+    js_construct("List", &[&Array::from_iter(list.iter().map(|s| JsValue::from_str(&s)))]).unwrap()
 }
