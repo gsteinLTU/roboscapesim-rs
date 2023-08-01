@@ -1,7 +1,7 @@
 use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
 
 use neo_babylon::prelude::*;
-use roboscapesim_common::ObjectData;
+use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::JsValue;
 
 
@@ -17,6 +17,7 @@ pub(crate) struct Game {
     pub(crate) last_state_time: Rc<Cell<f64>>,
     pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
     pub(crate) beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
+    pub(crate) room_state: Rc<Cell<Option<RoomState>>>,
 }
 
 impl Game {
@@ -61,7 +62,8 @@ impl Game {
             state_server_time: Rc::new(Cell::new(0.0)),
             last_state_server_time: Rc::new(Cell::new(0.0)),
             shadow_generator,
-            beeps: Rc::new(RefCell::new(HashMap::new())),            
+            beeps: Rc::new(RefCell::new(HashMap::new())),     
+            room_state: Rc::new(Cell::new(None)),
         }
     }
 

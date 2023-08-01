@@ -15,3 +15,5 @@ Cargo.lock
 
 # Mac OS BS
 .DS_Store
+
+.env

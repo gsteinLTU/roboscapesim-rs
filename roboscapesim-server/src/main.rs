@@ -27,6 +27,8 @@ pub static CLIENTS: Lazy<DashMap<u128, Arc<RTCDataChannel>>> = Lazy::new(|| {
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     // Setup logger
     SimpleLogger::new().with_level(log::LevelFilter::Warn).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
