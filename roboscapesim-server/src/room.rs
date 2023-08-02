@@ -11,6 +11,7 @@ use roboscapesim_common::*;
 use serde::Serialize;
 
 use crate::services::service_struct::Service;
+use crate::services::world;
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 
@@ -65,8 +66,11 @@ impl RoomData {
         info!("Room {} created", obj.name);
 
         // Setup test room
+        // Create IoTScape service
+        let service = world::create_world_service(obj.name.as_str());
+        obj.services.push(service);
 
-        /* Create the ground. */
+        // Ground
         let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
         let floor_handle = obj.sim.rigid_body_set.insert(rigid_body);
         let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0);
@@ -221,11 +225,17 @@ impl RoomData {
         for service in self.services.iter_mut() {
             // Handle messages
             if service.update() > 0 {
-                for msg in service.service.lock().unwrap().rx_queue.iter() {
+                loop {
+                    if service.service.lock().unwrap().rx_queue.len() == 0 {
+                        break;
+                    }
+
+                    let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
                     info!("{:?}", msg);
                 }
             }
         }
+        
 
         self.sim.update(delta_time);
 
