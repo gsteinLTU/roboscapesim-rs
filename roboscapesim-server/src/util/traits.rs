@@ -1,6 +1,6 @@
 pub mod resettable {
     use rapier3d::prelude::{Real, Isometry, RigidBodyHandle};
-    use crate::room::Simulation;
+    use crate::simulation::Simulation;
 
     pub trait Resettable {
         fn reset(&mut self, sim: &mut Simulation);

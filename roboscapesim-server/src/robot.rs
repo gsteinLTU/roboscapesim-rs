@@ -9,7 +9,8 @@ use nalgebra::{Point3,UnitQuaternion};
 use rapier3d::prelude::*;
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 
-use crate::room::{Simulation, RoomData};
+use crate::room::RoomData;
+use crate::simulation::Simulation;
 use crate::util::traits::resettable::Resettable;
 #[derive(Derivative)]
 #[derivative(Debug)]

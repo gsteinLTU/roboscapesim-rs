@@ -14,6 +14,8 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
+mod simulation;
+
 #[path = "./util/mod.rs"]
 mod util;
 
