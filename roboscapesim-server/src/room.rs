@@ -8,8 +8,6 @@ use log::{error, info};
 use nalgebra::point;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
-use rapier3d::prelude::Isometry;
-use rapier3d::prelude::Real;
 use rapier3d::prelude::{
     BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet, QueryPipeline, RigidBodyHandle,
@@ -17,11 +15,12 @@ use rapier3d::prelude::{
 use roboscapesim_common::*;
 use serde::Serialize;
 
+use crate::services::service_struct::Service;
 use crate::util::extra_rand::UpperHexadecimal;
 
 use crate::CLIENTS;
 use crate::robot::RobotData;
-use crate::util::traits::Resettable;
+use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -43,6 +42,8 @@ pub struct RoomData {
     pub sim: Simulation,
     #[derivative(Debug = "ignore")]
     pub reseters: Vec<Box<dyn Resettable + Send + Sync>>,
+    #[derivative(Debug = "ignore")]
+    pub services: Vec<Service>,
 }
 
 /// Holds rapier-related structs together
@@ -127,7 +128,8 @@ impl RoomData {
             sim: Simulation::new(),
             last_update: Instant::now(),
             robots: DashMap::new(),
-            reseters: Vec::new(),
+            reseters: vec![],
+            services: vec![],
         };
 
         info!("Room {} created", obj.name);
@@ -335,33 +337,6 @@ impl RoomData {
             self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim);
         } else {
             info!("Request to reset non-existing robot {}", id);
-        }
-    }
-}
-
-
-/// Resets a rigid body to its initial conditions
-pub(crate) struct RigidBodyResetter {
-    pub body_handle: RigidBodyHandle,
-    initial_position: Isometry<Real>,
-    initial_angvel: nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>>,
-    initial_linvel: nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>>,
-}
-
-impl RigidBodyResetter {
-    pub(crate) fn new(body_handle: RigidBodyHandle, sim: &Simulation) -> RigidBodyResetter {
-        let body = sim.rigid_body_set.get(body_handle).unwrap();
-        RigidBodyResetter { body_handle, initial_position: body.position().to_owned(), initial_angvel: body.angvel().to_owned(), initial_linvel: body.linvel().to_owned()}
-    }
-}
-
-impl Resettable for RigidBodyResetter {
-    fn reset(&mut self, sim: &mut Simulation) {
-        if sim.rigid_body_set.contains(self.body_handle){
-            let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
-            body.set_position(self.initial_position, true);
-            body.set_angvel(self.initial_angvel, true);
-            body.set_linvel(self.initial_linvel, true);
         }
     }
 }

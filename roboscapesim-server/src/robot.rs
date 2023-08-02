@@ -5,13 +5,12 @@ use chrono::Utc;
 use dashmap::DashMap;
 use derivative::Derivative;
 use log::{info, error};
-use nalgebra::{Point3, Quaternion, Rotation3, UnitQuaternion, Vector3};
+use nalgebra::{Point3,UnitQuaternion};
 use rapier3d::prelude::*;
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 
 use crate::room::{Simulation, RoomData};
-use crate::util::traits::{Resettable};
-
+use crate::util::traits::resettable::Resettable;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct RobotData {

@@ -17,6 +17,9 @@ use log::{info, trace, error};
 #[path = "./util/mod.rs"]
 mod util;
 
+#[path = "./services/mod.rs"]
+mod services;
+
 static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
 });
