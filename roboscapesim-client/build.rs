@@ -10,6 +10,8 @@ macro_rules! warn {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("cargo:rerun-if-changed=lib.rs");
+    
     // basic extension setup
     let r = netsblox_extension_util::build();
     if r.is_err() {
