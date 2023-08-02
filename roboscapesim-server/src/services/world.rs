@@ -1,8 +1,8 @@
-use std::{sync::{Arc, Mutex}, collections::BTreeMap, time::{Instant, Duration}};
+use std::{collections::BTreeMap, time::{Instant, Duration}};
 
-use iotscape::{IoTScapeService, ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription};
 
-use super::service_struct::{Service, ServiceType};
+use super::service_struct::{Service, ServiceType, setup_service};
 
 pub fn create_world_service(id: &str) -> Service {
     // Create definition struct
@@ -113,6 +113,18 @@ pub fn create_world_service(id: &str) -> Service {
         },
     );
 
+    definition.methods.insert(
+        "reset".to_owned(),
+        MethodDescription {
+            documentation: Some("Reset conditions of World".to_owned()),
+            params: vec![],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec![],
+            },
+        },
+    );
+
     definition.events.insert(
         "userJoined".to_owned(),
         EventDescription { params: vec![] },
@@ -123,13 +135,7 @@ pub fn create_world_service(id: &str) -> Service {
         EventDescription { params: vec![] },
     );
 
-    let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
-    let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1975".to_string());
-    let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
-        "RoboScapeWorld",
-        definition,
-        (server + ":" + &port).parse().unwrap(),
-    )));
+    let service = setup_service(definition);
 
     service
         .lock()
@@ -138,7 +144,7 @@ pub fn create_world_service(id: &str) -> Service {
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(60);
+    let announce_period = Duration::from_secs(30);
 
     Service {
         service_type: ServiceType::World,

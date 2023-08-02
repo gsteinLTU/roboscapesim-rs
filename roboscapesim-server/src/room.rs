@@ -10,7 +10,7 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
 use serde::Serialize;
 
-use crate::services::service_struct::Service;
+use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world;
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
@@ -38,7 +38,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub sim: Simulation,
     #[derivative(Debug = "ignore")]
-    pub reseters: Vec<Box<dyn Resettable + Send + Sync>>,
+    pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
     pub services: Vec<Service>,
 }
@@ -59,7 +59,7 @@ impl RoomData {
             sim: Simulation::new(),
             last_update: Instant::now(),
             robots: DashMap::new(),
-            reseters: vec![],
+            reseters: DashMap::new(),
             services: vec![],
         };
 
@@ -79,6 +79,7 @@ impl RoomData {
         
 
         // Test cube
+        let body_name = "cube";
         let rigid_body = RigidBodyBuilder::dynamic()
             .ccd_enabled(true)
             .translation(vector![1.2, 2.5, 0.0])
@@ -87,15 +88,15 @@ impl RoomData {
         let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5).restitution(0.3).density(0.1).build();
         let cube_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
         obj.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut obj.sim.rigid_body_set);
-        obj.sim.rigid_body_labels.insert("cube".into(), cube_body_handle);
-        obj.objects.insert("cube".into(), ObjectData {
-            name: "cube".into(),
+        obj.sim.rigid_body_labels.insert(body_name.into(), cube_body_handle);
+        obj.objects.insert(body_name.into(), ObjectData {
+            name: body_name.into(),
             transform: Transform { ..Default::default() },
             visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
             is_kinematic: false,
             updated: true,
         });
-        obj.reseters.push(Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
+        obj.reseters.insert(body_name.to_owned(), Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
 
 
         // Create robot
@@ -232,6 +233,29 @@ impl RoomData {
 
                     let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
                     info!("{:?}", msg);
+                    match service.service_type {
+                        ServiceType::World => {
+                            match msg.function {
+                                f => {
+                                    info!("Unrecognized function {}", f);
+                                }
+                            };
+                        },
+                        ServiceType::Entity => {
+                            match msg.function.as_str() {
+                                "reset" => {
+                                    if let Some(mut r) = self.reseters.get_mut(msg.device.as_str()) {
+                                        r.reset(&mut self.sim);
+                                    } else {
+                                        info!("Unrecognized device {}", msg.device);
+                                    }
+                                },
+                                f => {
+                                    info!("Unrecognized function {}", f);
+                                }
+                            };                            
+                        },
+                    }
                 }
             }
         }
@@ -275,8 +299,8 @@ impl RoomData {
             r.reset(&mut self.sim);
         }
 
-        for resetter in self.reseters.iter_mut() {
-            resetter.reset(&mut self.sim);
+        for mut resetter in self.reseters.iter_mut() {
+            resetter.value_mut().reset(&mut self.sim);
         }
     }
 

@@ -1,6 +1,6 @@
 use std::{sync::{Arc, Mutex}, time::{Instant, Duration}};
 
-use iotscape::IoTScapeService;
+use iotscape::{IoTScapeService, ServiceDefinition};
 
 pub enum ServiceType {
     World, Entity
@@ -29,4 +29,15 @@ impl Service {
         
         self.service.lock().unwrap().rx_queue.len()
     }
+}
+
+pub(crate) fn setup_service(definition: ServiceDefinition) -> Arc<Mutex<IoTScapeService>> {
+    let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
+    let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1975".to_string());
+    let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
+        "RoboScapeEntity",
+        definition,
+        (server + ":" + &port).parse().unwrap(),
+    )));
+    service
 }
