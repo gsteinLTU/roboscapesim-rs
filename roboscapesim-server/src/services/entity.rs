@@ -64,7 +64,7 @@ pub fn create_entity_service(id: &str) -> Service {
         },
     );
 
-    let service = setup_service(definition);
+    let service = setup_service(definition, ServiceType::Entity);
 
     service
         .lock()

@@ -223,6 +223,7 @@ impl RoomData {
             RobotData::robot_update(robot.value_mut(), &mut self.sim, &self.sockets, delta_time).await;
         }
 
+        let mut msgs = vec![];
         for service in self.services.iter_mut() {
             // Handle messages
             if service.update() > 0 {
@@ -232,33 +233,42 @@ impl RoomData {
                     }
 
                     let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
-                    info!("{:?}", msg);
-                    match service.service_type {
-                        ServiceType::World => {
-                            match msg.function {
-                                f => {
-                                    info!("Unrecognized function {}", f);
-                                }
-                            };
-                        },
-                        ServiceType::Entity => {
-                            match msg.function.as_str() {
-                                "reset" => {
-                                    if let Some(mut r) = self.reseters.get_mut(msg.device.as_str()) {
-                                        r.reset(&mut self.sim);
-                                    } else {
-                                        info!("Unrecognized device {}", msg.device);
-                                    }
-                                },
-                                f => {
-                                    info!("Unrecognized function {}", f);
-                                }
-                            };                            
-                        },
-                    }
+
+                    msgs.push((service.service_type, msg));
                 }
             }
         }
+        
+        for (service_type, msg) in msgs {
+            info!("{:?}", msg);
+            match service_type {
+                ServiceType::World => {
+                    match msg.function.as_str() {
+                        "reset" => {
+                            self.reset();
+                        },
+                        f => {
+                            info!("Unrecognized function {}", f);
+                        }
+                    };
+                },
+                ServiceType::Entity => {
+                    match msg.function.as_str() {
+                        "reset" => {
+                            if let Some(mut r) = self.reseters.get_mut(msg.device.as_str()) {
+                                r.reset(&mut self.sim);
+                            } else {
+                                info!("Unrecognized device {}", msg.device);
+                            }
+                        },
+                        f => {
+                            info!("Unrecognized function {}", f);
+                        }
+                    };                            
+                },
+            }
+        }
+        
         
 
         self.sim.update(delta_time);
