@@ -78,38 +78,49 @@
     let path = document.currentScript.src;
     path = path.substring(0, path.lastIndexOf("/"));
 
-	var element = document.createElement('link');
-	element.setAttribute('rel', 'stylesheet');
-	element.setAttribute('type', 'text/css');
-	element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
-	document.head.appendChild(element);
 
-	var scriptElement = document.createElement('script');
+    // Add CSS
+    var element = document.createElement('link');
+    element.setAttribute('rel', 'stylesheet');
+    element.setAttribute('type', 'text/css');
+    element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
+    document.head.appendChild(element);
 
-	scriptElement.onload = () => {
-		var element = createDialog('RoboScape Online');
-		element.style.width = '400px';
-		element.style.height = '400px';
-		const canvas = document.createElement('canvas');
-		canvas.id = 'roboscape-canvas';
-		canvas.style.width = 'calc(100% - 32px)';
-		canvas.style.height = 'calc(100% - 32px)';
-		element.querySelector('content').appendChild(canvas);
-		setupDialog(element);
-		const observer = new ResizeObserver(function () {
-		    BABYLON.Engine.LastCreatedEngine.resize();
-		});
-		observer.observe(element);
-		window.externalVariables['roboscapedialog'] = element;
-		const buttonbar = document.createElement('div');
-		buttonbar.id = 'roboscapebuttonbar';
-		element.querySelector('content').appendChild(buttonbar);
-	};
-	scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
-	document.head.appendChild(scriptElement);
+    // Add JS
+    alert('hi');
 
-	var scriptElement = document.createElement('script');
-	scriptElement.async = false;
+    var scriptElement = document.createElement('script');
+
+    // Create dialog for later use
+
+    scriptElement.onload = () => {        
+        var element = createDialog('RoboScape Online');
+        element.style.width = '400px';
+        element.style.height = '400px';
+        const canvas = document.createElement('canvas');
+        canvas.id = 'roboscape-canvas';
+        canvas.style.width = 'calc(100% - 32px)';
+        canvas.style.height = 'calc(100% - 32px)';
+        element.querySelector('content').appendChild(canvas);
+        setupDialog(element);
+        const observer = new ResizeObserver(function () {
+            BABYLON.Engine.LastCreatedEngine.resize();
+        });
+        observer.observe(element);
+        window.externalVariables['roboscapedialog'] = element;
+
+        const buttonbar = document.createElement('div');
+        buttonbar.id = 'roboscapebuttonbar';
+        element.querySelector('content').appendChild(buttonbar);
+
+    };
+
+    scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
+    document.head.appendChild(scriptElement);
+
+
+    var scriptElement = document.createElement('script');
+    scriptElement.async = false;
 
 	scriptElement.onload = () => {
 		var loaderScriptElement = document.createElement('script');
@@ -117,14 +128,14 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {robots_in_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {show_3d_view, robots_in_room} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 		        `;
 		    document.body.appendChild(s);
 		};

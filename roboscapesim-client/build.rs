@@ -9,9 +9,7 @@ macro_rules! warn {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=lib.rs");
-    
+fn main() -> Result<(), Box<dyn Error>> {    
     // basic extension setup
     let r = netsblox_extension_util::build();
     if r.is_err() {
@@ -40,47 +38,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     lines.push("");
 
-    // Add CSS
-    lines.push("\tvar element = document.createElement('link');");
-    lines.push("\telement.setAttribute('rel', 'stylesheet');");
-    lines.push("\telement.setAttribute('type', 'text/css');");
-    lines.push("\telement.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');");
-    lines.push("\tdocument.head.appendChild(element);");
-
-    // Add JS
-    lines.push("");
-    lines.push("\tvar scriptElement = document.createElement('script');");
-
-    // Create dialog for later use
-    lines.push("");
-    lines.push("\tscriptElement.onload = () => {");        
-    lines.push("\t\tvar element = createDialog('RoboScape Online');");
-    lines.push("\t\telement.style.width = '400px';");
-    lines.push("\t\telement.style.height = '400px';");
-    lines.push("\t\tconst canvas = document.createElement('canvas');");
-    lines.push("\t\tcanvas.id = 'roboscape-canvas';");
-    lines.push("\t\tcanvas.style.width = 'calc(100% - 32px)';");
-    lines.push("\t\tcanvas.style.height = 'calc(100% - 32px)';");
-    lines.push("\t\telement.querySelector('content').appendChild(canvas);");
-    lines.push("\t\tsetupDialog(element);");
-    lines.push("\t\tconst observer = new ResizeObserver(function () {");
-    lines.push("\t\t    BABYLON.Engine.LastCreatedEngine.resize();");
-    lines.push("\t\t});");
-    lines.push("\t\tobserver.observe(element);");
-    lines.push("\t\twindow.externalVariables['roboscapedialog'] = element;");
-
-    lines.push("\t\tconst buttonbar = document.createElement('div');");
-    lines.push("\t\tbuttonbar.id = 'roboscapebuttonbar';");
-    lines.push("\t\telement.querySelector('content').appendChild(buttonbar);");
-
-    lines.push("\t};");
-
-    lines.push("\tscriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');");
-    lines.push("\tdocument.head.appendChild(scriptElement);");
-
-    lines.push("");
-    lines.push("\tvar scriptElement = document.createElement('script');");
-    lines.push("\tscriptElement.async = false;");
+    // Read file  
+    let mut extra_content = String::new();
+    {
+        let mut file = File::open("./extra.js")?;
+        file.read_to_string(&mut extra_content)?;
+        
+        for line in extra_content.split("\n") {
+            lines.push(line);
+        }
+        
+    }
+    
     lines.push("");
     
     lines.push("\tscriptElement.onload = () => {");    
