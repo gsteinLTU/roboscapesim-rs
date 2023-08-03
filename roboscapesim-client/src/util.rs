@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use js_sys::{Function, Reflect, Array};
 use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
-use wasm_bindgen::{JsValue, JsCast, prelude::Closure, closure::WasmClosure};
+use wasm_bindgen::{JsValue, JsCast, prelude::Closure};
 use web_sys::{window, Document};
 
 

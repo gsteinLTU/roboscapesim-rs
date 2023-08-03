@@ -10,6 +10,7 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
 use serde::Serialize;
 
+use crate::services::entity::create_entity_service;
 use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world;
 use crate::simulation::Simulation;
@@ -79,7 +80,7 @@ impl RoomData {
         
 
         // Test cube
-        let body_name = "cube";
+        let body_name = obj.name.to_owned() + &"_" + &"cube";
         let rigid_body = RigidBodyBuilder::dynamic()
             .ccd_enabled(true)
             .translation(vector![1.2, 2.5, 0.0])
@@ -88,15 +89,18 @@ impl RoomData {
         let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5).restitution(0.3).density(0.1).build();
         let cube_body_handle = obj.sim.rigid_body_set.insert(rigid_body);
         obj.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut obj.sim.rigid_body_set);
-        obj.sim.rigid_body_labels.insert(body_name.into(), cube_body_handle);
-        obj.objects.insert(body_name.into(), ObjectData {
-            name: body_name.into(),
+        obj.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+        obj.objects.insert(body_name.clone(), ObjectData {
+            name: body_name.clone(),
             transform: Transform { ..Default::default() },
             visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
             is_kinematic: false,
             updated: true,
         });
-        obj.reseters.insert(body_name.to_owned(), Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
+        obj.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
+
+        let service = create_entity_service(&body_name);
+        obj.services.push(service);
 
 
         // Create robot
