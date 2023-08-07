@@ -1,10 +1,14 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}};
 
-use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
+use log::info;
+use rapier3d::prelude::RigidBodyHandle;
+
+use crate::room::RoomData;
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
-pub fn create_entity_service(id: &str) -> Service {
+pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -76,9 +80,26 @@ pub fn create_entity_service(id: &str) -> Service {
     let announce_period = Duration::from_secs(30);
 
     Service {
+        id: id.to_string(),
         service_type: ServiceType::Entity,
         service,
         last_announce,
         announce_period,
+        attached_rigid_body: Some(rigid_body.to_owned()),
     }
+}
+
+pub fn handle_entity_message(room: &mut RoomData, msg: &Request) {
+    match msg.function.as_str() {
+        "reset" => {
+            if let Some(mut r) = room.reseters.get_mut(msg.device.as_str()) {
+                r.reset(&mut room.sim);
+            } else {
+                info!("Unrecognized device {}", msg.device);
+            }
+        },
+        f => {
+            info!("Unrecognized function {}", f);
+        }
+    };
 }

@@ -10,9 +10,10 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
 use serde::Serialize;
 
-use crate::services::entity::create_entity_service;
+use crate::services::entity::{create_entity_service, handle_entity_message};
+use crate::services::position::handle_position_sensor_message;
 use crate::services::service_struct::{Service, ServiceType};
-use crate::services::world;
+use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 
@@ -41,7 +42,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: DashMap<String, Service>,
+    pub services: Vec<Service>,
 }
 
 impl RoomData {
@@ -61,7 +62,7 @@ impl RoomData {
             last_update: Instant::now(),
             robots: DashMap::new(),
             reseters: DashMap::new(),
-            services: DashMap::new(),
+            services: vec![],
         };
 
         info!("Room {} created", obj.name);
@@ -69,7 +70,7 @@ impl RoomData {
         // Setup test room
         // Create IoTScape service
         let service = world::create_world_service(obj.name.as_str());
-        obj.services.insert(obj.name.clone(), service);
+        obj.services.push(service);
 
         // Ground
         let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
@@ -99,8 +100,8 @@ impl RoomData {
         });
         obj.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
 
-        let service = create_entity_service(&body_name);
-        obj.services.insert(body_name.clone(), service);
+        let service = create_entity_service(&body_name, &cube_body_handle);
+        obj.services.push(service);
 
 
         // Create robot
@@ -228,7 +229,7 @@ impl RoomData {
         }
 
         let mut msgs = vec![];
-        for mut service in self.services.iter_mut() {
+        for service in self.services.iter_mut() {
             // Handle messages
             if service.update() > 0 {
                 loop {
@@ -246,67 +247,9 @@ impl RoomData {
         for (service_type, msg) in msgs {
             info!("{:?}", msg);
             match service_type {
-                ServiceType::World => {
-                    match msg.function.as_str() {
-                        "reset" => {
-                            self.reset();
-                        },
-                        f => {
-                            info!("Unrecognized function {}", f);
-                        }
-                    };
-                },
-                ServiceType::Entity => {
-                    match msg.function.as_str() {
-                        "reset" => {
-                            if let Some(mut r) = self.reseters.get_mut(msg.device.as_str()) {
-                                r.reset(&mut self.sim);
-                            } else {
-                                info!("Unrecognized device {}", msg.device);
-                            }
-                        },
-                        f => {
-                            info!("Unrecognized function {}", f);
-                        }
-                    };                            
-                },
-                ServiceType::PositionSensor => {
-                    if let Some(o) = self.sim.rigid_body_labels.get(msg.device.as_str()) {
-                        let o = self.sim.rigid_body_set.get(o.value().clone()).unwrap();
-                        match msg.function.as_str() {
-                            "getX" => {
-                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
-                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string()]));
-                                }                            
-                            },
-                            "getY" => {
-                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
-                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().y.to_string()]));
-                                }
-                            },
-                            "getZ" => {
-                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
-                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().z.to_string()]));
-                                }                            
-                            },
-                            "getPosition" => {
-                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
-                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()]));
-                                }                            
-                            },
-                            "getHeading" => {
-                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
-                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.rotation().euler_angles().1.to_string()]));
-                                }                            
-                            },
-                            f => {
-                                info!("Unrecognized function {}", f);
-                            }
-                        };
-                    } else {
-                        info!("Unrecognized object {}", msg.device);
-                    }
-                },
+                ServiceType::World => handle_world_msg(self, &msg),
+                ServiceType::Entity => handle_entity_message(self, &msg),
+                ServiceType::PositionSensor => handle_position_sensor_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
                 }

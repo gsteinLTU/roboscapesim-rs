@@ -1,9 +1,10 @@
-use std::{sync::{Arc, Mutex}, time::{Instant, Duration}};
+use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, hash::Hash};
 
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition};
+use rapier3d::prelude::RigidBodyHandle;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
     World, Entity, PositionSensor, LIDAR, ProximitySensor
 }
@@ -11,11 +12,26 @@ pub enum ServiceType {
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Service {
+    pub id: String,
     pub service_type: ServiceType,
     #[derivative(Debug = "ignore")]
     pub service: Arc<Mutex<IoTScapeService>>,
     pub last_announce: Instant,
     pub announce_period: Duration,
+    pub attached_rigid_body: Option<RigidBodyHandle>,
+}
+
+impl Hash for Service {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.service_type.hash(state);
+    }
+}
+
+impl PartialEq for Service {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.service_type == other.service_type
+    }
 }
 
 impl Service {

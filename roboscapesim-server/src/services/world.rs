@@ -1,6 +1,9 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}};
 
-use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
+use log::info;
+
+use crate::room::RoomData;
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
@@ -147,9 +150,22 @@ pub fn create_world_service(id: &str) -> Service {
     let announce_period = Duration::from_secs(30);
 
     Service {
+        id: id.to_string(),
         service_type: ServiceType::World,
         service,
         last_announce,
         announce_period,
+        attached_rigid_body: None,
     }
+}
+
+pub fn handle_world_msg(room: &mut RoomData, msg: &Request) {
+    match msg.function.as_str() {
+        "reset" => {
+            room.reset();
+        },
+        f => {
+            info!("Unrecognized function {}", f);
+        }
+    };
 }
