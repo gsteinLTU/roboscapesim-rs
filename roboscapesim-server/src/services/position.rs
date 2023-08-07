@@ -102,7 +102,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
 
     Service {
         id: id.to_string(),
-        service_type: ServiceType::World,
+        service_type: ServiceType::PositionSensor,
         service,
         last_announce,
         announce_period,

@@ -11,7 +11,7 @@ use roboscapesim_common::*;
 use serde::Serialize;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
-use crate::services::position::handle_position_sensor_message;
+use crate::services::position::{handle_position_sensor_message, create_position_service};
 use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
@@ -131,7 +131,11 @@ impl RoomData {
         //     i += 1;
         // }
 
+        let service = create_position_service(&robot.id, &robot.body_handle);
+        obj.services.push(service);
+
         obj.robots.insert("robot".to_string(), robot);
+
 
         obj.objects.insert("ground".into(), ObjectData {
             name: "ground".into(),
