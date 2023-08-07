@@ -5,7 +5,7 @@ use iotscape::{IoTScapeService, ServiceDefinition};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceType {
-    World, Entity
+    World, Entity, PositionSensor, LIDAR, ProximitySensor
 }
 
 #[derive(Derivative)]
@@ -36,14 +36,19 @@ impl Service {
     }
 }
 
-pub(crate) fn setup_service(definition: ServiceDefinition, service_type: ServiceType) -> Arc<Mutex<IoTScapeService>> {
+pub(crate) fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<Mutex<IoTScapeService>> {
     let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
     let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1975".to_string());
     let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
-        match service_type {
-            ServiceType::World => "RoboScapeWorld",
-            ServiceType::Entity => "RoboScapeEntity",
-        },
+        override_name.unwrap_or(
+            match service_type {
+                ServiceType::World => "RoboScapeWorld",
+                ServiceType::Entity => "RoboScapeEntity",
+                ServiceType::LIDAR => "LIDAR",
+                ServiceType::PositionSensor => "PositionSensor",
+                ServiceType::ProximitySensor => "ProximitySensor",
+            }
+        ),
         definition,
         (server + ":" + &port).parse().unwrap(),
     )));

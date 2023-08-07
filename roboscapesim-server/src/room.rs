@@ -41,7 +41,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Vec<Service>,
+    pub services: DashMap<String, Service>,
 }
 
 impl RoomData {
@@ -61,7 +61,7 @@ impl RoomData {
             last_update: Instant::now(),
             robots: DashMap::new(),
             reseters: DashMap::new(),
-            services: vec![],
+            services: DashMap::new(),
         };
 
         info!("Room {} created", obj.name);
@@ -69,7 +69,7 @@ impl RoomData {
         // Setup test room
         // Create IoTScape service
         let service = world::create_world_service(obj.name.as_str());
-        obj.services.push(service);
+        obj.services.insert(obj.name.clone(), service);
 
         // Ground
         let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
@@ -100,7 +100,7 @@ impl RoomData {
         obj.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &obj.sim)));
 
         let service = create_entity_service(&body_name);
-        obj.services.push(service);
+        obj.services.insert(body_name.clone(), service);
 
 
         // Create robot
@@ -228,7 +228,7 @@ impl RoomData {
         }
 
         let mut msgs = vec![];
-        for service in self.services.iter_mut() {
+        for mut service in self.services.iter_mut() {
             // Handle messages
             if service.update() > 0 {
                 loop {
@@ -270,6 +270,46 @@ impl RoomData {
                         }
                     };                            
                 },
+                ServiceType::PositionSensor => {
+                    if let Some(o) = self.sim.rigid_body_labels.get(msg.device.as_str()) {
+                        let o = self.sim.rigid_body_set.get(o.value().clone()).unwrap();
+                        match msg.function.as_str() {
+                            "getX" => {
+                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
+                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string()]));
+                                }                            
+                            },
+                            "getY" => {
+                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
+                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().y.to_string()]));
+                                }
+                            },
+                            "getZ" => {
+                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
+                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().z.to_string()]));
+                                }                            
+                            },
+                            "getPosition" => {
+                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
+                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()]));
+                                }                            
+                            },
+                            "getHeading" => {
+                                if let Some(s) = self.services.get_mut(&msg.device.to_owned()) {
+                                    s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.rotation().euler_angles().1.to_string()]));
+                                }                            
+                            },
+                            f => {
+                                info!("Unrecognized function {}", f);
+                            }
+                        };
+                    } else {
+                        info!("Unrecognized object {}", msg.device);
+                    }
+                },
+                t => {
+                    info!("Service type {:?} not yet implemented.", t);
+                }
             }
         }
         

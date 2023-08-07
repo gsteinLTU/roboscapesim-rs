@@ -135,7 +135,7 @@ pub fn create_world_service(id: &str) -> Service {
         EventDescription { params: vec![] },
     );
 
-    let service = setup_service(definition, ServiceType::World);
+    let service = setup_service(definition, ServiceType::World, None);
 
     service
         .lock()
