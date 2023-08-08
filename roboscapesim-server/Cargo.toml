@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 roboscapesim-common = { path = "../roboscapesim-common" }
-cyberdeck = { version = "0.1.3" }
+cyberdeck = { git = 'https://github.com/gsteinLTU/cyberdeck', branch = "master" }
 rapier3d = { version = "0.17.2", features = ["serde-serialize", "simd-stable"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"

@@ -104,8 +104,8 @@ impl RoomData {
         obj.services.push(service);
 
 
-        // Create robot
-        let mut robot = RobotData::create_robot_body(&mut obj.sim);
+        // Create robot 1
+        let mut robot = RobotData::create_robot_body(&mut obj.sim, None);
         let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
         obj.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         obj.objects.insert(robot_id.clone(), ObjectData {
@@ -117,6 +117,30 @@ impl RoomData {
         });
         RobotData::setup_robot_socket(&mut robot);
         
+        let service = create_position_service(&robot.id, &robot.body_handle);
+        obj.services.push(service);
+
+        obj.robots.insert(robot.id.to_string(), robot);
+
+
+        // Create robot 2
+        let mut robot2 = RobotData::create_robot_body(&mut obj.sim, None);
+        let robot2_id: String = ("robot_".to_string() + robot2.id.as_str()).into();
+        obj.sim.rigid_body_labels.insert(robot2_id.clone(), robot2.body_handle);
+        obj.objects.insert(robot2_id.clone(), ObjectData {
+            name: robot2_id.clone(),
+            transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
+            visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
+            is_kinematic: false,
+            updated: true,
+        });
+        RobotData::setup_robot_socket(&mut robot2);
+        
+        let service = create_position_service(&robot2.id, &robot2.body_handle);
+        obj.services.push(service);
+
+        obj.robots.insert(robot2.id.to_string(), robot2);
+
         // Wheel debug
         // let mut i = 0;
         // for wheel in &robot.wheel_bodies {
@@ -130,11 +154,6 @@ impl RoomData {
         //     });
         //     i += 1;
         // }
-
-        let service = create_position_service(&robot.id, &robot.body_handle);
-        obj.services.push(service);
-
-        obj.robots.insert("robot".to_string(), robot);
 
 
         obj.objects.insert("ground".into(), ObjectData {
@@ -260,8 +279,6 @@ impl RoomData {
             }
         }
         
-        
-
         self.sim.update(delta_time);
 
         // Update data before send

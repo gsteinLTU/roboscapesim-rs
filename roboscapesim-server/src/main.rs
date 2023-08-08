@@ -156,7 +156,14 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                 }
             }
         }
-    })
+    },
+    Some(vec![
+        "stun:stun.l.google.com:19302".to_owned(),
+        "stun:stun1.l.google.com:19302".to_owned(),
+        "stun:stun2.l.google.com:19302".to_owned(),
+        "stun:stun3.l.google.com:19302".to_owned(),
+        "stun:stun4.l.google.com:19302".to_owned(),
+    ]))
     .await?;
     let answer = peer.receive_offer(&offer).await?;
 

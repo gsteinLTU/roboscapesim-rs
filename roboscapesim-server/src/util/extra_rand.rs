@@ -1,4 +1,6 @@
-use rand::{prelude::Distribution, Rng};
+use rand::{prelude::Distribution, Rng, distributions::Uniform};
+
+use super::util::bytes_to_hex_string;
 
 /// Allows for getting a random distribution of uppercase hex characters (0-9 and A-F)
 #[derive(Debug)]
@@ -20,4 +22,36 @@ impl Distribution<char> for UpperHexadecimal {
             }
         }
     }
+}
+
+pub fn generate_random_mac_address() -> [u8; 6]
+{
+    let mut result = [0u8; 6];
+
+    for i in  0..result.len()
+    {
+        result[i] = rand::thread_rng().gen();
+    }
+
+    // Not needed for RoboScape, but set MAC to be locally administered and unicast
+    result[0] &= 0b11111110;
+    result[0] |= 0b00000010;
+
+    // Check last four digits for e and numbers
+    let last_four: Vec<char> = bytes_to_hex_string(&result)[8..].to_owned().chars().collect();
+    let last_four_digit_count = last_four.iter().filter(|c| char::is_ascii_digit(*c)).count();
+
+    // Prevent NetsBlox leading zero truncation
+    if last_four.first().unwrap() == &'0' && last_four_digit_count == 4
+    {
+        result[4] |= 0b00010001;
+    }
+
+    // Accidental float prevention
+    if last_four.contains(&'e') && last_four_digit_count == 3
+    {
+        result[4] |= 0b10001000;
+    }
+
+    result
 }

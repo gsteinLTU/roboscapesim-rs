@@ -11,7 +11,9 @@ use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 
 use crate::room::RoomData;
 use crate::simulation::Simulation;
+use crate::util::extra_rand::generate_random_mac_address;
 use crate::util::traits::resettable::Resettable;
+use crate::util::util::bytes_to_hex_string;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct RobotData {
@@ -50,7 +52,7 @@ impl RobotData {
         let mut buf = Vec::<u8>::new();
 
         // MAC address
-        let mut mac: Vec<u8> = vec![1,2,3,4,5,6];
+        let mut mac: Vec<u8> = self.id.clone().into_bytes();
         buf.append(&mut mac);
 
         // Timestamp
@@ -63,8 +65,10 @@ impl RobotData {
         self.socket.as_mut().unwrap().send(&buf.as_slice())
     }
 
-    pub fn create_robot_body(sim: &mut Simulation) -> RobotData {
-            
+    pub fn create_robot_body(sim: &mut Simulation, id: Option<String>) -> RobotData {
+        let id = id.unwrap_or_else(|| bytes_to_hex_string(&generate_random_mac_address()) ).to_owned();
+        info!("Creating robot {}", id);
+        
         /*
         * Vehicle we will control manually.
         */
@@ -174,7 +178,7 @@ impl RobotData {
             speed_l: 0.0,
             speed_r: 0.0,
             last_heartbeat: 0,
-            id: "010203040506".into(),
+            id: id.to_string(),
             whisker_l,
             whisker_r,
             whisker_states: [false, false],
