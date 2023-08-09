@@ -1,4 +1,4 @@
-use rand::{prelude::Distribution, Rng, distributions::Uniform};
+use rand::{prelude::Distribution, Rng};
 
 use super::util::bytes_to_hex_string;
 

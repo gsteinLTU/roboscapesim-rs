@@ -5,9 +5,9 @@ use chrono::Utc;
 use dashmap::DashMap;
 use derivative::Derivative;
 use log::{info, error};
-use nalgebra::{Point3,UnitQuaternion};
-use rapier3d::prelude::*;
+use nalgebra::{Point3,UnitQuaternion, Vector3};
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
+use rapier3d::prelude::*;
 
 use crate::room::RoomData;
 use crate::simulation::Simulation;
@@ -65,10 +65,10 @@ impl RobotData {
         self.socket.as_mut().unwrap().send(&buf.as_slice())
     }
 
-    pub fn create_robot_body(sim: &mut Simulation, id: Option<String>) -> RobotData {
+    pub fn create_robot_body(sim: &mut Simulation, id: Option<String>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
         let id = id.unwrap_or_else(|| bytes_to_hex_string(&generate_random_mac_address()) ).to_owned();
         info!("Creating robot {}", id);
-        
+
         /*
         * Vehicle we will control manually.
         */
@@ -77,8 +77,8 @@ impl RobotData {
         let hh = 0.027 * scale;
         let hd = 0.03 * scale;
 
-        let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
-        let box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
+        let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
+        let mut box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         // TODO: use rotation
 
         let rigid_body = RigidBodyBuilder::dynamic()
@@ -169,6 +169,16 @@ impl RobotData {
         let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set);
         let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
         let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set);
+
+        if let Some(p) = position {
+            sim.rigid_body_set.get_mut(vehicle_handle).unwrap().set_translation(p, true);
+            box_center = p.into();
+        }
+
+        if let Some(o) = orientation {
+            sim.rigid_body_set.get_mut(vehicle_handle).unwrap().set_rotation(o, true);
+            box_rotation = o;
+        }
 
         RobotData { 
             body_handle: vehicle_handle,

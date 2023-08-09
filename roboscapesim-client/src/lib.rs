@@ -254,6 +254,16 @@ const BEEPS_ENABLED: ExtensionSetting = ExtensionSetting {
     hidden: false
 };
 
+#[netsblox_extension_setting]
+const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting { 
+    name: "Robot ID Billboards Enabled", 
+    id: "roboscape_id_billboards", 
+    default_value: true,
+    on_hint: "Robot IDs show over heads", 
+    off_hint: "Robots IDs hidden", 
+    hidden: false
+};
+
 #[netsblox_extension_menu_item("Show 3D View")]
 #[wasm_bindgen]
 pub fn show_3d_view() {

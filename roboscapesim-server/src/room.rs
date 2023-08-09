@@ -105,7 +105,7 @@ impl RoomData {
 
 
         // Create robot 1
-        let mut robot = RobotData::create_robot_body(&mut obj.sim, None);
+        let mut robot = RobotData::create_robot_body(&mut obj.sim, None, None, None);
         let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
         obj.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         obj.objects.insert(robot_id.clone(), ObjectData {
@@ -124,7 +124,7 @@ impl RoomData {
 
 
         // Create robot 2
-        let mut robot2 = RobotData::create_robot_body(&mut obj.sim, None);
+        let mut robot2 = RobotData::create_robot_body(&mut obj.sim, None, Some(vector![1.0, 1.0, 1.0]), None);
         let robot2_id: String = ("robot_".to_string() + robot2.id.as_str()).into();
         obj.sim.rigid_body_labels.insert(robot2_id.clone(), robot2.body_handle);
         obj.objects.insert(robot2_id.clone(), ObjectData {
