@@ -16,17 +16,17 @@ struct ServerStatus {
 }
 
 pub(crate) async fn server_status() -> impl IntoResponse {
-    let mut hibernatingRooms: usize = 0;
+    let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
         if r.lock().await.hibernating {
-            hibernatingRooms += 1;
+            hibernating_rooms += 1;
         }
     }
 
     Json(ServerStatus {
         active_rooms: ROOMS.len(),
-        hibernating_rooms: hibernatingRooms,
+        hibernating_rooms,
         max_rooms: MAX_ROOMS,
     })
 }

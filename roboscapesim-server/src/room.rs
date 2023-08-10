@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
-use log::{error, info};
+use log::{error, info, trace};
 use nalgebra::{point,vector};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
@@ -245,6 +245,20 @@ impl RoomData {
     }
 
     pub async fn update(&mut self, delta_time: f64) {
+        // Check if room empty/not empty
+        if !self.hibernating && self.sockets.len() == 0 {
+            self.hibernating = true;
+            return;
+        } else if self.hibernating && self.sockets.len() > 0 {
+            self.hibernating = false;
+        }
+
+        if self.hibernating {
+            return;
+        }
+
+        trace!("Updating {}", self.name);
+
         let time = Utc::now().timestamp();
 
         for mut robot in self.robots.iter_mut() {

@@ -5,7 +5,7 @@ mod game;
 use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::{UpdateMessage, ClientMessage};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel, window};
 use neo_babylon::prelude::*;
@@ -57,7 +57,8 @@ async fn main() {
                 if last_state.borrow().contains_key(name) {
                     // Interpolate
                     let last_transform = last_state.borrow().get(name).unwrap().transform;
-                    let interpolated_transform = last_transform.interpolate(&update_obj.transform, t as f32);
+                    let interpolated_transform = last_transform.try_interpolate(&update_obj.transform, t as f32).unwrap_or(update_obj.transform);
+
                     //console::log_1(&format!("{}: last_transform: {:?} \n next_transform: {:?} \ninterpolated_transform = {:?}", name, last_transform, update_obj.transform, interpolated_transform).into());
 
                     apply_transform(game_clone.borrow().models.borrow().get(name).unwrap().clone(), interpolated_transform);

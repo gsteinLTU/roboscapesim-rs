@@ -2,6 +2,15 @@ use dashmap::DashMap;
 use nalgebra::{Quaternion, Vector3, vector, Point3};
 use serde::{Deserialize, Serialize};
 
+pub trait Interpolatable<T> 
+where Self: Sized {
+    fn interpolate(&self, other: &T, t: f32) -> Self {
+        self.try_interpolate(other, t).unwrap()
+    }
+    
+    fn try_interpolate(&self, other: &T, t: f32) -> Result<Self, &'static str>;
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
     pub position: Point3<f32>,
@@ -19,15 +28,21 @@ impl Default for Transform {
     }
 }
 
-impl Transform {
-    pub fn interpolate(&self, other: &Transform, t: f32) -> Transform {
+impl Interpolatable<Transform> for Transform {
+    fn try_interpolate(&self, other: &Transform, t: f32) -> Result<Transform, &'static str> {
         // Point does not have lerp currently
         let mut lerped_pos = self.position * (1.0 - t);
         lerped_pos.x += other.position.x * t;
         lerped_pos.y += other.position.y * t;
         lerped_pos.z += other.position.z * t;
         
-        Transform { position: lerped_pos, rotation: self.rotation.interpolate(&other.rotation, t), scaling: self.scaling.lerp(&other.scaling, t) }
+        let rot = self.rotation.try_interpolate(&other.rotation, t);
+
+        if let Err(e) = rot {
+            return Err(e);
+        }
+
+        Ok(Transform { position: lerped_pos, rotation: rot.unwrap(), scaling: self.scaling.lerp(&other.scaling, t) })
     }
 }
 
@@ -37,21 +52,21 @@ pub enum Orientation {
     Quaternion(Quaternion<f32>),
 }
 
-impl Orientation {
-    pub fn interpolate(&self, other: &Orientation, t: f32) -> Orientation {
+impl Interpolatable<Orientation> for Orientation {
+    fn try_interpolate(&self, other: &Orientation, t: f32) -> Result<Orientation, &'static str> {
         match self {
             Orientation::Euler(e) => {
                 if let Orientation::Euler(o) = other {
-                    return Orientation::Euler(e.lerp(&o, t));
+                    Ok(Orientation::Euler(e.lerp(&o, t)))
                 } else {
-                    panic!("Interpolation between Euler and quaternion Orientations not supported");                    
+                    Err("Interpolation between Euler and quaternion Orientations not supported")                
                 }
             },
             Orientation::Quaternion(q) => {
                 if let Orientation::Quaternion(q2) = other {
-                    return Orientation::Quaternion(q.lerp(&q2, t));
+                    Ok(Orientation::Quaternion(q.lerp(&q2, t)))
                 } else {
-                    panic!("Interpolation between Euler and quaternion Orientations not supported");                    
+                    Err("Interpolation between Euler and quaternion Orientations not supported")                    
                 }
             },
         }

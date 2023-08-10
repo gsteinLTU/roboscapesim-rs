@@ -74,18 +74,16 @@ async fn main() {
             for kvp in ROOMS.iter() {
                 let mut lock = kvp.value().lock().await;
                 if !lock.hibernating {
-                    trace!("Updating {}", kvp.key());
-
                     // Check timeout
                     if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
                         lock.hibernating = true;
                         info!("{} is now hibernating", kvp.key());
                         return;
                     }
-
-                    // Perform update
-                    lock.update(1.0 / update_fps as f64).await;
                 }
+
+                // Perform update
+                lock.update(1.0 / update_fps as f64).await;
             }
         }
     });
@@ -111,6 +109,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
         
         async move {
             let room = ROOMS.get(&(room_id.to_string())).unwrap();
+            //room.lock().await.visitors.insert(username);
             match e {
                 PeerEvent::DataChannelMessage(c, m) => {
                     trace!(
@@ -145,11 +144,13 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                 PeerEvent::DataChannelStateChange(c) => {
                     if c.ready_state() == RTCDataChannelState::Open {
                         CLIENTS.insert(peer_id, c.clone());
-                        trace!("{}::DataChannel '{}'", peer_id, c.label());
+                        info!("{}::DataChannel '{}' opened", peer_id, c.label());
                         room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
                         room.lock().await.send_state_to_client(true, peer_id).await;
                     } else if c.ready_state() == RTCDataChannelState::Closed {
-                        trace!("{}::DataChannel '{}'", peer_id, c.label());
+                        info!("{}::DataChannel '{}' closed", peer_id, c.label());
+                        CLIENTS.remove(&peer_id);
+                        room.lock().await.sockets.remove(&peer_id.to_string());
                     }
                 }
                 PeerEvent::PeerConnectionStateChange(s) => {
