@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::{response::IntoResponse, routing::post, Json, Router, http::{Method, header}};
+use axum::{response::IntoResponse, routing::{post, get}, Json, Router, http::{Method, header}};
 use chrono::Utc;
 use cyberdeck::*;
 mod room;
@@ -14,13 +14,18 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
+use crate::api::server_status;
+
 mod simulation;
+mod api;
 
 #[path = "./util/mod.rs"]
 mod util;
 
 #[path = "./services/mod.rs"]
 mod services;
+
+const MAX_ROOMS: usize = 64;
 
 static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
@@ -40,7 +45,8 @@ async fn main() {
 
     // build our application with a route
     let app = Router::new()
-        .route("/connect", post(connect))
+    .route("/connect", post(connect))
+    .route("/server/status", get(server_status))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
