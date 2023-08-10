@@ -34,43 +34,23 @@
 
         // Create join dialog for later use
         {
-            var element = createDialog('Join a Session');
-            element.style.width = '400px';
-            element.style.height = '200px';
-            
-            const content = document.createElement('div');
-            content.id = 'roboscapejoincontent';
-            let label = document.createElement('label');
-            label.innerText = "Session ID: ";
-            content.appendChild(label);
-            const input = document.createElement('input');
-            input.id = 'roboscapejoin';
-            content.appendChild(input);
-            element.querySelector('content').appendChild(content);
+            var element = createDialog('Join a Session', false, ['Join', 'Close']);
+            element.querySelector('content').innerHTML += `
+            <div style="margin-bottom: 12px;"><label>Room ID:&nbsp;</label><input class="inset"/></div>
+            <div><label>Password:&nbsp;</label><input class="inset"/></div>
+            `;
 
-            const content2 = document.createElement('div');
-            content.id = 'roboscapejoincontent2';
-            label = document.createElement('label');
-            label.innerText = "Recent Sessions: ";
-            content2.appendChild(label);
-            const dropdown = document.createElement('select');
-            dropdown.id = 'roboscapejoin-dropdown';
-            content2.appendChild(dropdown);
-            element.querySelector('content').appendChild(content2);
-
-
-            const content3 = document.createElement('div');
-            content.id = 'roboscapejoincontent3';
-            label = document.createElement('label');
-            label.innerText = "Password: ";
-            content3.appendChild(label);
-            const password = document.createElement('input');
-            dropdown.id = 'roboscapejoin-password';
-            content3.appendChild(password);
-            element.querySelector('content').appendChild(content3);
-
-            setupDialog(element);
+            setupDialog(element, false);
             window.externalVariables['roboscapedialog-join'] = element;
+
+            element = createDialog('Create a Session', false, ['Create', 'Close']);
+            element.querySelector('content').innerHTML += `
+            <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input class="inset"/></div>
+            <div><label>Environment:&nbsp;</label><input class="inset"/></div>
+            `;
+
+            setupDialog(element, false);
+            window.externalVariables['roboscapedialog-new'] = element;
         }
     };
 

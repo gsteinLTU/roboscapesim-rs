@@ -115,43 +115,23 @@
 
         // Create join dialog for later use
         {
-            var element = createDialog('Join a Session');
-            element.style.width = '400px';
-            element.style.height = '200px';
-            
-            const content = document.createElement('div');
-            content.id = 'roboscapejoincontent';
-            let label = document.createElement('label');
-            label.innerText = "Session ID: ";
-            content.appendChild(label);
-            const input = document.createElement('input');
-            input.id = 'roboscapejoin';
-            content.appendChild(input);
-            element.querySelector('content').appendChild(content);
+            var element = createDialog('Join a Session', false, ['Join', 'Close']);
+            element.querySelector('content').innerHTML += `
+            <div style="margin-bottom: 12px;"><label>Room ID:&nbsp;</label><input class="inset"/></div>
+            <div><label>Password:&nbsp;</label><input class="inset"/></div>
+            `;
 
-            const content2 = document.createElement('div');
-            content.id = 'roboscapejoincontent2';
-            label = document.createElement('label');
-            label.innerText = "Recent Sessions: ";
-            content2.appendChild(label);
-            const dropdown = document.createElement('select');
-            dropdown.id = 'roboscapejoin-dropdown';
-            content2.appendChild(dropdown);
-            element.querySelector('content').appendChild(content2);
-
-
-            const content3 = document.createElement('div');
-            content.id = 'roboscapejoincontent3';
-            label = document.createElement('label');
-            label.innerText = "Password: ";
-            content3.appendChild(label);
-            const password = document.createElement('input');
-            dropdown.id = 'roboscapejoin-password';
-            content3.appendChild(password);
-            element.querySelector('content').appendChild(content3);
-
-            setupDialog(element);
+            setupDialog(element, false);
             window.externalVariables['roboscapedialog-join'] = element;
+
+            element = createDialog('Create a Session', false, ['Create', 'Close']);
+            element.querySelector('content').innerHTML += `
+            <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input class="inset"/></div>
+            <div><label>Environment:&nbsp;</label><input class="inset"/></div>
+            `;
+
+            setupDialog(element, false);
+            window.externalVariables['roboscapedialog-new'] = element;
         }
     };
 
@@ -168,14 +148,14 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {show_3d_view, robots_in_room} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {robots_in_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 		        `;
 		    document.body.appendChild(s);
 		};
