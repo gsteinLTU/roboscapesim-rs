@@ -2,10 +2,8 @@ use anyhow::Result;
 use axum::{response::IntoResponse, routing::{post, get}, Json, Router, http::{Method, header}};
 use chrono::Utc;
 use cyberdeck::*;
-mod room;
 use roboscapesim_common::ClientMessage;
 use room::RoomData;
-mod robot;
 use simple_logger::SimpleLogger;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{time::{sleep, Duration, self}, task, sync::Mutex};
@@ -14,8 +12,10 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
-use crate::api::server_status;
+use crate::api::{server_status, rooms_list};
 
+mod room;
+mod robot;
 mod simulation;
 mod api;
 
@@ -47,6 +47,7 @@ async fn main() {
     let app = Router::new()
     .route("/connect", post(connect))
     .route("/server/status", get(server_status))
+    .route("/rooms/list", get(rooms_list))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])

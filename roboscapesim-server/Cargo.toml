@@ -31,3 +31,5 @@ derivative = "2.2.0"
 iotscape = "0.1.1"
 dotenvy = "0.15"
 netsblox-vm = "0.2.4"
+async-std = { version = "1.12.0", features = ["tokio1"] }
+public-ip = "0.2.2"

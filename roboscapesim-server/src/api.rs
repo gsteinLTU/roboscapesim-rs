@@ -1,9 +1,12 @@
-use axum::Json;
-
-use axum::response::IntoResponse;
+use axum::{Json, response::IntoResponse};
+use once_cell::unsync::Lazy;
 use serde::Serialize;
+use async_std::task::block_on;
+use std::{sync::Mutex, cell::RefCell};
 
 use crate::{ROOMS, MAX_ROOMS};
+
+static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
 #[derive(Debug, Serialize)]
 struct ServerStatus {
@@ -13,6 +16,13 @@ struct ServerStatus {
     hibernating_rooms: usize,
     #[serde(rename = "maxRooms")]
     max_rooms: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct RoomInfo {
+    id: String,
+    environment: String,
+    server: String,  
 }
 
 pub(crate) async fn server_status() -> impl IntoResponse {
@@ -29,4 +39,23 @@ pub(crate) async fn server_status() -> impl IntoResponse {
         hibernating_rooms,
         max_rooms: MAX_ROOMS,
     })
+}
+
+pub(crate) async fn rooms_list() -> impl IntoResponse {
+    let mut rooms = vec![];
+
+    let lock = &mut EXTERNAL_IP.lock().unwrap();
+    if lock.is_none() {
+        lock.insert("hi".to_string());
+    }
+    
+    for r in ROOMS.iter() {
+        rooms.push(RoomInfo{
+            id: r.lock().await.name.clone(),
+            environment: "rust".to_string(),
+            server: lock.clone().unwrap(),
+        });
+    }
+
+    Json(rooms)
 }
