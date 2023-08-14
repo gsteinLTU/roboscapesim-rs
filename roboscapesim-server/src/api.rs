@@ -1,11 +1,11 @@
 use axum::{Json, response::IntoResponse};
 use log::info;
-use roboscapesim_common::api::CreateRoomRequestData;
-use serde::{Serialize, Deserialize};
+use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData};
+use serde::Serialize;
 use std::sync::Mutex;
 use axum_macros::debug_handler;
 
-use crate::{ROOMS, MAX_ROOMS};
+use crate::{ROOMS, MAX_ROOMS, create_room};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
@@ -78,13 +78,23 @@ async fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Ve
     rooms
 }
 
+#[debug_handler]
 pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
     info!("{:?}", request);
-    ()
+
+    let room_id = create_room(request.password).await;
+
+    let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
+    let server = "http".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":3000";
+    Json(CreateRoomResponseData {
+        server,
+        room_id,
+    })
 }
 
 pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     // Final deployment is expected to be to AWS, although this URL currently works on other networks
     let url = "http://checkip.amazonaws.com";
-    reqwest::get(url).await.unwrap().text().await
+    Ok("127.0.0.1".into())
+    //reqwest::get(url).await.unwrap().text().await
 }

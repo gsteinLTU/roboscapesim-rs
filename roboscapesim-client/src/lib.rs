@@ -5,8 +5,8 @@ mod game;
 use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use reqwest::{Client, ClientBuilder};
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::CreateRoomRequestData};
+use reqwest::Client;
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel, window};
 use neo_babylon::prelude::*;
@@ -90,19 +90,31 @@ async fn main() {
     console_log!("RoboScape Online loaded!");
 }
 
-pub async fn connect(room_server: String) {
+pub async fn connect(room_server: String, room_id: String) {
+    // TODO: handle room change if already connected to this server
+
     let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
+
+    let pc_clone = pc.clone();
+    let oniceconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |_e: JsValue| {
+        let data_1 = Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap();
+        console_log!("ice connection state: {}", &data_1);
+    });
+
+    cyberdeck_client_web_sys::init_peer_connection(pc.clone(), (room_server.to_owned() + "/connect").to_string().into(), oniceconnectionstatechange).await;
+
     let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
+    
+    let send_channel_clone = send_channel.clone();
     
     let onclose = Closure::<dyn Fn()>::new(|| {
         console_log!("sendChannel has closed");
     });
-    let onopen = Closure::<dyn Fn()>::new(|| {
+    let onopen = Closure::<dyn Fn()>::new(move || {
         console_log!("sendChannel has opened");
+        send_channel_clone.borrow().send_with_str(serde_json::to_string(&ClientMessage::JoinRoom(room_id.clone(), get_username())).unwrap().as_str()).unwrap();
     });
     
-    let send_channel_clone = send_channel.clone();
-
     let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
         let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
 
@@ -120,13 +132,6 @@ pub async fn connect(room_server: String) {
     DATA_CHANNELS.with(|d| {
         d.borrow_mut().insert("foo".to_owned(), send_channel.clone());
     });
-
-    let pc_clone = pc.clone();
-    let oniceconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |_e: JsValue| {
-        console::log_1(&Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap().into());
-    });
-
-    cyberdeck_client_web_sys::init_peer_connection(pc.clone(), ("http://".to_owned() + &room_server + "/connect").to_string().into(), oniceconnectionstatechange).await;
 }
 
 fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
@@ -281,8 +286,9 @@ pub async fn new_room() {
     }
 
     if !in_room {
-        let room_server = request_room(get_username(), None).await;
-        connect(room_server).await;
+        let room_data = request_room(get_username(), None).await.unwrap();
+        console_log!("{:?}", room_data);
+        connect(room_data.server, room_data.room_id).await;
         GAME.with(|game| {
             game.borrow().in_room.replace(true);
         });
@@ -290,16 +296,18 @@ pub async fn new_room() {
     }
 }
 
-async fn request_room(username: String, password: Option<String>) -> String {
+async fn request_room(username: String, password: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
     let mut client_clone = Default::default();
     REQWEST_CLIENT.with(|client| {
         client_clone = client.clone();
     });
+
+    // TODO: get API URL through env var for deployed version
     let request = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
         username,
         password
     }).send().await;
-    "127.0.0.1:3000".into()
+    request.unwrap().json::<CreateRoomResponseData>().await
 }
 
 #[netsblox_extension_menu_item("Show 3D View")]

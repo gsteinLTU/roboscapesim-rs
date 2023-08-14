@@ -40,7 +40,7 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Setup logger
-    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Trace).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
@@ -100,6 +100,7 @@ async fn main() {
 }
 
 async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
+    trace!("Connection offer: {}", offer);
     match start_peer_connection(offer).await {
         Ok(answer) => Ok(Json(answer)),
         Err(_) => Err("failed to connect"),
@@ -107,14 +108,12 @@ async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
 }
 
 async fn start_peer_connection(offer: String) -> Result<String> {
-    // Temporarily, create a new room for each peer
-    let room_id = create_room(None).await;
+    let room_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
     let mut peer = Peer::new(move |peer_id, e| {
         let room_id = room_id.clone();
-        
         async move {
-            let room = ROOMS.get(&(room_id.to_string())).unwrap();
+
             //room.lock().await.visitors.insert(username);
             match e {
                 PeerEvent::DataChannelMessage(c, m) => {
@@ -134,29 +133,65 @@ async fn start_peer_connection(offer: String) -> Result<String> {
 
                     if let Ok(c) = serde_json::from_str::<ClientMessage>(&msg_str) {
                         trace!("Client message: {:?}", c);
-                        match c {
-                            ClientMessage::Heartbeat => {},
-                            ClientMessage::ResetAll => {
-                                room.lock().await.reset();
-                            },
-                            ClientMessage::ResetRobot(r) => {
-                                room.lock().await.reset_robot(r.as_str());
-                            },
-                            ClientMessage::ClaimRobot(_) => todo!(),
+
+                        if room_id.lock().await.is_none() {
+                            if let ClientMessage::JoinRoom(new_room_id, username) = c {
+                                info!("User {} (peer id {}), attempting to join room {}", username, peer_id, new_room_id);
+
+                                if ROOMS.contains_key(&new_room_id) {
+                                    room_id.lock().await.insert(new_room_id.clone());
+                                    let room = ROOMS.get(&new_room_id).unwrap();
+                                    room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
+                                    room.lock().await.send_state_to_client(true, peer_id).await;
+                                }
+                            }
+                        } else {
+                            let room = ROOMS.get(&(room_id.clone().lock().await.clone().unwrap())).unwrap();
+
+                            match c {
+                                ClientMessage::Heartbeat => {},
+                                ClientMessage::ResetAll => {
+                                    room.lock().await.reset();
+                                },
+                                ClientMessage::ResetRobot(r) => {
+                                    room.lock().await.reset_robot(r.as_str());
+                                },
+                                ClientMessage::ClaimRobot(_) => todo!(),
+                                ClientMessage::JoinRoom(new_room_id, username) => {
+                                    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, new_room_id);
+
+                                    if room_id.lock().await.is_some() {
+                                        // TODO: leave old room
+                                    }
+
+                                    if ROOMS.contains_key(&new_room_id) {
+                                        room_id.lock().await.insert(new_room_id.clone());
+                                        let room = ROOMS.get(&new_room_id).unwrap();
+                                        let room = room.lock().await;
+                                        room.sockets.insert(peer_id.to_string(), peer_id);
+                                        room.send_state_to_client(true, peer_id).await;
+                                    }
+                                },
+                            }
                         }
                     }
                     //c.send_text(format!("Echo {}", msg_str)).await.unwrap();
                 }
                 PeerEvent::DataChannelStateChange(c) => {
+                    trace!("{}::Data Channel {} state: {} ", peer_id, c.label(), c.ready_state());
+
                     if c.ready_state() == RTCDataChannelState::Open {
                         CLIENTS.insert(peer_id, c.clone());
                         info!("{}::DataChannel '{}' opened", peer_id, c.label());
-                        room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
-                        room.lock().await.send_state_to_client(true, peer_id).await;
                     } else if c.ready_state() == RTCDataChannelState::Closed {
                         info!("{}::DataChannel '{}' closed", peer_id, c.label());
                         CLIENTS.remove(&peer_id);
-                        room.lock().await.sockets.remove(&peer_id.to_string());
+
+                        let r = room_id.lock().await;
+                        if r.is_some() {
+                            let room = ROOMS.get(&(r.clone().unwrap())).unwrap();
+                            room.lock().await.sockets.remove(&peer_id.to_string());
+                        }
                     }
                 }
                 PeerEvent::PeerConnectionStateChange(s) => {
@@ -179,6 +214,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
     ]))
     .await?;
     let answer = peer.receive_offer(&offer).await?;
+    trace!("Peer offer answered: {}", answer);
 
     // move cyberdeck to another thread to keep it alive
     tokio::spawn(async move {
@@ -189,6 +225,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
             // keep the connection alive while not in invalid state
             sleep(Duration::from_millis(1000)).await;
         }
+        
         // because we moved cyberdeck ownership into here gets dropped here and will stop all channels
     });
 
