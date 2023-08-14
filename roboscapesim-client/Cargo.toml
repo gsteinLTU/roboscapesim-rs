@@ -23,6 +23,7 @@ wasm-bindgen-futures = "0.4.37"
 serde_json = "1.0.96"
 dashmap = { version = "5.4.0", features = ["serde"] }
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
+reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
 
 [build-dependencies]
 netsblox-extension-util = "*"

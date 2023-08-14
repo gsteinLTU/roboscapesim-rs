@@ -7,6 +7,7 @@ use wasm_bindgen::JsValue;
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
+    pub(crate) in_room: Rc<Cell<bool>>,
     pub(crate) scene: Rc<RefCell<Scene>>,
     pub(crate) models: Rc<RefCell<HashMap<String, Rc<BabylonMesh>>>>,
     pub(crate) state: Rc<RefCell<HashMap<String, ObjectData>>>,
@@ -53,6 +54,7 @@ impl Game {
         neo_babylon::api::setup_vr_experience(&scene.borrow());
 
         Game {
+            in_room: Rc::new(Cell::new(false)),
             scene,
             models: Rc::new(RefCell::new(HashMap::new())),
             state: Rc::new(RefCell::new(HashMap::new())),

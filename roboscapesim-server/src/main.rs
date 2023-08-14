@@ -12,7 +12,7 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
-use crate::api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP};
+use crate::api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP, post_create};
 
 mod room;
 mod robot;
@@ -40,7 +40,7 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Setup logger
-    SimpleLogger::new().with_level(log::LevelFilter::Warn).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
@@ -52,6 +52,7 @@ async fn main() {
     .route("/connect", post(connect))
     .route("/server/status", get(server_status))
     .route("/rooms/list", get(rooms_list))
+    .route("/rooms/create", post(post_create))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])

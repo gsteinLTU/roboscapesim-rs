@@ -5,7 +5,8 @@ mod game;
 use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
+use reqwest::{Client, ClientBuilder};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::CreateRoomRequestData};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{console, RtcPeerConnection, RtcDataChannel, window};
 use neo_babylon::prelude::*;
@@ -24,6 +25,10 @@ thread_local! {
 
 thread_local! {
     static GAME: Rc<RefCell<Game>> = Rc::new(RefCell::new(Game::new()));
+}
+
+thread_local! {
+    static REQWEST_CLIENT: Rc<Client> = Rc::new(Client::new());
 }
 
 #[netsblox_extension_info]
@@ -83,10 +88,9 @@ async fn main() {
     });
     
     console_log!("RoboScape Online loaded!");
-    connect().await;
 }
 
-pub async fn connect() {
+pub async fn connect(room_server: String) {
     let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
     let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
     
@@ -122,7 +126,7 @@ pub async fn connect() {
         console::log_1(&Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap().into());
     });
 
-    cyberdeck_client_web_sys::init_peer_connection(pc.clone(), "http://localhost:3000/connect".to_string().into(), oniceconnectionstatechange).await;
+    cyberdeck_client_web_sys::init_peer_connection(pc.clone(), ("http://".to_owned() + &room_server + "/connect").to_string().into(), oniceconnectionstatechange).await;
 }
 
 fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
@@ -264,6 +268,39 @@ const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting {
     off_hint: "Robots IDs hidden", 
     hidden: false
 };
+
+#[netsblox_extension_menu_item("New simulation...")]
+#[wasm_bindgen]
+pub async fn new_room() {
+    let in_room = GAME.with(|game| {
+        game.borrow().in_room.get()
+    });
+
+    if in_room {
+        // TODO: disconnect and clean up
+    }
+
+    if !in_room {
+        let room_server = request_room(get_username(), None).await;
+        connect(room_server).await;
+        GAME.with(|game| {
+            game.borrow().in_room.replace(true);
+        });
+        show_3d_view();
+    }
+}
+
+async fn request_room(username: String, password: Option<String>) -> String {
+    let mut client_clone = Default::default();
+    REQWEST_CLIENT.with(|client| {
+        client_clone = client.clone();
+    });
+    let request = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
+        username,
+        password
+    }).send().await;
+    "127.0.0.1:3000".into()
+}
 
 #[netsblox_extension_menu_item("Show 3D View")]
 #[wasm_bindgen]

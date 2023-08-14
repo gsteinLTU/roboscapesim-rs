@@ -5,13 +5,27 @@ use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
 use wasm_bindgen::{JsValue, JsCast, prelude::Closure};
 use web_sys::{window, Document};
 
-
-// Try to get a value from window.externalVariables
+/// Try to get a value from window.externalVariables
 pub(crate) fn get_nb_externalvar(name: &str) -> Result<JsValue, JsValue>
 {
     let window = window().unwrap();
     let external_vars = Reflect::get(&window, &"externalVariables".into()).unwrap();
     Reflect::get(&external_vars, &name.into())
+}
+
+/// Try to get NetsBlox username
+pub(crate) fn get_username() -> String
+{
+    //world.children[0].cloud.username
+    let ide = get_ide();
+    let cloud = Reflect::get(&ide, &"cloud".into()).unwrap();
+    Reflect::get(&cloud, &"username".into()).unwrap().as_string().unwrap_or("anonymous".into())
+}
+
+fn get_ide() -> JsValue {
+    let window = window().unwrap();
+    let world = Reflect::get(&window, &"world".into()).unwrap();
+    Reflect::get(&Reflect::get(&world, &"children".into()).unwrap(), &0.into()).unwrap()
 }
 
 /// Try to get a function from the window

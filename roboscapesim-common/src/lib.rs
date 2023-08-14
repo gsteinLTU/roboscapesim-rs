@@ -2,6 +2,8 @@ use dashmap::DashMap;
 use nalgebra::{Quaternion, Vector3, vector, Point3};
 use serde::{Deserialize, Serialize};
 
+pub mod api;
+
 pub trait Interpolatable<T> 
 where Self: Sized {
     fn interpolate(&self, other: &T, t: f32) -> Self {

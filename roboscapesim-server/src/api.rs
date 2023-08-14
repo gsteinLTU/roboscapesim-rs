@@ -1,5 +1,7 @@
 use axum::{Json, response::IntoResponse};
-use serde::Serialize;
+use log::info;
+use roboscapesim_common::api::CreateRoomRequestData;
+use serde::{Serialize, Deserialize};
 use std::sync::Mutex;
 use axum_macros::debug_handler;
 
@@ -42,17 +44,30 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 
 #[debug_handler]
 pub(crate) async fn rooms_list() -> impl IntoResponse {
-    let rooms = get_rooms().await;
+    let rooms = get_rooms(None, true).await;
     Json(rooms)
 }
 
-async fn get_rooms() -> Vec<RoomInfo> {
+/// Get list of rooms, optionally filtering to a specific user
+async fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<RoomInfo> {
     let mut rooms = vec![];
     
     let server = EXTERNAL_IP.lock().unwrap().clone().unwrap_or_else(|| "127.0.0.1".into());
 
+    let user_filter = user_filter.unwrap_or_default();
+
     for r in ROOMS.iter() {
-        let id = r.lock().await.name.clone();
+        let room_data = r.lock().await;
+        // Skip if user not in visitors
+        if user_filter.len() > 0 && room_data.visitors.contains(&user_filter) {
+            continue;
+        }
+
+        if !include_hibernating && room_data.hibernating {
+            continue;
+        }
+
+        let id = room_data.name.clone();
 
         rooms.push(RoomInfo{
             id,
@@ -63,7 +78,13 @@ async fn get_rooms() -> Vec<RoomInfo> {
     rooms
 }
 
+pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
+    info!("{:?}", request);
+    ()
+}
+
 pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
+    // Final deployment is expected to be to AWS, although this URL currently works on other networks
     let url = "http://checkip.amazonaws.com";
     reqwest::get(url).await.unwrap().text().await
 }
