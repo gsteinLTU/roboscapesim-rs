@@ -1,12 +1,11 @@
 use axum::{Json, response::IntoResponse};
-use once_cell::unsync::Lazy;
 use serde::Serialize;
-use async_std::task::block_on;
-use std::{sync::Mutex, cell::RefCell};
+use std::sync::Mutex;
+use axum_macros::debug_handler;
 
 use crate::{ROOMS, MAX_ROOMS};
 
-static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
+pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
 #[derive(Debug, Serialize)]
 struct ServerStatus {
@@ -41,21 +40,30 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     })
 }
 
+#[debug_handler]
 pub(crate) async fn rooms_list() -> impl IntoResponse {
-    let mut rooms = vec![];
+    let rooms = get_rooms().await;
+    Json(rooms)
+}
 
-    let lock = &mut EXTERNAL_IP.lock().unwrap();
-    if lock.is_none() {
-        lock.insert("hi".to_string());
-    }
+async fn get_rooms() -> Vec<RoomInfo> {
+    let mut rooms = vec![];
     
+    let server = EXTERNAL_IP.lock().unwrap().clone().unwrap_or_else(|| "127.0.0.1".into());
+
     for r in ROOMS.iter() {
+        let id = r.lock().await.name.clone();
+
         rooms.push(RoomInfo{
-            id: r.lock().await.name.clone(),
+            id,
             environment: "rust".to_string(),
-            server: lock.clone().unwrap(),
+            server: server.clone(),
         });
     }
+    rooms
+}
 
-    Json(rooms)
+pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
+    let url = "http://checkip.amazonaws.com";
+    reqwest::get(url).await.unwrap().text().await
 }

@@ -12,7 +12,7 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 
-use crate::api::{server_status, rooms_list};
+use crate::api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP};
 
 mod room;
 mod robot;
@@ -42,6 +42,10 @@ async fn main() {
     // Setup logger
     SimpleLogger::new().with_level(log::LevelFilter::Warn).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
+
+    if let Ok(ip) = get_external_ip().await {
+        EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
+    }
 
     // build our application with a route
     let app = Router::new()
