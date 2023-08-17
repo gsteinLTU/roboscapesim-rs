@@ -219,7 +219,11 @@ async fn start_peer_connection(offer: String) -> Result<String> {
     .await?);
     let pc = peer.peer_connection.clone();
     pc.set_remote_description(RTCSessionDescription::offer(serde_json::from_str::<HashMap<String, String>>(&offer).unwrap().get("sdp").unwrap().to_owned()).unwrap()).await.unwrap();
-    
+    let answer = pc.create_answer(None).await?;
+    let mut gather_complete = pc.gathering_complete_promise().await;
+    pc.set_local_description(answer).await?;
+    let _ = gather_complete.recv().await;
+
     TEMP_PEERS.insert(peer.peer_id, Arc::downgrade(&peer));
 
     // move cyberdeck to another thread to keep it alive
@@ -237,9 +241,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
         // because we moved cyberdeck ownership into here gets dropped here and will stop all channels
     });
 
-    let answer = pc.create_answer(None).await.unwrap();
-    pc.set_local_description(answer.clone()).await.unwrap();
-    
+    let answer = pc.local_description().await.unwrap();
     Ok(answer.sdp)
 }
 
