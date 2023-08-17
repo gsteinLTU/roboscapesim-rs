@@ -149,15 +149,15 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {new_room, show_3d_view, robots_in_room} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {robots_in_room, new_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.new_room = new_room;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 		        `;
 		    document.body.appendChild(s);
 		};

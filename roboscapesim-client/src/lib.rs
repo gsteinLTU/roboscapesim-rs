@@ -106,8 +106,8 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 ).unwrap();
             })
         },
-        Ok(UpdateMessage::RoomInfo(_)) => {
-
+        Ok(UpdateMessage::RoomInfo(state)) => {
+            set_title(&state.name);
         },
         Ok(UpdateMessage::Update(t, full_update, roomdata)) => {
             let view = roomdata.to_owned();
@@ -270,13 +270,18 @@ pub async fn new_room() {
 }
 
 async fn request_room(username: String, password: Option<String>) {
+    set_title("Connecting...");
+
+    // Create peer connection
     let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
     PEER_CONNECTION.with(|p| {
         p.replace(Some(pc.clone()));
     });
 
+    // Create data channel
     let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
 
+    // Callbacks for data channel
     let onclose = Closure::<dyn Fn()>::new(|| {
         console_log!("sendChannel has closed");
     });
@@ -291,11 +296,11 @@ async fn request_room(username: String, password: Option<String>) {
         send_channel_clone.borrow().send_with_str(serde_json::to_string(&ClientMessage::JoinRoom(room_id_clone.borrow().clone().unwrap(), username_clone.clone(), None)).unwrap().as_str()).unwrap();
     });
     
-    let send_channel_clone = send_channel.clone();
+    //let send_channel_clone = send_channel.clone();
     let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
         let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
 
-        console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
+        //console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
 
         GAME.with(move |game| { handle_update_message(serde_json::from_str::<UpdateMessage>(payload.as_str()), game); });
     });
@@ -311,6 +316,7 @@ async fn request_room(username: String, password: Option<String>) {
         d.borrow_mut().insert("foo".to_owned(), send_channel.clone());
     });
 
+    // Callbacks for peer connection
     let pc_clone = pc.clone();
     let oniceconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |_e: JsValue| {
         let data_1 = Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap();
@@ -345,10 +351,6 @@ async fn request_room(username: String, password: Option<String>) {
     let onconnectionstatechange = Closure::<dyn Fn()>::new(move || {
         let state = js_get(&pc_clone.borrow(), "connectionState").unwrap().as_string().unwrap();
         console_log!("onconnectionstatechange {:?}", state);
-
-        if state == "connected" {
-            //
-        }
     });
     pc.borrow().set_onconnectionstatechange(Some(&onconnectionstatechange.into_js_value().unchecked_into()));
 

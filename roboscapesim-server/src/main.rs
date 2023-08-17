@@ -45,7 +45,7 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Setup logger
-    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Trace).env().init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
@@ -264,6 +264,7 @@ async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str)
     // Setup connection to room
     room.visitors.insert(username.to_owned());
     room.sockets.insert(peer_id.to_string(), peer_id);
+    room.send_info_to_client(peer_id).await;
     room.send_state_to_client(true, peer_id).await;
     Ok(())
 }

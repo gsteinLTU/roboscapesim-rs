@@ -196,6 +196,23 @@ impl RoomData {
     }
 
     /// Send the room's current state data to a specific client
+    pub async fn send_info_to_client(&self, client: u128) {
+        let mut users = vec![];
+
+        for user in self.visitors.iter() {
+            users.push(user.clone());
+        }
+
+        Self::send_to_client(
+            &UpdateMessage::RoomInfo(
+                RoomState { name: self.name.clone(), roomtime: self.roomtime, users }
+            ),
+            client,
+        )
+        .await;
+    }
+
+    /// Send the room's current state data to a specific client
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
             Self::send_to_client(
