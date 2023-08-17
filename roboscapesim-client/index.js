@@ -22,8 +22,8 @@
 
         getMenu() {
             return {
-				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 				'New simulation...': window.RoboScapeOnline_fns.new_room,
+				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
         }

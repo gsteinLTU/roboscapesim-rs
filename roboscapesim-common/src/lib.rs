@@ -148,6 +148,6 @@ pub enum ClientMessage {
     ResetRobot(String),
     /// Claiming robot
     ClaimRobot(String),
-    /// Joining Room
-    JoinRoom(String, String)
+    /// Joining Room (room id, username, password)
+    JoinRoom(String, String, Option<String>)
 }

@@ -99,7 +99,13 @@ fn init_ui() {
 /// Process an UpdateMessage from the server
 fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
     match msg {
-        Ok(UpdateMessage::Heartbeat) => {},
+        Ok(UpdateMessage::Heartbeat) => {
+            DATA_CHANNELS.with(|dc| {
+                dc.borrow().get("foo").unwrap().borrow().send_with_str(
+                    &serde_json::to_string(&ClientMessage::Heartbeat).unwrap()
+                ).unwrap();
+            })
+        },
         Ok(UpdateMessage::RoomInfo(_)) => {
 
         },
@@ -274,19 +280,32 @@ async fn request_room(username: String, password: Option<String>) {
     let onclose = Closure::<dyn Fn()>::new(|| {
         console_log!("sendChannel has closed");
     });
+    
+    let send_channel_clone = send_channel.clone();
+    let username_clone = username.clone();
+    let room_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
+    let room_id_clone = room_id.clone();
     let onopen = Closure::<dyn Fn()>::new(move || {
         console_log!("sendChannel has opened");
+        send_channel_clone.borrow().send_with_str(serde_json::to_string(&ClientMessage::JoinRoom(room_id_clone.borrow().clone().unwrap(), username_clone.clone(), None)).unwrap().as_str()).unwrap();
     });
     
+    let send_channel_clone = send_channel.clone();
     let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
         let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
 
-        //console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
+        console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
 
         GAME.with(move |game| { handle_update_message(serde_json::from_str::<UpdateMessage>(payload.as_str()), game); });
     });
+
     cyberdeck_client_web_sys::init_data_channel(send_channel.clone(), onclose, onopen, onmessage);
+
+    let onerror = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
+        console_log!("sendChannel error: {:?}", e.as_string());
+    });
+    send_channel.borrow().set_onerror(Some(onerror.into_js_value().unchecked_ref()));
 
     DATA_CHANNELS.with(|d| {
         d.borrow_mut().insert("foo".to_owned(), send_channel.clone());
@@ -323,12 +342,19 @@ async fn request_room(username: String, password: Option<String>) {
     pc.borrow().set_onnegotiationneeded(Some(&onnegotiationneeded.into_js_value().unchecked_into()));
 
     let pc_clone = pc.clone();
-    let onconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
-        console_log!("onconnectionstatechange {:?}", js_get(&pc_clone.borrow(), "connectionState"));
+    let onconnectionstatechange = Closure::<dyn Fn()>::new(move || {
+        let state = js_get(&pc_clone.borrow(), "connectionState").unwrap().as_string().unwrap();
+        console_log!("onconnectionstatechange {:?}", state);
+
+        if state == "connected" {
+            //
+        }
     });
     pc.borrow().set_onconnectionstatechange(Some(&onconnectionstatechange.into_js_value().unchecked_into()));
 
     let pc_clone = pc.clone();
+    let room_id_clone = room_id.clone();
+
     let onicegatheringstatechange = Closure::<dyn Fn()>::new(move || {
         console_log!("onicegatheringstatechange {:?}", pc_clone.borrow().ice_gathering_state());
 
@@ -337,6 +363,7 @@ async fn request_room(username: String, password: Option<String>) {
             let username = username.to_owned();
             let password = password.to_owned();
             let offer = JSON::stringify(&pc_clone.borrow().local_description().unwrap().unchecked_into()).unwrap().as_string().unwrap();
+            let room_id_clone = room_id_clone.clone();
 
             wasm_bindgen_futures::spawn_local(async move {
                 let mut client_clone = Default::default();
@@ -356,6 +383,7 @@ async fn request_room(username: String, password: Option<String>) {
                 let mut rdesc = RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
                 rdesc.sdp(&response.answer);
                 wasm_bindgen_futures::JsFuture::from(pc_clone.borrow().set_remote_description(&rdesc)).await.unwrap();
+                room_id_clone.borrow_mut().insert(response.room_id);
             });
         }
     });

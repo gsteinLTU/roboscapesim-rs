@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::{response::IntoResponse, routing::{post, get}, Json, Router, http::{Method, header}};
 use chrono::Utc;
 use cyberdeck::*;
-use roboscapesim_common::ClientMessage;
+use roboscapesim_common::{ClientMessage, UpdateMessage};
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use webrtc::peer_connection::{sdp::session_description::RTCSessionDescription, offer_answer_options::RTCAnswerOptions};
@@ -139,14 +139,15 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                         trace!("Client message: {:?}", c);
 
                         if room_id.lock().await.is_none() {
-                            if let ClientMessage::JoinRoom(new_room_id, username) = c {
+                            // Not in a room, so only joining a room makes sense
+                            if let ClientMessage::JoinRoom(new_room_id, username, password) = c {
                                 info!("User {} (peer id {}), attempting to join room {}", username, peer_id, new_room_id);
 
-                                if ROOMS.contains_key(&new_room_id) {
-                                    room_id.lock().await.insert(new_room_id.clone());
-                                    let room = ROOMS.get(&new_room_id).unwrap();
-                                    room.lock().await.sockets.insert(peer_id.to_string(), peer_id);
-                                    room.lock().await.send_state_to_client(true, peer_id).await;
+                                match join_room(&username, &password.unwrap_or_default(), peer_id, &new_room_id).await {
+                                    Ok(_) => {
+                                        room_id.lock().await.insert(new_room_id.clone());
+                                    }
+                                    Err(e) => error!("{}", e),
                                 }
                             }
                         } else {
@@ -161,20 +162,19 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                                     room.lock().await.reset_robot(r.as_str());
                                 },
                                 ClientMessage::ClaimRobot(_) => todo!(),
-                                ClientMessage::JoinRoom(new_room_id, username) => {
-                                    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, new_room_id);
+                                ClientMessage::JoinRoom(new_room_id, username, password) => {
+                                    // For changing rooms if new room will be on same server
 
                                     if room_id.lock().await.is_some() {
                                         // TODO: leave old room
                                     }
-
-                                    if ROOMS.contains_key(&new_room_id) {
-                                        room_id.lock().await.insert(new_room_id.clone());
-                                        let room = ROOMS.get(&new_room_id).unwrap();
-                                        let room = room.lock().await;
-                                        room.sockets.insert(peer_id.to_string(), peer_id);
-                                        room.send_state_to_client(true, peer_id).await;
-                                    }
+                                    
+                                    match join_room(&username, &password.unwrap_or_default(), peer_id, &new_room_id).await {
+                                        Ok(_) => {
+                                            room_id.lock().await.insert(new_room_id.clone());
+                                        }
+                                        Err(e) => error!("{}", e),
+                                    } 
                                 },
                             }
                         }
@@ -187,6 +187,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                     if c.ready_state() == RTCDataChannelState::Open {
                         CLIENTS.insert(peer_id, c.clone());
                         info!("{}::DataChannel '{}' opened", peer_id, c.label());
+                        c.send_text(serde_json::to_string(&UpdateMessage::Heartbeat).unwrap()).await.unwrap();
                     } else if c.ready_state() == RTCDataChannelState::Closed {
                         info!("{}::DataChannel '{}' closed", peer_id, c.label());
                         CLIENTS.remove(&peer_id);
@@ -243,6 +244,28 @@ async fn start_peer_connection(offer: String) -> Result<String> {
 
     let answer = pc.local_description().await.unwrap();
     Ok(answer.sdp)
+}
+
+async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
+    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, room_id);
+
+    if !ROOMS.contains_key(room_id) {
+        return Err(format!("Room {} does not exist!", room_id));
+    }
+
+    let room = ROOMS.get(room_id).unwrap();
+    let room = room.lock().await;
+    
+    // Check password
+    if room.password.clone().is_some_and(|pass| pass != password) {
+        return Err("Wrong password!".to_owned());
+    }
+    
+    // Setup connection to room
+    room.visitors.insert(username.to_owned());
+    room.sockets.insert(peer_id.to_string(), peer_id);
+    room.send_state_to_client(true, peer_id).await;
+    Ok(())
 }
 
 async fn create_room(password: Option<String>) -> String {
