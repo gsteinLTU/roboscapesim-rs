@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use axum_macros::debug_handler;
 
-use crate::{ROOMS, MAX_ROOMS, create_room};
+use crate::{ROOMS, MAX_ROOMS, create_room, connect, TEMP_PEERS};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
@@ -86,9 +86,13 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
 
     let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
     let server = "http".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":3000";
+
+    let answer = connect(request.offer).await.unwrap();
+
     Json(CreateRoomResponseData {
         server,
         room_id,
+        answer
     })
 }
 

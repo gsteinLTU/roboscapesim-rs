@@ -5,7 +5,8 @@ use cyberdeck::*;
 use roboscapesim_common::ClientMessage;
 use room::RoomData;
 use simple_logger::SimpleLogger;
-use std::{net::SocketAddr, sync::Arc};
+use webrtc::peer_connection::{sdp::session_description::RTCSessionDescription, offer_answer_options::RTCAnswerOptions};
+use std::{net::SocketAddr, sync::{Arc, Weak}, collections::HashMap};
 use tokio::{time::{sleep, Duration, self}, task, sync::Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
@@ -35,6 +36,10 @@ pub static CLIENTS: Lazy<DashMap<u128, Arc<RTCDataChannel>>> = Lazy::new(|| {
     DashMap::new()
 });
 
+pub static TEMP_PEERS: Lazy<DashMap<u128, Weak<Peer>>> = Lazy::new(|| {
+    DashMap::new()
+});
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -49,7 +54,6 @@ async fn main() {
 
     // build our application with a route
     let app = Router::new()
-    .route("/connect", post(connect))
     .route("/server/status", get(server_status))
     .route("/rooms/list", get(rooms_list))
     .route("/rooms/create", post(post_create))
@@ -99,18 +103,18 @@ async fn main() {
     }
 }
 
-async fn connect(Json(offer): Json<String>) -> impl IntoResponse {
+async fn connect(offer: String) -> Result<String, String> {
     trace!("Connection offer: {}", offer);
     match start_peer_connection(offer).await {
-        Ok(answer) => Ok(Json(answer)),
-        Err(_) => Err("failed to connect"),
+        Ok(answer) => Ok(answer),
+        Err(_) => Err("failed to connect".to_owned()),
     }
 }
 
 async fn start_peer_connection(offer: String) -> Result<String> {
     let room_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-
-    let mut peer = Peer::new(move |peer_id, e| {
+    
+    let peer = Arc::new(Peer::new(move |peer_id, e| {
         let room_id = room_id.clone();
         async move {
 
@@ -212,9 +216,11 @@ async fn start_peer_connection(offer: String) -> Result<String> {
         "stun:stun3.l.google.com:19302".to_owned(),
         "stun:stun4.l.google.com:19302".to_owned(),
     ]))
-    .await?;
-    let answer = peer.receive_offer(&offer).await?;
-    trace!("Peer offer answered: {}", answer);
+    .await?);
+    let pc = peer.peer_connection.clone();
+    pc.set_remote_description(RTCSessionDescription::offer(serde_json::from_str::<HashMap<String, String>>(&offer).unwrap().get("sdp").unwrap().to_owned()).unwrap()).await.unwrap();
+    
+    TEMP_PEERS.insert(peer.peer_id, Arc::downgrade(&peer));
 
     // move cyberdeck to another thread to keep it alive
     tokio::spawn(async move {
@@ -225,11 +231,16 @@ async fn start_peer_connection(offer: String) -> Result<String> {
             // keep the connection alive while not in invalid state
             sleep(Duration::from_millis(1000)).await;
         }
+
+        info!("Peer {} dropping", peer.peer_id);
         
         // because we moved cyberdeck ownership into here gets dropped here and will stop all channels
     });
 
-    Ok(answer)
+    let answer = pc.create_answer(None).await.unwrap();
+    pc.set_local_description(answer.clone()).await.unwrap();
+    
+    Ok(answer.sdp)
 }
 
 async fn create_room(password: Option<String>) -> String {
