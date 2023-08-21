@@ -60,7 +60,7 @@ pub(crate) fn setup_service(definition: ServiceDefinition, service_type: Service
             match service_type {
                 ServiceType::World => "RoboScapeWorld",
                 ServiceType::Entity => "RoboScapeEntity",
-                ServiceType::LIDAR => "LIDAR",
+                ServiceType::LIDAR => "LIDARSensor",
                 ServiceType::PositionSensor => "PositionSensor",
                 ServiceType::ProximitySensor => "ProximitySensor",
             }
