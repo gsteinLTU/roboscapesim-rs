@@ -318,7 +318,7 @@ impl RobotData {
                     let solid = true;
                     let filter = QueryFilter::default().exclude_sensors();
 
-                    let mut distance = 0u16;
+                    let mut distance = (max_toi * 100.0) as u16;
                     if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set,
                         &sim.collider_set, &ray, max_toi, solid, filter
                     ) {
@@ -352,9 +352,10 @@ impl RobotData {
                 },
                 b'n' => { 
                     info!("OnSetNumeric");
+                    // TODO: Decide on supporting this
                 },
                 b'P' => {
-                    info!("OnButtonPress");                    
+                    info!("OnButtonPress");         
                 },
                 _ => {}
             }
