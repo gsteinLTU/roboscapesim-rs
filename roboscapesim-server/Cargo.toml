@@ -25,12 +25,10 @@ nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
 chrono = { version = "0.4", features = ["serde"] }
 simple_logger = "4.2"
 log = "0.4"
-rayon = "1.7"
 webrtc = "0.8"
 derivative = "2.2.0"
 iotscape = "0.1.1"
 dotenvy = "0.15"
 netsblox-vm = "0.2"
-async-std = { version = "1.12.0", features = ["tokio1"] }
 axum-macros = "0.3.8"
 reqwest = "0.11.18"
