@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::FRAC_PI
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 
+use log::trace;
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
@@ -121,7 +122,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                         // the ray travelled a distance equal to `ray.dir * toi`.
                         let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
                         distance = toi * 100.0;
-                        println!("Collider {:?} hit at point {}", handle, hit_point);
+                        trace!("Collider {:?} hit at point {}", handle, hit_point);
                     }
                     distances.push(distance);
                 }

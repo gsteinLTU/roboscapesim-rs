@@ -1,3 +1,4 @@
+use std::f32::consts::FRAC_PI_2;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
@@ -126,6 +127,7 @@ impl RoomData {
         
         let service = create_lidar_service(&robot.id, &robot.body_handle);
         obj.services.push(service);
+        obj.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
         
         obj.robots.insert(robot.id.to_string(), robot);
 
@@ -143,6 +145,9 @@ impl RoomData {
         RobotData::setup_robot_socket(&mut robot2);
         
         let service = create_position_service(&robot2.id, &robot2.body_handle);
+        obj.services.push(service);
+
+        let service = create_lidar_service(&robot2.id, &robot2.body_handle);
         obj.services.push(service);
 
         obj.robots.insert(robot2.id.to_string(), robot2);
