@@ -89,7 +89,7 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
     }
 }
 
-pub fn handle_entity_message(room: &mut RoomData, msg: &Request) {
+pub fn handle_entity_message(room: &mut RoomData, msg: Request) {
     match msg.function.as_str() {
         "reset" => {
             if let Some(mut r) = room.reseters.get_mut(msg.device.as_str()) {

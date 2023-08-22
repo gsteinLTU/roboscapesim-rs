@@ -1,17 +1,26 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::{PI, FRAC_PI_2, FRAC_PI_4}};
+use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::FRAC_PI_2};
 
-use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
-use rapier3d::prelude::{RigidBodyHandle, Real, Ray};
+use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
+
+use crate::room::RoomData;
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
-pub struct LIDARData {
+pub struct LIDARConfig {
     pub num_beams: u8, 
-    pub start_angle: UnitQuaternion<Real>, 
-    pub end_angle: UnitQuaternion<Real>, 
-    pub offset: Vector3<Real>
+    pub start_angle: Real, 
+    pub end_angle: Real, 
+    pub offset_pos: Vector3<Real>,
+    pub max_distance: Real,
+}
+
+impl Default for LIDARConfig {
+    fn default() -> Self {
+        Self { num_beams: 3, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: Vector3::zeros(), max_distance: 3.0 }
+    }
 }
 
 pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
@@ -56,7 +65,7 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
 
     Service {
         id: id.to_string(),
-        service_type: ServiceType::PositionSensor,
+        service_type: ServiceType::LIDAR,
         service,
         last_announce,
         announce_period,
@@ -64,7 +73,12 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     }
 }
 
-pub fn calculate_rays(num_beams: u8, start_angle: f32, end_angle: f32, orientation: UnitQuaternion<Real>, body_pos: Vector3<Real>, offset_pos: Vector3<Real>) -> Vec<Ray> {
+pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, body_pos: &Vector3<Real>) -> Vec<Ray> {
+    let num_beams = config.num_beams;
+    let start_angle = config.start_angle;
+    let end_angle = config.end_angle;
+    let offset_pos = config.offset_pos;
+
     let mut rays = vec![];
     let angle_delta = (end_angle - start_angle) / f32::max(1.0, num_beams as f32 - 1.0);
     let origin = nalgebra::OPoint { coords: body_pos + orientation * offset_pos };
@@ -80,11 +94,61 @@ pub fn calculate_rays(num_beams: u8, start_angle: f32, end_angle: f32, orientati
     rays
 }
 
+pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
+    let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+    if let Some(s) = s {
+        if s.attached_rigid_body.is_some() {
+            if let Some(o) = room.sim.rigid_body_set.get(s.attached_rigid_body.unwrap()) {
+                if !room.lidar_configs.contains_key(&s.id) {
+                    room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
+                }
+
+                let get = &room.lidar_configs.get(&s.id).unwrap();
+                let config = get.value();
+                let rays = calculate_rays(config, o.rotation(), o.translation());
+                
+                // Raycast each ray
+                let solid = true;
+                let filter = QueryFilter::default().exclude_sensors();
+
+                let mut distances = vec![];
+                for ray in rays {
+                    let mut distance = config.max_distance * 100.0;
+                    if let Some((handle, toi)) = room.sim.query_pipeline.cast_ray(&room.sim.rigid_body_set,
+                        &room.sim.collider_set, &ray, config.max_distance, solid, filter
+                    ) {
+                        // The first collider hit has the handle `handle` and it hit after
+                        // the ray travelled a distance equal to `ray.dir * toi`.
+                        let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+                        distance = toi * 100.0;
+                        println!("Collider {:?} hit at point {}", handle, hit_point);
+                    }
+                    distances.push(distance);
+                }
+
+                let distances = distances.iter().map(|f| f.to_string() ).collect();
+
+                // Send result
+                s.service.lock().unwrap().enqueue_response_to(msg, Ok(distances));      
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+use std::f32::consts::{PI, FRAC_PI_4};
 
 #[test]
 fn test_calculate_rays() {
+    let mut config = LIDARConfig {
+        num_beams: 3,
+        start_angle: 0.0,
+        end_angle: FRAC_PI_2,
+        ..Default::default()
+    };
+
     // Test some angles
-    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
+    let rays = calculate_rays(&config, &UnitQuaternion::identity(), &Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
@@ -93,7 +157,9 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
 
-    let rays = calculate_rays(3, FRAC_PI_2, 0.0, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
+    config.start_angle = FRAC_PI_2;
+    config.end_angle = 0.0;
+    let rays = calculate_rays(&config, &UnitQuaternion::identity(), &Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
@@ -102,7 +168,9 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
 
-    let rays = calculate_rays(3, -FRAC_PI_4, FRAC_PI_4, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
+    config.start_angle = -FRAC_PI_4;
+    config.end_angle = FRAC_PI_4;
+    let rays = calculate_rays(&config, &UnitQuaternion::identity(), &Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, -0.7071068, epsilon = 0.0000003, ulps = 5);
@@ -112,7 +180,9 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
 
     // Test change of origin
-    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), vector![1.0,2.0,3.0], Vector3::zeros());
+    config.start_angle = 0.0;
+    config.end_angle = FRAC_PI_2;
+    let rays = calculate_rays(&config, &UnitQuaternion::identity(), &vector![1.0,2.0,3.0]);
     float_cmp::assert_approx_eq!(f32, rays[0].origin.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].origin.y, 2.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
@@ -121,7 +191,8 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[1].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
 
     // Test offset
-    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), Vector3::zeros(), vector![1.0,2.0,3.0]);
+    config.offset_pos = vector![1.0,2.0,3.0];
+    let rays = calculate_rays(&config, &UnitQuaternion::identity(), &Vector3::zeros());
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
@@ -137,7 +208,8 @@ fn test_calculate_rays() {
 
     // Test orientation
     // Flipped upside down
-    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::from_euler_angles(PI, 0.0, 0.0), Vector3::zeros(), Vector3::zeros());
+    config.offset_pos = vector![0.0,0.0,0.0];
+    let rays = calculate_rays(&config, &UnitQuaternion::from_euler_angles(PI, 0.0, 0.0), &Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
@@ -146,8 +218,9 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, -1.0, epsilon = 0.0000003, ulps = 5);
 
-    // Pointing up
-    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::from_euler_angles(0.0, 0.0, -FRAC_PI_2), Vector3::zeros(), vector![1.0, 0.0, 0.0]);
+    // Pointing up with offset
+    config.offset_pos = vector![1.0,0.0,0.0];
+    let rays = calculate_rays(&config, &UnitQuaternion::from_euler_angles(0.0, 0.0, -FRAC_PI_2), &Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].origin.x, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].origin.y, -1.0, epsilon = 0.0000003, ulps = 5);

@@ -159,7 +159,7 @@ pub fn create_world_service(id: &str) -> Service {
     }
 }
 
-pub fn handle_world_msg(room: &mut RoomData, msg: &Request) {
+pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
     match msg.function.as_str() {
         "reset" => {
             room.reset();

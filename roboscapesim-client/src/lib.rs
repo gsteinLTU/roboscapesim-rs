@@ -385,7 +385,7 @@ async fn request_room(username: String, password: Option<String>) {
                 let mut rdesc = RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
                 rdesc.sdp(&response.answer);
                 wasm_bindgen_futures::JsFuture::from(pc_clone.borrow().set_remote_description(&rdesc)).await.unwrap();
-                room_id_clone.borrow_mut().insert(response.room_id);
+                let _ = room_id_clone.borrow_mut().insert(response.room_id);
             });
         }
     });

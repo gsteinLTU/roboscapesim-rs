@@ -11,6 +11,7 @@ use roboscapesim_common::*;
 use serde::Serialize;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
+use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
 use crate::services::position::{handle_position_sensor_message, create_position_service};
 use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world::{self, handle_world_msg};
@@ -43,6 +44,8 @@ pub struct RoomData {
     pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
     pub services: Vec<Service>,
+    #[derivative(Debug = "ignore")]
+    pub lidar_configs: DashMap<String, LIDARConfig>,
 }
 
 impl RoomData {
@@ -63,6 +66,7 @@ impl RoomData {
             robots: DashMap::new(),
             reseters: DashMap::new(),
             services: vec![],
+            lidar_configs: DashMap::new(),
         };
 
         info!("Room {} created", obj.name);
@@ -119,9 +123,11 @@ impl RoomData {
         
         let service = create_position_service(&robot.id, &robot.body_handle);
         obj.services.push(service);
-
+        
+        let service = create_lidar_service(&robot.id, &robot.body_handle);
+        obj.services.push(service);
+        
         obj.robots.insert(robot.id.to_string(), robot);
-
 
         // Create robot 2
         let mut robot2 = RobotData::create_robot_body(&mut obj.sim, None, Some(vector![1.0, 1.0, 1.0]), None);
@@ -301,9 +307,10 @@ impl RoomData {
         for (service_type, msg) in msgs {
             info!("{:?}", msg);
             match service_type {
-                ServiceType::World => handle_world_msg(self, &msg),
-                ServiceType::Entity => handle_entity_message(self, &msg),
+                ServiceType::World => handle_world_msg(self, msg),
+                ServiceType::Entity => handle_entity_message(self, msg),
                 ServiceType::PositionSensor => handle_position_sensor_message(self, msg),
+                ServiceType::LIDAR => handle_lidar_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
                 }

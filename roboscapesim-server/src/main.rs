@@ -1,11 +1,11 @@
 use anyhow::Result;
-use axum::{response::IntoResponse, routing::{post, get}, Json, Router, http::{Method, header}};
+use axum::{routing::{post, get}, Router, http::{Method, header}};
 use chrono::Utc;
 use cyberdeck::*;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use room::RoomData;
 use simple_logger::SimpleLogger;
-use webrtc::peer_connection::{sdp::session_description::RTCSessionDescription, offer_answer_options::RTCAnswerOptions};
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use std::{net::SocketAddr, sync::{Arc, Weak}, collections::HashMap};
 use tokio::{time::{sleep, Duration, self}, task, sync::Mutex};
 use tower_http::cors::{Any, CorsLayer};
@@ -49,7 +49,7 @@ async fn main() {
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
-        EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
+        let _ = EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
     }
 
     // build our application with a route
@@ -145,7 +145,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
 
                                 match join_room(&username, &password.unwrap_or_default(), peer_id, &new_room_id).await {
                                     Ok(_) => {
-                                        room_id.lock().await.insert(new_room_id.clone());
+                                        let _ = room_id.lock().await.insert(new_room_id.clone());
                                     }
                                     Err(e) => error!("{}", e),
                                 }
@@ -171,7 +171,7 @@ async fn start_peer_connection(offer: String) -> Result<String> {
                                     
                                     match join_room(&username, &password.unwrap_or_default(), peer_id, &new_room_id).await {
                                         Ok(_) => {
-                                            room_id.lock().await.insert(new_room_id.clone());
+                                            let _ = room_id.lock().await.insert(new_room_id.clone());
                                         }
                                         Err(e) => error!("{}", e),
                                     } 

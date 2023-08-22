@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use axum_macros::debug_handler;
 
-use crate::{ROOMS, MAX_ROOMS, create_room, connect, TEMP_PEERS};
+use crate::{ROOMS, MAX_ROOMS, create_room, connect};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
@@ -98,7 +98,7 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
 
 pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     // Final deployment is expected to be to AWS, although this URL currently works on other networks
-    let url = "http://checkip.amazonaws.com";
     Ok("127.0.0.1".into())
+    //let url = "http://checkip.amazonaws.com";
     //reqwest::get(url).await.unwrap().text().await
 }
