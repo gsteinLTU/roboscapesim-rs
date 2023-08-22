@@ -240,18 +240,20 @@ impl RobotData {
         robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
 
         if robot.drive_state == DriveState::SetDistance {
-            robot.distance_l -= (robot.speed_l * -32.0) as f64 * dt;
-            robot.distance_r -= (robot.speed_r * -32.0) as f64 * dt;
-            info!("{} {}", robot.distance_l, robot.distance_r);
 
             // Stop robot if distance reached
             if f64::abs(robot.distance_l) < f64::abs(robot.speed_l as f64 * -32.0 * dt) {
                 info!("Distance reached L");
                 robot.speed_l = 0.0;
+            } else {
+                robot.distance_l -= (robot.speed_l * -32.0) as f64 * dt;
             }
+
             if f64::abs(robot.distance_r) < f64::abs(robot.speed_r as f64 * -32.0 * dt) {
                 info!("Distance reached R");
                 robot.speed_r = 0.0;
+            } else {
+                robot.distance_r -= (robot.speed_r * -32.0) as f64 * dt;
             }
 
             if robot.speed_l == 0.0 && robot.speed_r == 0.0 {
@@ -278,8 +280,14 @@ impl RobotData {
 
                         info!("OnDrive {} {}", d1, d2);
 
-                        robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
-                        robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;                    
+                        // Check prevents robots from inching forwards from "drive 0 0"
+                        if f64::abs(robot.distance_l) > f64::EPSILON {
+                            robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                        }
+
+                        if f64::abs(robot.distance_r) > f64::EPSILON {
+                            robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                        }                    
                     }
                 },
                 b'S' => { 
@@ -314,12 +322,12 @@ impl RobotData {
                     // Setup raycast
                     let body = sim.rigid_body_set.get(robot.body_handle).unwrap();
                     let body_pos = body.translation();
-                    let offset = body.rotation() * vector![0.18, 0.05, 0.0];
+                    let offset = body.rotation() * vector![0.17, 0.05, 0.0];
                     let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
                     let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
                     let max_toi = 3.0;
                     let solid = true;
-                    let filter = QueryFilter::default().exclude_sensors();
+                    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
 
                     let mut distance = (max_toi * 100.0) as u16;
                     if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set,

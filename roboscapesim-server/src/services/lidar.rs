@@ -97,8 +97,8 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
     let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
-        if s.attached_rigid_body.is_some() {
-            if let Some(o) = room.sim.rigid_body_set.get(s.attached_rigid_body.unwrap()) {
+        if let Some(body) = s.attached_rigid_body.clone() {
+            if let Some(o) = room.sim.rigid_body_set.get(body) {
                 if !room.lidar_configs.contains_key(&s.id) {
                     room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
                 }
@@ -109,7 +109,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                 
                 // Raycast each ray
                 let solid = true;
-                let filter = QueryFilter::default().exclude_sensors();
+                let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(body);
 
                 let mut distances = vec![];
                 for ray in rays {
