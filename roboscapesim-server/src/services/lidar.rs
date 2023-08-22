@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::{PI, FR
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns};
 
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray};
 
 use super::service_struct::{setup_service, ServiceType, Service};
@@ -67,12 +67,14 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
 pub fn calculate_rays(num_beams: u8, start_angle: f32, end_angle: f32, orientation: UnitQuaternion<Real>, body_pos: Vector3<Real>, offset_pos: Vector3<Real>) -> Vec<Ray> {
     let mut rays = vec![];
     let angle_delta = (end_angle - start_angle) / f32::max(1.0, num_beams as f32 - 1.0);
+    let origin = nalgebra::OPoint { coords: body_pos + orientation * offset_pos };
 
     for i in 0..num_beams {
-        let angle = angle_delta * i as f32 + start_angle;
-        let direction = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), angle);
-        let direction = orientation * (direction * *Vector3::z_axis());
-        rays.push(Ray::new(nalgebra::OPoint { coords: body_pos + orientation * offset_pos }, direction));
+        let angle = -angle_delta * i as f32 - start_angle;
+        let direction = orientation * Rotation3::from_axis_angle(&Vector3::y_axis(), angle);        
+        println!("{:?}", direction.euler_angles());
+        let direction = direction * vector![1.0, 0.0, 0.0];
+        rays.push(Ray::new(origin, direction));
     }
 
     rays
@@ -81,16 +83,8 @@ pub fn calculate_rays(num_beams: u8, start_angle: f32, end_angle: f32, orientati
 
 #[test]
 fn test_calculate_rays() {
+    // Test some angles
     let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
-    assert_eq!(rays.len(), 3);
-    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
-
-    let rays = calculate_rays(3, FRAC_PI_2, 0.0, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
     assert_eq!(rays.len(), 3);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
@@ -99,12 +93,70 @@ fn test_calculate_rays() {
     float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
 
+    let rays = calculate_rays(3, FRAC_PI_2, 0.0, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
+    assert_eq!(rays.len(), 3);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
+
     let rays = calculate_rays(3, -FRAC_PI_4, FRAC_PI_4, UnitQuaternion::identity(), Vector3::zeros(), Vector3::zeros());
     assert_eq!(rays.len(), 3);
-    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, -0.7071068, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
-    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, -0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
     float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
+
+    // Test change of origin
+    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), vector![1.0,2.0,3.0], Vector3::zeros());
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.y, 2.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.y, 2.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
+
+    // Test offset
+    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::identity(), Vector3::zeros(), vector![1.0,2.0,3.0]);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.y, 2.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.y, 2.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].origin.z, 3.0, epsilon = 0.0000003, ulps = 5);
+
+    // Test orientation
+    // Flipped upside down
+    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::from_euler_angles(PI, 0.0, 0.0), Vector3::zeros(), Vector3::zeros());
+    assert_eq!(rays.len(), 3);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.x, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, -0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.z, -1.0, epsilon = 0.0000003, ulps = 5);
+
+    // Pointing up
+    let rays = calculate_rays(3, 0.0, FRAC_PI_2, UnitQuaternion::from_euler_angles(0.0, 0.0, -FRAC_PI_2), Vector3::zeros(), vector![1.0, 0.0, 0.0]);
+    assert_eq!(rays.len(), 3);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.x, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.y, -1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].origin.z, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.x, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.y, -1.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[0].dir.z, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.y, -0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[1].dir.z, 0.7071068, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.y, 0.0, epsilon = 0.0000003, ulps = 5);
+    float_cmp::assert_approx_eq!(f32, rays[2].dir.z, 1.0, epsilon = 0.0000003, ulps = 5);
 }
