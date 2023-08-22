@@ -25,6 +25,7 @@ pub struct RobotData {
     pub speed_r: f32,
     pub last_heartbeat: i64,
     pub id: String,
+    pub mac: [u8; 6],
     pub whisker_l: ColliderHandle,
     pub whisker_r: ColliderHandle,
     pub whisker_states: [bool; 2],
@@ -52,7 +53,7 @@ impl RobotData {
         let mut buf = Vec::<u8>::new();
 
         // MAC address
-        let mut mac: Vec<u8> = self.id.clone().into_bytes();
+        let mut mac = Vec::from(self.mac.clone());
         buf.append(&mut mac);
 
         // Timestamp
@@ -65,8 +66,9 @@ impl RobotData {
         self.socket.as_mut().unwrap().send(&buf.as_slice())
     }
 
-    pub fn create_robot_body(sim: &mut Simulation, id: Option<String>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
-        let id = id.unwrap_or_else(|| bytes_to_hex_string(&generate_random_mac_address()) ).to_owned();
+    pub fn create_robot_body(sim: &mut Simulation, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
+        let mac = mac.unwrap_or_else(|| generate_random_mac_address());
+        let id = bytes_to_hex_string(&mac).to_owned();
         info!("Creating robot {}", id);
 
         /*
@@ -188,7 +190,8 @@ impl RobotData {
             speed_l: 0.0,
             speed_r: 0.0,
             last_heartbeat: 0,
-            id: id.to_string(),
+            mac,
+            id,
             whisker_l,
             whisker_r,
             whisker_states: [false, false],
