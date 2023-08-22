@@ -290,7 +290,9 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for mut robot in self.robots.iter_mut() {
-            RobotData::robot_update(robot.value_mut(), &mut self.sim, &self.sockets, delta_time).await;
+            if RobotData::robot_update(robot.value_mut(), &mut self.sim, &self.sockets, delta_time).await {
+                self.last_interaction_time = Utc::now().timestamp();
+            }
         }
 
         let mut msgs = vec![];
@@ -306,6 +308,12 @@ impl RoomData {
 
                     msgs.push((service.service_type, msg));
                 }
+            }
+        }
+
+        if msgs.len() > 0 {
+            if msgs.iter().filter(|msg| msg.1.function != "heartbeat").count() > 0 {
+                self.last_interaction_time = Utc::now().timestamp();
             }
         }
         
@@ -363,6 +371,8 @@ impl RoomData {
         for mut resetter in self.reseters.iter_mut() {
             resetter.value_mut().reset(&mut self.sim);
         }
+
+        self.last_interaction_time = Utc::now().timestamp();
     }
 
     /// Reset single robot
@@ -372,5 +382,7 @@ impl RoomData {
         } else {
             info!("Request to reset non-existing robot {}", id);
         }
+
+        self.last_interaction_time = Utc::now().timestamp();
     }
 }

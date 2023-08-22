@@ -224,10 +224,12 @@ impl RobotData {
         }
     }
 
-    pub async fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64){
+    pub async fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> bool {
         if robot.socket.is_none() {
-            return;
+            return false;
         }
+
+        let mut had_messages = false;
 
         if Utc::now().timestamp() - robot.last_heartbeat > 50 {
             if let Err(e) = robot.send_roboscape_message(b"I") {
@@ -265,6 +267,7 @@ impl RobotData {
         let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
 
         if size > 0 {
+            had_messages = true;
             match &buf[0] {
                 b'D' => { 
                     info!("OnDrive");
@@ -414,6 +417,8 @@ impl RobotData {
                 error!("{}", e);
             }
         }
+
+        had_messages
     }
 }
 
