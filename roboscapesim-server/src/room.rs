@@ -10,6 +10,8 @@ use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
 use serde::Serialize;
+use futures::{SinkExt, StreamExt};
+use tokio_websockets::Message;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
@@ -179,15 +181,15 @@ impl RoomData {
     }
 
     /// Send a serialized object of type T to the client
-    pub async fn send_to_client<T: Serialize>(val: &T, client_id: u128) -> usize {
+    pub async fn send_to_client<T: Serialize>(val: &T, client_id: u128) {
         let msg = serde_json::to_string(val).unwrap();
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {
-            return client.value().send_text(msg).await.unwrap_or_default();
+            let mut c = client.value().lock().await;
+            c.send(Message::text(msg.clone())).await;
         } else {
             error!("Client {} not found!", client_id);
-            return 0;
         }
     }
 
@@ -199,7 +201,8 @@ impl RoomData {
             let client = CLIENTS.get(&client_id);
             
             if let Some(client) = client {
-                client.value().send_text(&msg).await.unwrap_or_default();
+                let mut c = client.value().lock().await;
+                c.send(Message::text(msg.clone())).await;
             } else {
                 error!("Client {} not found!", client_id);
             }

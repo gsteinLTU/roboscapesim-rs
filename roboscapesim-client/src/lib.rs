@@ -2,25 +2,26 @@
 mod util;
 mod game;
 
-use js_sys::{Reflect, Array, JSON};
+use gloo_timers::future::sleep;
+use instant::Duration;
+use js_sys::{Reflect, Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{console, RtcPeerConnection, RtcDataChannel, window, RtcSessionDescriptionInit, RtcIceGatheringState};
+use web_sys::{console, window, WebSocket};
 use neo_babylon::prelude::*;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+use wasm_bindgen_futures::spawn_local;
+
 use self::util::*;
 use self::game::*;
+
 extern crate console_error_panic_hook;
-use std::{cell::RefCell, rc::Rc, collections::HashMap, sync::Arc};
 
 thread_local! {
-    static PEER_CONNECTION: RefCell<Option<Rc<RefCell<RtcPeerConnection>>>> = RefCell::new(None);
-}
-
-thread_local! {
-    static DATA_CHANNELS: RefCell<HashMap<String, Rc<RefCell<RtcDataChannel>>>> = RefCell::new(HashMap::new());
+    static WEBSOCKET: RefCell<Option<Rc<RefCell<WebSocket>>>> = RefCell::new(None);
 }
 
 thread_local! {
@@ -85,26 +86,32 @@ async fn main() {
 fn init_ui() {
     create_button("Reset", Closure::new(|| { 
         console_log!("Reset");
-    
-        DATA_CHANNELS.with(|dcs| {
-            // Send reset message
-            // TODO: Allow robot reset requests too
-            let message = serde_json::to_string(&ClientMessage::ResetAll).unwrap();
-            let message = message.as_str();
-            dcs.borrow().get("foo").unwrap().borrow().send_with_str(message).unwrap();
-        });
+
+        // Send reset message
+        // TODO: Allow robot reset requests too
+        send_message(&ClientMessage::ResetAll);
     }));
+}
+
+fn send_message(msg: &ClientMessage) {
+    WEBSOCKET.with(|socket| {
+        let socket = socket.borrow().clone();
+        if socket.is_none() {
+            console_log!("Attempt to send without socket!");
+        } else if let Some(socket) = socket {
+            let socket = socket.borrow();
+            let message = serde_json::to_string(msg).unwrap();
+            let message = message.as_str();
+            socket.send_with_str(message).unwrap();
+        }
+    });
 }
 
 /// Process an UpdateMessage from the server
 fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
     match msg {
         Ok(UpdateMessage::Heartbeat) => {
-            DATA_CHANNELS.with(|dc| {
-                dc.borrow().get("foo").unwrap().borrow().send_with_str(
-                    &serde_json::to_string(&ClientMessage::Heartbeat).unwrap()
-                ).unwrap();
-            })
+            send_message(&ClientMessage::Heartbeat);
         },
         Ok(UpdateMessage::RoomInfo(state)) => {
             set_title(&state.name);
@@ -216,7 +223,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             let game_rc = game.clone();
             let mesh = Arc::new(mesh.clone());
             let obj = Arc::new(obj.clone());
-            wasm_bindgen_futures::spawn_local(async move {
+            spawn_local(async move {
                 // TODO: detect assets dir
                 let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
@@ -254,142 +261,61 @@ pub async fn new_room() {
     let in_room = GAME.with(|game| {
         game.borrow().in_room.get()
     });
-
+    
     if in_room {
         // TODO: disconnect and clean up
     }
 
     if !in_room {
-        request_room(get_username(), None).await;
-        //connect(room_data).await;
-        GAME.with(|game| {
-            game.borrow().in_room.replace(true);
-        });
-        show_3d_view();
+        let response = request_room(get_username(), None).await;
+
+        if let Ok(response) = response {
+            connect(&response).await;
+            send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), None));
+            GAME.with(|game| {
+                game.borrow().in_room.replace(true);
+            });
+            show_3d_view();
+        }
     }
 }
 
-async fn request_room(username: String, password: Option<String>) {
+async fn request_room(username: String, password: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
     set_title("Connecting...");
 
-    // Create peer connection
-    let pc: Rc<RefCell<RtcPeerConnection>> = cyberdeck_client_web_sys::create_peer_connection(None);
-    PEER_CONNECTION.with(|p| {
-        p.replace(Some(pc.clone()));
+    let mut client_clone = Default::default();
+    REQWEST_CLIENT.with(|client| {
+        client_clone = client.clone();
     });
 
-    // Create data channel
-    let send_channel = cyberdeck_client_web_sys::create_data_channel(pc.clone(), "foo");
+    // TODO: get API URL through env var for deployed version
+    let response = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
+        username,
+        password
+    }).send().await.unwrap();
 
-    // Callbacks for data channel
-    let onclose = Closure::<dyn Fn()>::new(|| {
-        console_log!("sendChannel has closed");
-    });
-    
-    let send_channel_clone = send_channel.clone();
-    let username_clone = username.clone();
-    let room_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    response.json().await
+}
 
-    let room_id_clone = room_id.clone();
-    let onopen = Closure::<dyn Fn()>::new(move || {
-        console_log!("sendChannel has opened");
-        send_channel_clone.borrow().send_with_str(serde_json::to_string(&ClientMessage::JoinRoom(room_id_clone.borrow().clone().unwrap(), username_clone.clone(), None)).unwrap().as_str()).unwrap();
-    });
-    
-    //let send_channel_clone = send_channel.clone();
-    let onmessage = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
-        let payload = Reflect::get(&e, &"data".into()).unwrap().as_string().unwrap();
-
-        //console_log!("Message from DataChannel '{}' with payload '{}'", Reflect::get(&send_channel_clone.borrow(), &"label".into()).unwrap().as_string().unwrap(), payload);
-
-        GAME.with(move |game| { handle_update_message(serde_json::from_str::<UpdateMessage>(payload.as_str()), game); });
+async fn connect(response: &CreateRoomResponseData) {
+    WEBSOCKET.with(|socket| {
+        let s = WebSocket::new(&response.server);
+        let s = Rc::new(RefCell::new(s.unwrap()));
+        socket.replace(Some(s));  
     });
 
-    cyberdeck_client_web_sys::init_data_channel(send_channel.clone(), onclose, onopen, onmessage);
+    loop {
+        sleep(Duration::from_millis(25)).await;
 
-    let onerror = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
-        console_log!("sendChannel error: {:?}", e.as_string());
-    });
-    send_channel.borrow().set_onerror(Some(onerror.into_js_value().unchecked_ref()));
-
-    DATA_CHANNELS.with(|d| {
-        d.borrow_mut().insert("foo".to_owned(), send_channel.clone());
-    });
-
-    // Callbacks for peer connection
-    let pc_clone = pc.clone();
-    let oniceconnectionstatechange = Closure::<dyn Fn(JsValue)>::new(move |_e: JsValue| {
-        let data_1 = Reflect::get(&pc_clone.borrow(), &"iceConnectionState".into()).unwrap().as_string().unwrap();
-        console_log!("ice connection state: {}", &data_1);
-    });
-
-    pc.borrow().set_oniceconnectionstatechange(Some(Closure::from(oniceconnectionstatechange).into_js_value().unchecked_ref()));
-    
-    let pc_clone = pc.clone();
-    let onicecandidate = Closure::<dyn Fn(JsValue)>::new(move |event: JsValue| {    
-        console_log!("onicecandidate {}", JSON::stringify(&event).unwrap().as_string().unwrap());
-        console_log!("onicecandidate {}", JSON::stringify(&pc_clone.borrow()).unwrap().as_string().unwrap());
-    });
-
-    pc.borrow().set_onicecandidate(Some(&onicecandidate.into_js_value().unchecked_into()));
-
-    let pc_clone = pc.clone();
-    let onnegotiationneeded = Closure::<dyn Fn()>::new(move || {
-        console_log!("onnegotiationneeded");
-        let pc_clone = pc_clone.clone();
-        
-        wasm_bindgen_futures::spawn_local(async move {
-            let offer = wasm_bindgen_futures::JsFuture::from(pc_clone.borrow().create_offer()).await.unwrap();
-            console_log!("{:?}", offer);
-            wasm_bindgen_futures::JsFuture::from(pc_clone.borrow().set_local_description(offer.unchecked_ref())).await.unwrap();
-            console_log!("{:?}", pc_clone.borrow().local_description().unwrap());
+        let mut status = 0;
+        WEBSOCKET.with(|socket| {
+            status = socket.borrow().clone().unwrap().clone().borrow().ready_state();
         });
-    });
-    pc.borrow().set_onnegotiationneeded(Some(&onnegotiationneeded.into_js_value().unchecked_into()));
 
-    let pc_clone = pc.clone();
-    let onconnectionstatechange = Closure::<dyn Fn()>::new(move || {
-        let state = js_get(&pc_clone.borrow(), "connectionState").unwrap().as_string().unwrap();
-        console_log!("onconnectionstatechange {:?}", state);
-    });
-    pc.borrow().set_onconnectionstatechange(Some(&onconnectionstatechange.into_js_value().unchecked_into()));
-
-    let pc_clone = pc.clone();
-    let room_id_clone = room_id.clone();
-
-    let onicegatheringstatechange = Closure::<dyn Fn()>::new(move || {
-        console_log!("onicegatheringstatechange {:?}", pc_clone.borrow().ice_gathering_state());
-
-        if pc_clone.borrow().ice_gathering_state() == RtcIceGatheringState::Complete {
-            let pc_clone = pc_clone.clone();
-            let username = username.to_owned();
-            let password = password.to_owned();
-            let offer = JSON::stringify(&pc_clone.borrow().local_description().unwrap().unchecked_into()).unwrap().as_string().unwrap();
-            let room_id_clone = room_id_clone.clone();
-
-            wasm_bindgen_futures::spawn_local(async move {
-                let mut client_clone = Default::default();
-                REQWEST_CLIENT.with(|client| {
-                    client_clone = client.clone();
-                });
-
-                // TODO: get API URL through env var for deployed version
-                let response = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
-                    username,
-                    password,
-                    offer
-                }).send().await.unwrap();
-
-                let response: CreateRoomResponseData = response.json().await.unwrap();
-                console_log!("{:?}", response);
-                let mut rdesc = RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-                rdesc.sdp(&response.answer);
-                wasm_bindgen_futures::JsFuture::from(pc_clone.borrow().set_remote_description(&rdesc)).await.unwrap();
-                let _ = room_id_clone.borrow_mut().insert(response.room_id);
-            });
+        if status != WebSocket::CONNECTING {
+            break;
         }
-    });
-    pc.borrow().set_onicegatheringstatechange(Some(&onicegatheringstatechange.into_js_value().unchecked_into()));
+    }
 }
 
 #[netsblox_extension_menu_item("Show 3D View")]

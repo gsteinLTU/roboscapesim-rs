@@ -11,10 +11,19 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 wasm-bindgen = "0.2.86"
 js-sys = "0.3"
-web-sys = { version = "0.3.64", features = ["console", "Performance", "PerformanceTiming", "RtcIceCandidate", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcSdpType", "RtcIceGatheringState"] }
+web-sys = { version = "0.3.64", features = [
+    "console", 
+    "Performance",
+    "PerformanceTiming", 
+    "BinaryType",
+    "Blob",
+    "ErrorEvent",
+    "FileReader",
+    "MessageEvent",
+    "ProgressEvent",
+    "WebSocket"] }
 roboscapesim-common = { path = "../roboscapesim-common" }
 neo-babylon = "0.1.7"
-cyberdeck-client-web-sys = { git = 'https://github.com/gsteinLTU/cyberdeck', branch = "master" }
 netsblox-extension-macro = "0.1"
 netsblox-extension-util = "^0.1.4"
 console_error_panic_hook = "0.1.7"
@@ -22,6 +31,7 @@ wasm-bindgen-futures = "0.4.37"
 serde_json = "1.0"
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
+gloo-timers = { version = "0.3.0", features = ["futures"] }
 
 [build-dependencies]
 netsblox-extension-util = "*"

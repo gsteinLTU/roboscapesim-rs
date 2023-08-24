@@ -5,14 +5,12 @@ use serde::{Deserialize, Serialize};
 pub struct CreateRoomRequestData {
     pub username: String,
     pub password: Option<String>,
-    pub offer: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CreateRoomResponseData {
     pub server: String,
-    pub room_id: String,
-    pub answer: String,
+    pub room_id: String
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
