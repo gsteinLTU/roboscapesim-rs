@@ -112,7 +112,7 @@ async fn main() {
                         
                         if let Ok(msg) = recv {
                             let msg = serde_json::to_string(&msg).unwrap();
-                            client.sink.lock().await.send(Message::Text(msg)).await.unwrap();
+                            client.sink.lock().await.send(Message::Text(msg)).now_or_never();
                         }
                     }
                 }
