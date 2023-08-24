@@ -301,6 +301,18 @@ async fn connect(response: &CreateRoomResponseData) {
     WEBSOCKET.with(|socket| {
         let s = WebSocket::new(&response.server);
         let s = Rc::new(RefCell::new(s.unwrap()));
+        GAME.with(|game| { 
+            let gc = game.clone();
+            let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
+                let msg = serde_json::from_str(&js_get(&evt, "data").unwrap().as_string().unwrap());
+                handle_update_message(msg, &gc);
+            });
+            s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
+        });
+
+        s.borrow().set_onopen(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+            console_log!("open");
+        }).into_js_value().unchecked_ref()));
         socket.replace(Some(s));  
     });
 

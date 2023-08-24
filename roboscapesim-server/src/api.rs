@@ -30,7 +30,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
-        if r.lock().await.hibernating {
+        if r.read().await.hibernating {
             hibernating_rooms += 1;
         }
     }
@@ -57,7 +57,7 @@ async fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Ve
     let user_filter = user_filter.unwrap_or_default();
 
     for r in ROOMS.iter() {
-        let room_data = r.lock().await;
+        let room_data = r.read().await;
         // Skip if user not in visitors
         if user_filter.len() > 0 && room_data.visitors.contains(&user_filter) {
             continue;

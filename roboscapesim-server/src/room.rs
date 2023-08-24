@@ -10,8 +10,6 @@ use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
 use serde::Serialize;
-use futures::{SinkExt, StreamExt};
-use tokio_websockets::Message;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
@@ -180,29 +178,26 @@ impl RoomData {
         obj
     }
 
-    /// Send a serialized object of type T to the client
-    pub async fn send_to_client<T: Serialize>(val: &T, client_id: u128) {
-        let msg = serde_json::to_string(val).unwrap();
+    /// Send UpdateMessage to a client
+    pub async fn send_to_client(msg: &UpdateMessage, client_id: u128) {
+        info!("{:?} to {}", &msg, client_id);
+
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {
-            let mut c = client.value().lock().await;
-            c.send(Message::text(msg.clone())).await;
+            client.value().tx.lock().await.send(msg.clone()).unwrap();
         } else {
             error!("Client {} not found!", client_id);
         }
     }
 
-    /// Send a serialized object of type T to all clients in list
-    pub async fn send_to_clients<T: Serialize>(val: &T, clients: impl Iterator<Item = u128>) {
-        let msg = serde_json::to_string(val).unwrap();
-
+    /// Send UpdateMessage to all clients in list
+    pub async fn send_to_clients(msg: &UpdateMessage, clients: impl Iterator<Item = u128>) {
         for client_id in clients {
             let client = CLIENTS.get(&client_id);
             
             if let Some(client) = client {
-                let mut c = client.value().lock().await;
-                c.send(Message::text(msg.clone())).await;
+                client.value().tx.lock().await.send(msg.clone()).unwrap();
             } else {
                 error!("Client {} not found!", client_id);
             }
@@ -222,8 +217,7 @@ impl RoomData {
                 RoomState { name: self.name.clone(), roomtime: self.roomtime, users }
             ),
             client,
-        )
-        .await;
+        ).await;
     }
 
     /// Send the room's current state data to a specific client
@@ -232,8 +226,7 @@ impl RoomData {
             Self::send_to_client(
                 &UpdateMessage::Update(self.roomtime, true, self.objects.clone()),
                 client,
-            )
-            .await;
+            ).await;
         } else {
             Self::send_to_client(
                 &UpdateMessage::Update(
@@ -250,15 +243,13 @@ impl RoomData {
                         .collect::<DashMap<String, ObjectData>>(),
                 ),
                 client,
-            )
-            .await;
+            ).await;
         }
     }
 
     pub async fn send_state_to_all_clients(&self, full_update: bool) {
         for client in &self.sockets {
-            self.send_state_to_client(full_update, client.value().to_owned())
-                .await;
+            self.send_state_to_client(full_update, client.value().to_owned()).await;
         }
 
         for mut obj in self.objects.iter_mut() {
@@ -289,6 +280,18 @@ impl RoomData {
         }
 
         trace!("Updating {}", self.name);
+
+        // Handle client messages
+        for client in self.sockets.iter() {
+            let client = CLIENTS.get(client.value());
+
+            if let Some(client) = client {
+                while client.rx.lock().await.len() > 0 {
+                    let msg = client.rx.lock().await.recv().await.unwrap();
+                    info!("{:?}", msg);
+                }
+            }
+        }
 
         let time = Utc::now().timestamp();
 
