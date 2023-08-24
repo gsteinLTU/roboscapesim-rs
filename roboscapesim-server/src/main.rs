@@ -1,11 +1,11 @@
 use anyhow::Result;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use chrono::Utc;
-use futures::SinkExt;
 use roboscapesim_common::ClientMessage;
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
+use tokio_tungstenite::tungstenite::Message;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::{time::{Duration, self}, task, sync::RwLock, net::TcpListener};
@@ -13,7 +13,7 @@ use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
-use tokio_websockets::Message;
+use futures::{SinkExt, StreamExt, FutureExt};
 
 use crate::{api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP, post_create}, socket::accept_connection};
 
@@ -44,7 +44,7 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Setup logger
-    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Trace).env().init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
@@ -71,6 +71,7 @@ async fn main() {
 
     let update_fps = 30;
 
+    // Loop listening for new WS connections
     let _ws_loop = task::spawn(async move {
         let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
 
@@ -80,14 +81,16 @@ async fn main() {
         }
     });
 
+    // Loop sending/receiving and adding to channels
     let _ws_update_loop = task::spawn(async move {
         loop {
             // Get client updates
             for client in CLIENTS.iter() {
+
                 // RX
-                if let Some(Ok(msg)) = client.value().stream.lock().await.next().await {
+                if let Some(Some(Ok(msg))) = client.value().stream.lock().await.next().now_or_never() {
                     trace!("Websocket message from {}: {:?}", client.key(), msg);
-                    if let Ok(msg) = msg.as_text() {
+                    if let Ok(msg) = msg.to_text() {
 
                         if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
                             match msg {
@@ -101,13 +104,15 @@ async fn main() {
                         }                    
                     }
                 }
-
+                
                 // TX
                 if client.rx1.lock().await.len() > 0 {
                     while client.rx1.lock().await.len() > 0 {
-                        if let Ok(msg) = client.rx1.lock().await.recv().await {
+                        let recv = client.rx1.lock().await.try_recv();
+                        
+                        if let Ok(msg) = recv {
                             let msg = serde_json::to_string(&msg).unwrap();
-                            client.stream.lock().await.send(Message::text(msg)).await.unwrap();
+                            client.sink.lock().await.send(Message::Text(msg)).await.unwrap();
                         }
                     }
                 }

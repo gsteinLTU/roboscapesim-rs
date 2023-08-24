@@ -282,15 +282,26 @@ impl RoomData {
         trace!("Updating {}", self.name);
 
         // Handle client messages
+        let mut needs_reset = false;
         for client in self.sockets.iter() {
             let client = CLIENTS.get(client.value());
 
             if let Some(client) = client {
                 while client.rx.lock().await.len() > 0 {
                     let msg = client.rx.lock().await.recv().await.unwrap();
-                    info!("{:?}", msg);
+                    match msg {
+                        ClientMessage::Heartbeat => {},
+                        ClientMessage::ResetAll => { needs_reset = true; },
+                        ClientMessage::ResetRobot(_) => {},
+                        ClientMessage::ClaimRobot(_) => {},
+                        _ => {}
+                    }
                 }
             }
+        }
+
+        if needs_reset {
+            self.reset();
         }
 
         let time = Utc::now().timestamp();
