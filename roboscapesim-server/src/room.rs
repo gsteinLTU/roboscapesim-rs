@@ -37,6 +37,7 @@ pub struct RoomData {
     pub visitors: DashSet<String>,
     pub last_update: Instant,
     pub last_full_update: i64,
+    pub last_sim_update: Instant,
     pub roomtime: f64,
     pub robots: DashMap<String, RobotData>,
     #[derivative(Debug = "ignore")]
@@ -68,6 +69,7 @@ impl RoomData {
             reseters: DashMap::new(),
             services: vec![],
             lidar_configs: DashMap::new(),
+            last_sim_update: Instant::now(),
         };
 
         info!("Room {} created", obj.name);
@@ -266,7 +268,7 @@ impl RoomData {
         ("Room".to_owned() + &s).to_owned()
     }
 
-    pub async fn update(&mut self, delta_time: f64) {
+    pub async fn update(&mut self) {
         // Check if room empty/not empty
         if !self.hibernating && self.sockets.len() == 0 {
             self.hibernating = true;
@@ -280,6 +282,11 @@ impl RoomData {
         }
 
         trace!("Updating {}", self.name);
+
+        let max_delta_time = 1.0 / 30.0;
+        let now = Instant::now();
+        let delta_time = f64::min(max_delta_time, (now - self.last_sim_update).as_secs_f64());
+        self.last_sim_update = now;
 
         // Handle client messages
         let mut needs_reset = false;
@@ -367,14 +374,14 @@ impl RoomData {
         self.roomtime += delta_time;
 
         if time - self.last_full_update < 60 {
-            if (Instant::now() - self.last_update) > Duration::from_millis(100) {
+            if (now - self.last_update) > Duration::from_millis(100) {
                 self.send_state_to_all_clients(false).await;
-                self.last_update = Instant::now();
+                self.last_update = now;
             }
         } else {
             self.send_state_to_all_clients(true).await;
-            self.last_update = Instant::now();
             self.last_full_update = time;
+            self.last_update = now;
         }
     }
 

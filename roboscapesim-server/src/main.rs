@@ -8,7 +8,7 @@ use socket::SocketInfo;
 use tokio_tungstenite::tungstenite::Message;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::{time::{Duration, self}, task, sync::RwLock, net::TcpListener};
+use tokio::{time::{Duration, self, Instant}, task, sync::RwLock, net::TcpListener};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -127,7 +127,6 @@ async fn main() {
             interval.tick().await;
 
             let update_time = Utc::now();
-            
             // Perform updates
             for kvp in ROOMS.iter() {
                 let mut lock = kvp.value().write().await;
@@ -141,7 +140,7 @@ async fn main() {
                 }
 
                 // Perform update
-                lock.update(1.0 / update_fps as f64).await;
+                lock.update().await;
             }
         }
     });
