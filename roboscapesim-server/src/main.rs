@@ -1,21 +1,21 @@
 use anyhow::Result;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use chrono::Utc;
-use derivative::Derivative;
 use futures::SinkExt;
-use roboscapesim_common::{ClientMessage, UpdateMessage};
+use roboscapesim_common::ClientMessage;
 use room::RoomData;
 use simple_logger::SimpleLogger;
+use socket::SocketInfo;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::{time::{Duration, self}, task, sync::{Mutex, broadcast::{Sender, Receiver, self}, RwLock}, net::{TcpStream, TcpListener}};
+use tokio::{time::{Duration, self}, task, sync::RwLock, net::TcpListener};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
-use tokio_websockets::{WebsocketStream, Message};
+use tokio_websockets::Message;
 
-use crate::api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP, post_create};
+use crate::{api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP, post_create}, socket::accept_connection};
 
 mod room;
 mod robot;
@@ -27,27 +27,13 @@ mod util;
 
 #[path = "./services/mod.rs"]
 mod services;
+mod socket;
 
 const MAX_ROOMS: usize = 64;
 
 static ROOMS: Lazy<DashMap<String, Arc<RwLock<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
 });
-
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub struct SocketInfo {
-    /// To client
-    pub tx: Arc<Mutex<Sender<UpdateMessage>>>, 
-    /// To server, internal use
-    pub tx1: Arc<Mutex<Sender<ClientMessage>>>, 
-    /// From client
-    pub rx: Arc<Mutex<Receiver<ClientMessage>>>, 
-    /// From client, internal use
-    pub rx1: Arc<Mutex<Receiver<UpdateMessage>>>, 
-    #[derivative(Debug = "ignore")]
-    pub stream: Arc<Mutex<WebsocketStream<TcpStream>>>,
-}
 
 pub static CLIENTS: Lazy<DashMap<u128, SocketInfo>> = Lazy::new(|| {
     DashMap::new()
@@ -158,29 +144,6 @@ async fn main() {
     if let Err(err) = server.await {
         error!("server error: {}", err);
     }
-}
-
-async fn accept_connection(stream: TcpStream) -> u128 {
-    let addr = stream.peer_addr().expect("connected streams should have a peer address");
-    info!("Peer address: {}", addr);
-
-    let ws_stream = tokio_websockets::ServerBuilder::new().accept(stream)
-        .await
-        .expect("Error during the websocket handshake occurred");
-    
-    let id = rand::random();
-    info!("New WebSocket connection id {} ({})", id, addr);
-    
-    let (tx, rx1) = broadcast::channel(16);
-    let (tx1, rx) = broadcast::channel(16);
-    CLIENTS.insert(id, SocketInfo { 
-        tx: Arc::new(Mutex::new(tx)), 
-        tx1: Arc::new(Mutex::new(tx1)), 
-        rx: Arc::new(Mutex::new(rx)), 
-        rx1: Arc::new(Mutex::new(rx1)), 
-        stream: Arc::new(Mutex::new(ws_stream))
-    });
-    id
 }
 
 async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
