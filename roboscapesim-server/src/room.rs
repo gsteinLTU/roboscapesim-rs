@@ -182,8 +182,6 @@ impl RoomData {
 
     /// Send UpdateMessage to a client
     pub async fn send_to_client(msg: &UpdateMessage, client_id: u128) {
-        info!("{:?} to {}", &msg, client_id);
-
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {

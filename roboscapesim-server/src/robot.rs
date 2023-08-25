@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use chrono::Utc;
 use dashmap::DashMap;
 use derivative::Derivative;
-use log::{info, error};
+use log::{info, error, trace};
 use nalgebra::{Point3,UnitQuaternion, Vector3};
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
@@ -270,7 +270,7 @@ impl RobotData {
             had_messages = true;
             match &buf[0] {
                 b'D' => { 
-                    info!("OnDrive");
+                    trace!("OnDrive");
 
                     if buf.len() > 4 {
                         robot.drive_state = DriveState::SetDistance;
@@ -281,7 +281,7 @@ impl RobotData {
                         robot.distance_l = d2 as f64;
                         robot.distance_r = d1 as f64;
 
-                        info!("OnDrive {} {}", d1, d2);
+                        trace!("OnDrive {} {}", d1, d2);
 
                         // Check prevents robots from inching forwards from "drive 0 0"
                         if f64::abs(robot.distance_l) > f64::EPSILON {
@@ -294,7 +294,7 @@ impl RobotData {
                     }
                 },
                 b'S' => { 
-                    info!("OnSetSpeed");
+                    trace!("OnSetSpeed");
                     robot.drive_state = DriveState::SetSpeed;
 
                     if buf.len() > 4 {
@@ -306,7 +306,7 @@ impl RobotData {
                     }
                 },
                 b'B' => { 
-                    info!("OnBeep");
+                    trace!("OnBeep");
                     
                     if buf.len() > 4 {
                         let freq = u16::from_le_bytes([buf[1], buf[2]]);
@@ -317,10 +317,10 @@ impl RobotData {
                     }
                 },
                 b'L' => { 
-                    info!("OnSetLED");
+                    trace!("OnSetLED");
                 },
                 b'R' => { 
-                    info!("OnGetRange");
+                    trace!("OnGetRange");
 
                     // Setup raycast
                     let body = sim.rigid_body_set.get(robot.body_handle).unwrap();
@@ -350,7 +350,7 @@ impl RobotData {
                     }
                 },
                 b'T' => { 
-                    info!("OnGetTicks");
+                    trace!("OnGetTicks");
                     let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
                     let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
                     let mut message: [u8; 9] = [0; 9];
@@ -365,11 +365,11 @@ impl RobotData {
                     }
                 },
                 b'n' => { 
-                    info!("OnSetNumeric");
+                    trace!("OnSetNumeric");
                     // TODO: Decide on supporting this
                 },
                 b'P' => {
-                    info!("OnButtonPress");         
+                    trace!("OnButtonPress");         
                 },
                 _ => {}
             }
