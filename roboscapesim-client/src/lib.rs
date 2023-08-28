@@ -14,6 +14,7 @@ use web_sys::{console, window, WebSocket};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
+use js_sys::eval;
 
 use self::util::*;
 use self::game::*;
@@ -91,8 +92,36 @@ fn init_ui() {
         // TODO: Allow robot reset requests too
         send_message(&ClientMessage::ResetAll);
     }));
+
+    eval("
+    var setupJS = () => {
+
+        if(BABYLON.GUI == undefined) {
+            setTimeout(setupJS,200);
+        }
+
+        var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI');
+
+        var textStackPanel = new BABYLON.GUI.StackPanel();
+        textStackPanel.setPadding(20, 20, 20, 20);
+        textStackPanel.spacing = 20;
+        textStackPanel.verticalAlignment = 'top';
+        advancedTexture.addControl(textStackPanel);
+
+        window['roboscapesim-textStackPanel'] = textStackPanel;
+    };
+
+    setTimeout(setupJS, 200);
+
+
+    const observer = new ResizeObserver(function () {
+        BABYLON.Engine.LastCreatedEngine.resize();
+    });
+    observer.observe(window.externalVariables.roboscapedialog);
+    ").unwrap();
 }
 
+/// Send a ClientMessage to the server
 fn send_message(msg: &ClientMessage) {
     WEBSOCKET.with(|socket| {
         let socket = socket.borrow().clone();

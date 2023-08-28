@@ -103,10 +103,7 @@
             canvas.style.height = 'calc(100% - 32px)';
             element.querySelector('content').appendChild(canvas);
             setupDialog(element);
-            const observer = new ResizeObserver(function () {
-                BABYLON.Engine.LastCreatedEngine.resize();
-            });
-            observer.observe(element);
+            
             window.externalVariables['roboscapedialog'] = element;
 
             const buttonbar = document.createElement('div');
@@ -138,8 +135,7 @@
 
     scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
     document.head.appendChild(scriptElement);
-
-
+ 
     var scriptElement = document.createElement('script');
     scriptElement.async = false;
 
@@ -149,20 +145,24 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {robots_in_room, new_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {new_room, robots_in_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.new_room = new_room;
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 		        `;
 		    document.body.appendChild(s);
 		};
 		loaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');
 		document.head.appendChild(loaderScriptElement);
+		var guiScriptElement = document.createElement('script');
+		guiScriptElement.async = false;
+		guiScriptElement.setAttribute('src', 'https://preview.babylonjs.com/gui/babylon.gui.js');
+		document.head.appendChild(guiScriptElement);
 	};
 	scriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');
 	document.head.appendChild(scriptElement);

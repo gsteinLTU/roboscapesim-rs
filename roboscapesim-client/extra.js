@@ -21,10 +21,7 @@
             canvas.style.height = 'calc(100% - 32px)';
             element.querySelector('content').appendChild(canvas);
             setupDialog(element);
-            const observer = new ResizeObserver(function () {
-                BABYLON.Engine.LastCreatedEngine.resize();
-            });
-            observer.observe(element);
+            
             window.externalVariables['roboscapedialog'] = element;
 
             const buttonbar = document.createElement('div');
@@ -56,7 +53,6 @@
 
     scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
     document.head.appendChild(scriptElement);
-
-
+ 
     var scriptElement = document.createElement('script');
     scriptElement.async = false;

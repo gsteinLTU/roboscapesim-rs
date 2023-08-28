@@ -66,8 +66,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     lines.push("\t\tloaderScriptElement.setAttribute('src', 'https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js');");
     lines.push("\t\tdocument.head.appendChild(loaderScriptElement);");
 
-    lines.push("\t};");    
+    lines.push("\t\tvar guiScriptElement = document.createElement('script');");
+    lines.push("\t\tguiScriptElement.async = false;");
+    lines.push("\t\tguiScriptElement.setAttribute('src', 'https://preview.babylonjs.com/gui/babylon.gui.js');");
+    lines.push("\t\tdocument.head.appendChild(guiScriptElement);");
 
+    lines.push("\t};");    
+    
     lines.push("\tscriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');");
     lines.push("\tdocument.head.appendChild(scriptElement);");
     lines.push("\tdisableRetinaSupport();");
