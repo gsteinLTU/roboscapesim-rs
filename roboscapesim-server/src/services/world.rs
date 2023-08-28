@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, time::{Instant, Duration}};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
+use roboscapesim_common::UpdateMessage;
 
 use crate::room::RoomData;
 
@@ -128,6 +129,51 @@ pub fn create_world_service(id: &str) -> Service {
         },
     );
 
+    definition.methods.insert(
+        "clearText".to_owned(),
+        MethodDescription {
+            documentation: Some("Clear text messages on the client display".to_owned()),
+            params: vec![],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec![],
+            },
+        },
+    );
+
+    definition.methods.insert(
+        "showText".to_owned(),
+        MethodDescription {
+            documentation: Some("Show a text message on the client displays".to_owned()),
+            params: vec![
+                MethodParam {
+                    name: "textbox_id".to_owned(),
+                    documentation: Some("ID of text box to update/create".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "text".to_owned(),
+                    documentation: Some("Text to display".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "timeout".to_owned(),
+                    documentation: Some("Time (in ms) to keep message around for".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: true,
+                },
+            ],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec![],
+            },
+        },
+    );
+
+
+
     definition.events.insert(
         "userJoined".to_owned(),
         EventDescription { params: vec![] },
@@ -159,10 +205,19 @@ pub fn create_world_service(id: &str) -> Service {
     }
 }
 
-pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
+pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
     match msg.function.as_str() {
         "reset" => {
             room.reset();
+        },
+        "showText" => {
+            let id = msg.params[0].as_str().unwrap().to_owned();
+            let text = msg.params[1].as_str().unwrap().to_owned();
+            let timeout = msg.params[2].as_f64();
+            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone())).await;
+        },
+        "clearText" => {
+            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone())).await;
         },
         f => {
             info!("Unrecognized function {}", f);

@@ -342,7 +342,7 @@ impl RoomData {
         for (service_type, msg) in msgs {
             info!("{:?}", msg);
             match service_type {
-                ServiceType::World => handle_world_msg(self, msg),
+                ServiceType::World => handle_world_msg(self, msg).await,
                 ServiceType::Entity => handle_entity_message(self, msg),
                 ServiceType::PositionSensor => handle_position_sensor_message(self, msg),
                 ServiceType::LIDAR => handle_lidar_message(self, msg),

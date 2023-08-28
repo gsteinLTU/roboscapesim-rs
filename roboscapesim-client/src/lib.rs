@@ -140,9 +140,13 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
             game.borrow().state_server_time.replace(t);
             game.borrow().state_time.replace(instant::now());
         },
-        Ok(UpdateMessage::DisplayText(id, text, duration)) => {
+        Ok(UpdateMessage::DisplayText(id, text, timeout)) => {
             // TODO: show on canvas
-            console_log!("Display Text \"{}\" in position {} for {} s", text, id, duration);
+            console_log!("Display Text \"{}\" in position {} for {:?} s", text, id, timeout);
+            add_or_update_text(&text, &id, timeout)
+        },
+        Ok(UpdateMessage::ClearText) => {
+            clear_all_text_blocks();
         },
         Ok(UpdateMessage::Beep(id, freq, duration)) => {
             if BEEPS_ENABLED.get() {

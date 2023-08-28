@@ -132,7 +132,9 @@ pub enum UpdateMessage {
     /// Sending information about objects in the room
     Update(f64, bool, DashMap<String, ObjectData>),
     /// Tell client to display text for a duration
-    DisplayText(u16, String, u16),
+    DisplayText(String, String, Option<f64>),
+    /// Clear all text displayed
+    ClearText,
     /// Tell client to play a beep from a given object, with a frequency and duration
     Beep(String, u16, u16),
 }
