@@ -160,7 +160,7 @@ pub fn create_world_service(id: &str) -> Service {
                 },
                 MethodParam {
                     name: "timeout".to_owned(),
-                    documentation: Some("Time (in ms) to keep message around for".to_owned()),
+                    documentation: Some("Time (in s) to keep message around for".to_owned()),
                     r#type: "number".to_owned(),
                     optional: true,
                 },

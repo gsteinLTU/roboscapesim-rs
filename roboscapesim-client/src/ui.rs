@@ -1,13 +1,14 @@
-use std::{collections::BTreeMap, cell::RefCell, rc::Rc};
+use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use roboscapesim_common::ClientMessage;
+use web_sys::window;
 
 use crate::{util::*, console_log};
 
 use super::send_message;
 
 use js_sys::eval;
-use wasm_bindgen::{prelude::Closure, JsValue};
+use wasm_bindgen::{prelude::Closure, JsValue, JsCast};
 
 /// Set up UI elements for the 3D view window
 pub(crate) fn init_ui() {
@@ -64,44 +65,78 @@ pub(crate) fn set_title(title: &str) {
     f.call2(&JsValue::NULL, &dialog, &JsValue::from_str(title)).unwrap();
 }
 
-thread_local! {
-    static TEXT_BLOCKS: Rc<RefCell<BTreeMap<String, JsValue>>> = Rc::new(RefCell::new(BTreeMap::new()));
+struct TextBlock {
+    pub id: Rc<RefCell<String>>,
+    pub js_value: RefCell<JsValue>,
+    pub timeout: Cell<Option<i32>>,
+}
+impl TextBlock {
+    fn create_timeout(&mut self, timeout: f64) {
+        TEXT_BLOCKS.with(|text_blocks| {
+            let text_blocks_clone = text_blocks.clone();
+            let id = self.id.clone();
+            self.timeout.set(Some(window().unwrap().set_timeout_with_callback_and_timeout_and_arguments_0(
+                Closure::<dyn Fn()>::new(move || {
+                    text_blocks_clone.borrow_mut().remove(&id.borrow().clone()).unwrap();
+                }).into_js_value().unchecked_ref(),
+                (timeout * 1000.0) as i32
+            ).unwrap()));
+        });
+    }
+
+    fn clear_timeout(&mut self){
+        if let Some(timeout) = self.timeout.get() {
+            window().unwrap().clear_timeout_with_handle(timeout);
+            self.timeout.set(None);
+        }
+    }
 }
 
-/**
- * Create a TextBlock in the 3D view's overlay.
- * If a TextBlock already has the id, that TextBlock's text and timeout will be updated.
- * 
- * @param {string} text Text to display in TextBlock
- * @param {string} id ID of TextBlock
- * @param {number | boolean} timeout TextBlock will be removed after timeout ms, or never if timeout is falsey.
- */
+impl Drop for TextBlock {
+    fn drop(&mut self) {
+        console_log!("Dropping {}", self.id.borrow());
+        js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "removeControl", &[&self.js_value.borrow()]).unwrap();
+        self.clear_timeout();
+    }
+}
+
+thread_local! {
+    static TEXT_BLOCKS: Rc<RefCell<BTreeMap<String, Rc::<RefCell<TextBlock>>>>> = Rc::new(RefCell::new(BTreeMap::new()));
+}
+
+/// Create a TextBlock in the 3D view's overlay.
+/// If a TextBlock already has the id, that TextBlock's text and timeout will be updated.
 pub(crate) fn add_or_update_text(text: &str, id: &str, timeout: Option<f64>) {
+    let id = "textblock_".to_owned() + id;
     TEXT_BLOCKS.with(|text_blocks| {
-        if !text_blocks.borrow().contains_key(id) {
-            let text_block = eval(&("let textBlock = new BABYLON.GUI.TextBlock('textblock_' + ('".to_owned() + id + "' ?? Math.round(Math.random() * 10000000)));
+        if !text_blocks.borrow().contains_key(&id) {
+            let text_block = RefCell::new(eval(&("let textBlock = new BABYLON.GUI.TextBlock('textblock_' + ('".to_owned() + &id + "' ?? Math.round(Math.random() * 10000000)));
             textBlock.heightInPixels = 24;
             textBlock.outlineColor = '#2226';
             textBlock.outlineWidth = 3;
             textBlock.color = '#FFF';
             textBlock.fontSizeInPixels = 20;
-            textBlock;")).unwrap();
-            js_set(&text_block, "text", text).unwrap();
-            js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "addControl", &[&text_block]).unwrap();
-            text_blocks.borrow_mut().insert(js_get(&text_block, "name").unwrap().as_string().unwrap(), text_block);
+            textBlock;")).unwrap());
+            js_set(&text_block.borrow(), "text", text).unwrap();
+            js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "addControl", &[&text_block.borrow()]).unwrap();
+            
+            let id = js_get(&text_block.borrow(), "name").unwrap().as_string().unwrap();
+
+            let block = Rc::new(RefCell::new(TextBlock { id: Rc::new(RefCell::new(id.clone())), js_value: text_block.clone(), timeout: Cell::new(None) }));
+
+            if let Some(timeout) = timeout {
+                block.borrow_mut().create_timeout(timeout);                
+            }
+
+            text_blocks.borrow_mut().insert(id, block);
         } else {
-            js_set(&text_blocks.borrow()[id], "text", text).unwrap();
-        }
+            text_blocks.borrow_mut().get_mut(&id).unwrap().borrow_mut().clear_timeout();   
+            
+            if let Some(timeout) = timeout {
+                text_blocks.borrow_mut().get_mut(&id).unwrap().borrow_mut().create_timeout(timeout);           
+            }         
 
-        if let Some(timeout) = timeout {
-            // if (textBlocks[id].timeout) {
-            //     clearTimeout(textBlocks[id].timeout);
-            // }
-
-            // textBlocks[id].timeout = setTimeout(() => {
-            //     textStackPanel.removeControl(textBlocks[id]);
-            //     delete textBlocks[id];
-            // }, timeout);
+            js_set(&text_blocks.borrow()[&id].borrow().js_value.borrow(), "text", text).unwrap();
         }
     });
 }
@@ -111,18 +146,6 @@ pub(crate) fn add_or_update_text(text: &str, id: &str, timeout: Option<f64>) {
  */
 pub(crate) fn clear_all_text_blocks() {
     TEXT_BLOCKS.with(|text_blocks| {
-        for text_block in text_blocks.borrow().iter() {
-            // if (Object.hasOwnProperty.call(textBlocks, id)) {
-            //     const element = textBlocks[id];
-
-            //     if (element.timeout) {
-            //         clearTimeout(element.timeout);
-            //     }
-
-            //     textStackPanel.removeControl(element);
-            //     delete textBlocks[id];
-            // }
-        }
         text_blocks.borrow_mut().clear();
     });
 }
