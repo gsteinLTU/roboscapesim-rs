@@ -86,8 +86,7 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 
     for i in 0..num_beams {
         let angle = -angle_delta * i as f32 - start_angle;
-        let direction = orientation * Rotation3::from_axis_angle(&Vector3::y_axis(), angle);        
-        println!("{:?}", direction.euler_angles());
+        let direction = orientation * Rotation3::from_axis_angle(&Vector3::y_axis(), angle);
         let direction = direction * vector![1.0, 0.0, 0.0];
         rays.push(Ray::new(origin, direction));
     }

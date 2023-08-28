@@ -340,7 +340,7 @@ impl RobotData {
                         // the ray travelled a distance equal to `ray.dir * toi`.
                         let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
                         distance = (toi * 100.0) as u16;
-                        println!("Collider {:?} hit at point {}", handle, hit_point);
+                        trace!("Collider {:?} hit at point {}", handle, hit_point);
                     }
 
                     // Send result message
