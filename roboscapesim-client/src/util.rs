@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use js_sys::{Function, Reflect, Array};
 use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
-use wasm_bindgen::{JsValue, JsCast, prelude::Closure};
+use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{window, Document};
 
 /// Try to get a value from window.externalVariables
@@ -77,24 +77,9 @@ pub(crate) fn document() -> Document {
     window().unwrap().document().unwrap()
 }
 
-pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys::Element {
-    let document = document();
-    let button = document.create_element("button").unwrap();
-    button.set_text_content(Some(text));
-    button.add_event_listener_with_callback("click", &callback.into_js_value().into()).unwrap();
-    document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&button).unwrap();
-    button
-}
-
-pub(crate) fn set_title(title: &str) {
-    let dialog = get_nb_externalvar("roboscapedialog").unwrap();
-    let f = get_window_fn("setDialogTitle").unwrap();
-    f.call2(&JsValue::NULL, &dialog, &JsValue::from_str(title)).unwrap();
-}
-
 #[macro_export]
 macro_rules! console_log {
     ($($tokens: tt)*) => {
-        console::log_1(&format!($($tokens)*).into())
+        web_sys::console::log_1(&format!($($tokens)*).into())
     }
 }

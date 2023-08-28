@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 mod util;
 mod game;
+mod ui;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
@@ -10,14 +11,14 @@ use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{console, window, WebSocket};
+use web_sys::{window, WebSocket};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
-use js_sys::eval;
 
 use self::util::*;
 use self::game::*;
+use self::ui::*;
 
 extern crate console_error_panic_hook;
 
@@ -42,7 +43,7 @@ const INFO: ExtensionInfo = ExtensionInfo {
 #[wasm_bindgen(start)]
 async fn main() {
     console_error_panic_hook::set_once();
-
+    
     GAME.with(|game| {
         // Init game
         let game_clone = game.clone();
@@ -52,7 +53,7 @@ async fn main() {
             let now = instant::now();
             let t = (now - game_clone.borrow().state_time.get()) / (game_clone.borrow().state_time.get() - game_clone.borrow().last_state_time.get());
             //console::log_1(&format!("t = {}, now = {}, last_state_time = {}, state_time = {}", t, now, *game_clone.borrow().last_state_time.borrow(), *game_clone.borrow().state_time.borrow()).into());
-
+            
             for update_obj in next_state.borrow().iter() {
                 let name = update_obj.0;
                 let update_obj = update_obj.1;
@@ -60,15 +61,15 @@ async fn main() {
                 if !game_clone.borrow().models.borrow().contains_key(name) {
                     continue;
                 }
-
+                
                 // Don't update objects not loaded yet
                 if last_state.borrow().contains_key(name) {
                     // Interpolate
                     let last_transform = last_state.borrow().get(name).unwrap().transform;
                     let interpolated_transform = last_transform.try_interpolate(&update_obj.transform, t as f32).unwrap_or(update_obj.transform);
-
+                    
                     //console::log_1(&format!("{}: last_transform: {:?} \n next_transform: {:?} \ninterpolated_transform = {:?}", name, last_transform, update_obj.transform, interpolated_transform).into());
-
+                    
                     apply_transform(game_clone.borrow().models.borrow().get(name).unwrap().clone(), interpolated_transform);
                 } else {
                     // Assign directly
@@ -77,48 +78,10 @@ async fn main() {
             }
         });
         game.borrow().scene.borrow().add_before_render_observable(before_render);
-        init_ui();
+        ui::init_ui();
     });
     
     console_log!("RoboScape Online loaded!");
-}
-
-/// Set up UI elements for the 3D view window
-fn init_ui() {
-    create_button("Reset", Closure::new(|| { 
-        console_log!("Reset");
-
-        // Send reset message
-        // TODO: Allow robot reset requests too
-        send_message(&ClientMessage::ResetAll);
-    }));
-
-    eval("
-    var setupJS = () => {
-
-        if(BABYLON.GUI == undefined) {
-            setTimeout(setupJS,200);
-        }
-
-        var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI');
-
-        var textStackPanel = new BABYLON.GUI.StackPanel();
-        textStackPanel.setPadding(20, 20, 20, 20);
-        textStackPanel.spacing = 20;
-        textStackPanel.verticalAlignment = 'top';
-        advancedTexture.addControl(textStackPanel);
-
-        window['roboscapesim-textStackPanel'] = textStackPanel;
-    };
-
-    setTimeout(setupJS, 200);
-
-
-    const observer = new ResizeObserver(function () {
-        BABYLON.Engine.LastCreatedEngine.resize();
-    });
-    observer.observe(window.externalVariables.roboscapedialog);
-    ").unwrap();
 }
 
 /// Send a ClientMessage to the server
