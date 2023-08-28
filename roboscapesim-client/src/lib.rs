@@ -107,6 +107,9 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
         },
         Ok(UpdateMessage::RoomInfo(state)) => {
             set_title(&state.name);
+            GAME.with(|game| {
+                game.borrow().room_state.replace(Some(state));
+            });
         },
         Ok(UpdateMessage::Update(t, full_update, roomdata)) => {
             let view = roomdata.to_owned();
@@ -341,4 +344,19 @@ pub fn robots_in_room() -> JsValue {
         game.borrow().state.borrow().keys().filter(|k| k.starts_with("robot_")).map(|k| k[6..].to_owned()).collect::<Vec<_>>()
     });
     js_construct("List", &[&Array::from_iter(list.iter().map(|s| JsValue::from_str(&s)))]).unwrap()
+}
+
+#[netsblox_extension_block(name = "roomID", category = "network", spec = "RoboScape room id", target = netsblox_extension_util::TargetObject::Both)]
+#[wasm_bindgen]
+pub fn room_id() -> JsValue {
+    let state = GAME.with(|game| {
+        game.borrow().room_state.borrow().clone()
+    });
+
+    if let Some(state) = state {
+        return JsValue::from_str(&state.name.clone());
+    }
+
+    // If no room info
+    JsValue::from_bool(false)
 }
