@@ -249,6 +249,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                     js_set(&tag_rotation, "y", 0.0).unwrap();
                     js_set(&tag_rotation, "z", 0.0).unwrap();
                     
+                    game_rc.borrow().name_tags.borrow_mut().insert(obj.name.to_owned(), tag);
                 }
             });
         },
