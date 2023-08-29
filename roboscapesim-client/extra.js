@@ -6,6 +6,14 @@
     element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
     document.head.appendChild(element);
 
+    var extraStyle = document.createElement('style');
+    extraStyle.innerText = `
+    #roboscapebuttonbar * {
+        margin: auto 5px;
+    }
+    `;
+    document.head.appendChild(extraStyle);
+
     // Add JS
     var scriptElement = document.createElement('script');
 
@@ -24,9 +32,16 @@
             
             window.externalVariables['roboscapedialog'] = element;
 
+            
             const buttonbar = document.createElement('div');
             buttonbar.id = 'roboscapebuttonbar';
             element.querySelector('content').appendChild(buttonbar);
+            
+            const robotmenu_label = document.createElement('label');
+            robotmenu_label.innerText = 'Robot ID:';
+            buttonbar.appendChild(robotmenu_label);
+            const robotmenu = document.createElement('select');
+            buttonbar.appendChild(robotmenu);
         }
 
         // Create join dialog for later use

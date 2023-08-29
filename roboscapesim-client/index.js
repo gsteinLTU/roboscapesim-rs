@@ -22,7 +22,7 @@
 
         getMenu() {
             return {
-				'New simulation...': window.RoboScapeOnline_fns.new_room,
+                'New simulation...': window.RoboScapeOnline_fns.new_room,
 				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
@@ -40,6 +40,7 @@
 					'network',
 					[
 						new Extension.Palette.Block('robotsInRoom'),
+						new Extension.Palette.Block('roomID'),
 					],
 					SpriteMorph
 				),
@@ -47,6 +48,7 @@
 					'network',
 					[
 						new Extension.Palette.Block('robotsInRoom'),
+						new Extension.Palette.Block('roomID'),
 					],
 					StageMorph
 				),
@@ -63,6 +65,14 @@
 					'robots in room',
 					[],
 					function () { return RoboScapeOnline_fns.robots_in_room(); }
+				).for(SpriteMorph, StageMorph),
+				new Extension.Block(
+					'roomID',
+					'reporter',
+					'network',
+					'RoboScape room id',
+					[],
+					function () { return RoboScapeOnline_fns.room_id(); }
 				).for(SpriteMorph, StageMorph),
 
             ];
@@ -88,6 +98,14 @@
     element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
     document.head.appendChild(element);
 
+    var extraStyle = document.createElement('style');
+    extraStyle.innerText = `
+    #roboscapebuttonbar * {
+        margin: auto 5px;
+    }
+    `;
+    document.head.appendChild(extraStyle);
+
     // Add JS
     var scriptElement = document.createElement('script');
 
@@ -106,9 +124,16 @@
             
             window.externalVariables['roboscapedialog'] = element;
 
+            
             const buttonbar = document.createElement('div');
             buttonbar.id = 'roboscapebuttonbar';
             element.querySelector('content').appendChild(buttonbar);
+            
+            const robotmenu_label = document.createElement('label');
+            robotmenu_label.innerText = 'Robot ID:';
+            buttonbar.appendChild(robotmenu_label);
+            const robotmenu = document.createElement('select');
+            buttonbar.appendChild(robotmenu);
         }
 
         // Create join dialog for later use
@@ -145,7 +170,7 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {new_room, robots_in_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {new_room, robots_in_room, room_id, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
@@ -153,6 +178,7 @@
 		        window.RoboScapeOnline_fns = {};
 				window.RoboScapeOnline_fns.new_room = new_room;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.room_id = room_id;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 		        `;
 		    document.body.appendChild(s);
