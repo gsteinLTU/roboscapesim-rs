@@ -17,9 +17,41 @@ pub(crate) fn init_ui() {
         console_log!("Reset");
 
         // Send reset message
-        // TODO: Allow robot reset requests too
-        send_message(&ClientMessage::ResetAll);
+        match get_selected_robot() {
+            None => {
+                send_message(&ClientMessage::ResetAll);
+            }
+            Some(robot) => {
+                send_message(&ClientMessage::ResetRobot(robot));
+            }
+        }
     }));
+    create_button("Chase Cam", Closure::new(|| { 
+        console_log!("Chase Cam");
+
+    }));
+    create_button("First Person Cam", Closure::new(|| { 
+        console_log!("First Person Cam");
+
+    }));
+    create_button("Free Cam", Closure::new(|| { 
+        console_log!("Free Cam");
+    }));
+    create_button("Encrypt", Closure::new(|| { 
+        console_log!("Encrypt");
+
+        if let Some(robot) = get_selected_robot() {
+            send_message(&ClientMessage::EncryptRobot(robot));
+        }
+    }));
+    create_button("Claim", Closure::new(|| { 
+        console_log!("Claim");
+
+        if let Some(robot) = get_selected_robot() {
+            send_message(&ClientMessage::ClaimRobot(robot));
+        }
+    }));
+
 
     eval("
         var setupJS = () => {
