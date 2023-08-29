@@ -22,6 +22,7 @@ pub(crate) struct Game {
     pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
     pub(crate) beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
     pub(crate) room_state: Rc<RefCell<Option<RoomState>>>,
+    pub(crate) name_tags: Rc<RefCell<HashMap<String, JsValue>>>,
 }
 
 impl Game {
@@ -69,6 +70,7 @@ impl Game {
             shadow_generator,
             beeps: Rc::new(RefCell::new(HashMap::new())),     
             room_state: Rc::new(RefCell::new(None)),
+            name_tags: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -79,65 +81,5 @@ impl Game {
         self.models.borrow_mut().insert(name.to_owned(), model.clone());
 
         Ok(model)
-    }
-
-    pub(crate) fn create_label(text: &str, font: Option<&str>, color: Option<&str>, outline: Option<bool>) -> JsValue {
-        // Defaults
-        let font = font.unwrap_or("Arial");
-        let color = color.unwrap_or("#ffffff");
-        let outline = outline.unwrap_or(true);
-
-        // Set font
-        let font_size = 48;
-        let font = "bold ".to_owned() + &i32::to_string(&font_size) + "px " + font;
-    
-        // Set height for plane
-        let plane_height = 3.0;
-    
-        // Set height for dynamic texture
-        let dtheight = 1.5 * font_size as f64; //or set as wished
-    
-        // Calcultae ratio
-        let ratio = plane_height / dtheight;
-    
-        //Use a temporary dynamic texture to calculate the length of the text on the dynamic texture canvas
-        let temp = eval("new BABYLON.DynamicTexture('DynamicTexture', 64)").unwrap();
-        let tmpctx = js_call_member(&temp, "getContext", &[]).unwrap();
-        js_set(&tmpctx, "font", &font).unwrap();
-
-        let dtwidth = js_get(&js_call_member(&tmpctx, "measureText", &[&JsValue::from_str(&text)]).unwrap(), "width").unwrap();
-        let dtwidth = dtwidth.as_f64().unwrap() + 8.0;
-    
-        // Calculate width the plane has to be 
-        let plane_width = dtwidth * ratio;
-    
-        //Create dynamic texture and write the text
-        let dynamic_texture = eval(&("new BABYLON.DynamicTexture('DynamicTexture', { width: ".to_owned() + &dtwidth.to_string() + " + 8, height: " +  &dtheight.to_string() + " + 8 }, null, false)")).unwrap();
-        let mat = eval("new BABYLON.StandardMaterial('mat', null);").unwrap();
-        js_set(&mat, "diffuseTexture", &dynamic_texture).unwrap();
-        js_set(&mat, "ambientColor", &Color3::new(1.0, 1.0, 1.0)).unwrap();
-        js_set(&mat, "specularColor", &Color3::new(0.0, 0.0, 0.0)).unwrap();
-        js_set(&mat, "diffuseColor", &Color3::new(0.0, 0.0, 0.0)).unwrap();
-        js_set(&mat, "emissiveColor", &Color3::new(1.0, 1.0, 1.0)).unwrap();
-    
-        // Create outline
-        if outline {
-            js_call_member(&dynamic_texture, "drawText", &[&JsValue::from_str(text), &JsValue::from_f64(2.0), &JsValue::from_f64(dtheight - 4.0), &JsValue::from_str(&font), &JsValue::from_str("#111111"), &JsValue::NULL, &JsValue::TRUE]).unwrap();
-            js_call_member(&dynamic_texture, "drawText", &[&JsValue::from_str(text), &JsValue::from_f64(4.0), &JsValue::from_f64(dtheight - 2.0), &JsValue::from_str(&font), &JsValue::from_str("#111111"), &JsValue::NULL, &JsValue::TRUE]).unwrap();
-            js_call_member(&dynamic_texture, "drawText", &[&JsValue::from_str(text), &JsValue::from_f64(6.0), &JsValue::from_f64(dtheight - 4.0), &JsValue::from_str(&font), &JsValue::from_str("#111111"), &JsValue::NULL, &JsValue::TRUE]).unwrap();
-            js_call_member(&dynamic_texture, "drawText", &[&JsValue::from_str(text), &JsValue::from_f64(4.0), &JsValue::from_f64(dtheight - 6.0), &JsValue::from_str(&font), &JsValue::from_str("#111111"), &JsValue::NULL, &JsValue::TRUE]).unwrap();
-        }
-    
-        // Draw text
-        js_call_member(&dynamic_texture, "drawText", &[&JsValue::from_str(text),&JsValue::from_f64(4.0), &JsValue::from_f64(dtheight - 4.0), &JsValue::from_str(&font), &JsValue::from_str(&color), &JsValue::NULL, &JsValue::TRUE]).unwrap();
-    
-        js_set(&dynamic_texture, "hasAlpha", true).unwrap();
-        js_set(&dynamic_texture, "getAlphaFromRGB", true).unwrap();
-    
-        //Create plane and set dynamic texture as material
-        let plane = eval(&("BABYLON.MeshBuilder.CreatePlane('plane', { width: ".to_owned() + &plane_width.to_string() + ", height: " + &plane_width.to_string() + " }, null)")).unwrap();
-        js_set(&plane, "material", mat).unwrap();
-    
-        plane
     }
 }

@@ -66,7 +66,7 @@ impl Interpolatable<Orientation> for Orientation {
             },
             Orientation::Quaternion(q) => {
                 if let Orientation::Quaternion(q2) = other {
-                    Ok(Orientation::Quaternion(q.lerp(&q2, t)))
+                    Ok(Orientation::Quaternion(q.lerp(&q2, t).normalize()))
                 } else {
                     Err("Interpolation between Euler and quaternion Orientations not supported")                    
                 }

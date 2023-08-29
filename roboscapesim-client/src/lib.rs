@@ -5,7 +5,7 @@ mod ui;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
-use js_sys::{Reflect, Array};
+use js_sys::{Reflect, Array, eval};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
@@ -229,6 +229,26 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 apply_transform(m.clone(), obj.transform);
                 game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
                 console_log!("Created mesh");
+
+                if obj.name.starts_with("robot_") {
+                    let tag = create_label("robot", None, None, None);
+                    
+                    js_set(&tag, "billboardMode", &eval("BABYLON.TransformNode.BILLBOARDMODE_ALL").unwrap()).unwrap();
+                    js_call_member(&tag, "setParent", &[(*m).as_ref()]).unwrap();
+                    
+                    let tag_scaling = js_get(&tag, "scaling").unwrap();
+                    js_set(&tag_scaling, "x", 0.05).unwrap(); 
+                    js_set(&tag_scaling, "y", 0.05).unwrap(); 
+                    let tag_position = js_get(&tag, "position").unwrap();
+                    js_set(&tag_position, "z", 0.0).unwrap();
+                    js_set(&tag_position, "y", 0.2).unwrap();
+                    js_set(&tag_position, "x", 0.0).unwrap();
+                    let tag_rotation = js_get(&tag, "rotation").unwrap();
+                    js_set(&tag_rotation, "x", 0.0).unwrap();
+                    js_set(&tag_rotation, "y", 0.0).unwrap();
+                    js_set(&tag_rotation, "z", 0.0).unwrap();
+                    
+                }
             });
         },
     }
