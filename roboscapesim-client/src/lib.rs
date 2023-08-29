@@ -231,17 +231,18 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 console_log!("Created mesh");
 
                 if obj.name.starts_with("robot_") {
-                    let tag = create_label("robot", None, None, None);
+                    let tag = create_label(&obj.name[(obj.name.len() - 4)..], None, None, None);
                     
                     js_set(&tag, "billboardMode", &eval("BABYLON.TransformNode.BILLBOARDMODE_ALL").unwrap()).unwrap();
                     js_call_member(&tag, "setParent", &[(*m).as_ref()]).unwrap();
                     
+                    // Set tag transform
                     let tag_scaling = js_get(&tag, "scaling").unwrap();
-                    js_set(&tag_scaling, "x", 0.05).unwrap(); 
-                    js_set(&tag_scaling, "y", 0.05).unwrap(); 
+                    js_set(&tag_scaling, "x", 0.04).unwrap(); 
+                    js_set(&tag_scaling, "y", 0.035).unwrap(); 
                     let tag_position = js_get(&tag, "position").unwrap();
                     js_set(&tag_position, "z", 0.0).unwrap();
-                    js_set(&tag_position, "y", 0.2).unwrap();
+                    js_set(&tag_position, "y", 0.175).unwrap();
                     js_set(&tag_position, "x", 0.0).unwrap();
                     let tag_rotation = js_get(&tag, "rotation").unwrap();
                     js_set(&tag_rotation, "x", 0.0).unwrap();
