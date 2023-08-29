@@ -273,7 +273,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                     if search_node.is_none() {
                         let new_option = document().create_element("option").unwrap();
                         new_option.set_inner_html(&obj.name[6..]);
-                        new_option.set_attribute("value", &obj.name).unwrap();
+                        new_option.set_attribute("value", &obj.name[6..]).unwrap();
                         robotmenu.append_child(&new_option).unwrap();
                     }
                 }
