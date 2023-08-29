@@ -41,7 +41,10 @@
             robotmenu_label.innerText = 'Robot ID:';
             buttonbar.appendChild(robotmenu_label);
             const robotmenu = document.createElement('select');
+            const nonchoice = document.createElement('option');
+            robotmenu.appendChild(nonchoice);
             buttonbar.appendChild(robotmenu);
+            window.externalVariables['roboscapedialog-robotmenu'] = robotmenu;
         }
 
         // Create join dialog for later use

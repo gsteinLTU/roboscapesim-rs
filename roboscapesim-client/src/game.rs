@@ -1,12 +1,7 @@
 use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
-
-use js_sys::eval;
 use neo_babylon::prelude::*;
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::JsValue;
-
-use crate::util::{js_call_member, js_set, js_get};
-
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {

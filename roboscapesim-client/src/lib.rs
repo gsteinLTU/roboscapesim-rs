@@ -11,7 +11,7 @@ use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{window, WebSocket};
+use web_sys::{window, WebSocket, Node};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
@@ -230,6 +230,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
                 console_log!("Created mesh");
 
+                // Robot-specific behavior
                 if obj.name.starts_with("robot_") {
                     let tag = create_label(&obj.name[(obj.name.len() - 4)..], None, None, None);
                     
@@ -250,6 +251,31 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                     js_set(&tag_rotation, "z", 0.0).unwrap();
                     
                     game_rc.borrow().name_tags.borrow_mut().insert(obj.name.to_owned(), tag);
+
+                    let robotmenu: Node = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
+                    
+                    // Don't create duplicates in the menu
+                    let mut search_node = robotmenu.first_child();
+
+                    while search_node.is_some() {
+                        let node = search_node.unwrap();
+
+                        if let Some(txt) = node.text_content() {
+                            if txt == &obj.name[6..]{
+                                search_node = Some(node);
+                                break;
+                            }
+                        }
+
+                        search_node = node.next_sibling();
+                    }
+                    
+                    if search_node.is_none() {
+                        let new_option = document().create_element("option").unwrap();
+                        new_option.set_inner_html(&obj.name[6..]);
+                        new_option.set_attribute("value", &obj.name).unwrap();
+                        robotmenu.append_child(&new_option).unwrap();
+                    }
                 }
             });
         },

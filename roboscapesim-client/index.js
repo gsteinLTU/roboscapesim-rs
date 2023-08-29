@@ -22,7 +22,7 @@
 
         getMenu() {
             return {
-                'New simulation...': window.RoboScapeOnline_fns.new_room,
+				'New simulation...': window.RoboScapeOnline_fns.new_room,
 				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
@@ -133,7 +133,10 @@
             robotmenu_label.innerText = 'Robot ID:';
             buttonbar.appendChild(robotmenu_label);
             const robotmenu = document.createElement('select');
+            const nonchoice = document.createElement('option');
+            robotmenu.appendChild(nonchoice);
             buttonbar.appendChild(robotmenu);
+            window.externalVariables['roboscapedialog-robotmenu'] = robotmenu;
         }
 
         // Create join dialog for later use
@@ -170,16 +173,16 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {new_room, robots_in_room, room_id, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {robots_in_room, new_room, show_3d_view, room_id} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.new_room = new_room;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
-				window.RoboScapeOnline_fns.room_id = room_id;
+				window.RoboScapeOnline_fns.new_room = new_room;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.room_id = room_id;
 		        `;
 		    document.body.appendChild(s);
 		};

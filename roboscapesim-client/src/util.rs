@@ -77,6 +77,15 @@ pub(crate) fn document() -> Document {
     window().unwrap().document().unwrap()
 }
 
+pub(crate) fn get_selected_robot() -> Option<String> {
+    let robotmenu = get_nb_externalvar("roboscapedialog-robotmenu").unwrap();
+    let value = js_get(&robotmenu, "value").unwrap().as_string().unwrap();
+    match value.as_str() {
+        "" => None,
+        v => Some(v.to_owned()),
+    }
+}
+
 #[macro_export]
 macro_rules! console_log {
     ($($tokens: tt)*) => {

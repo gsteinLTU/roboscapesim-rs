@@ -9,7 +9,6 @@ use nalgebra::{point,vector};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use roboscapesim_common::*;
-use serde::Serialize;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
