@@ -287,6 +287,7 @@ impl RoomData {
 
         // Handle client messages
         let mut needs_reset = false;
+        let mut robot_resets = vec![];
         for client in self.sockets.iter() {
             let client = CLIENTS.get(client.value());
 
@@ -294,10 +295,14 @@ impl RoomData {
                 while client.rx.lock().await.len() > 0 {
                     let msg = client.rx.lock().await.recv().await.unwrap();
                     match msg {
-                        ClientMessage::Heartbeat => {},
                         ClientMessage::ResetAll => { needs_reset = true; },
-                        ClientMessage::ResetRobot(_) => {},
-                        ClientMessage::ClaimRobot(_) => {},
+                        ClientMessage::ResetRobot(robot_id) => {
+                            if self.is_authorized(client.key().clone(), &robot_id) {
+                                robot_resets.push(robot_id);
+                            }
+                        },
+                        ClientMessage::ClaimRobot(robot_id) => {},
+                        ClientMessage::EncryptRobot(robot_id) => {},
                         _ => {}
                     }
                 }
@@ -306,6 +311,10 @@ impl RoomData {
 
         if needs_reset {
             self.reset();
+        } else {
+            for robot in robot_resets {
+                self.reset_robot(&robot);
+            }
         }
 
         let time = Utc::now().timestamp();
@@ -405,5 +414,10 @@ impl RoomData {
         }
 
         self.last_interaction_time = Utc::now().timestamp();
+    }
+
+    fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
+        // TODO: check robot claim
+        true
     }
 }
