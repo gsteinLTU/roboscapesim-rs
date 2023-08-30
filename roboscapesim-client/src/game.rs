@@ -34,6 +34,20 @@ impl Game {
         camera.set_min_z(0.01);
         camera.set_max_z(300.0);
         camera.set_speed(0.35);
+        
+        // Other cameras
+        let follow_cam = FollowCamera::new("followcam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow()));
+        follow_cam.set_height_offset(1.25);
+        follow_cam.set_radius(2.0);
+        follow_cam.set_rotation_offset(0.0);
+        follow_cam.set_camera_acceleration(0.2);
+        follow_cam.set_max_camera_speed(50.0);
+        follow_cam.set_min_z(0.01);
+        follow_cam.set_max_z(200.0);
+
+        let first_person_cam = UniversalCamera::new("firstPersonCam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow()));
+        first_person_cam.set_min_z(0.01);
+        first_person_cam.set_max_z(150.0);
 
         // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions
         // Add lights to the scene
