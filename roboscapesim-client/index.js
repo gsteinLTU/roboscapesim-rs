@@ -39,16 +39,16 @@
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('robotsInRoom'),
 						new Extension.Palette.Block('roomID'),
+						new Extension.Palette.Block('robotsInRoom'),
 					],
 					SpriteMorph
 				),
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('robotsInRoom'),
 						new Extension.Palette.Block('roomID'),
+						new Extension.Palette.Block('robotsInRoom'),
 					],
 					StageMorph
 				),
@@ -59,20 +59,20 @@
         getBlocks() {
             return [
 				new Extension.Block(
-					'robotsInRoom',
-					'reporter',
-					'network',
-					'robots in room',
-					[],
-					function () { return RoboScapeOnline_fns.robots_in_room(); }
-				).for(SpriteMorph, StageMorph),
-				new Extension.Block(
 					'roomID',
 					'reporter',
 					'network',
 					'RoboScape room id',
 					[],
 					function () { return RoboScapeOnline_fns.room_id(); }
+				).for(SpriteMorph, StageMorph),
+				new Extension.Block(
+					'robotsInRoom',
+					'reporter',
+					'network',
+					'robots in room',
+					[],
+					function () { return RoboScapeOnline_fns.robots_in_room(); }
 				).for(SpriteMorph, StageMorph),
 
             ];
@@ -118,7 +118,7 @@
             const canvas = document.createElement('canvas');
             canvas.id = 'roboscape-canvas';
             canvas.style.width = 'calc(100% - 32px)';
-            canvas.style.height = 'calc(100% - 32px)';
+            canvas.style.height = 'calc(100% - 48px)';
             element.querySelector('content').appendChild(canvas);
             setupDialog(element);
             
@@ -173,16 +173,16 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {robots_in_room, new_room, show_3d_view, room_id} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {room_id, robots_in_room, show_3d_view, new_room} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
-				window.RoboScapeOnline_fns.new_room = new_room;
-				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 				window.RoboScapeOnline_fns.room_id = room_id;
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.new_room = new_room;
 		        `;
 		    document.body.appendChild(s);
 		};

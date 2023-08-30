@@ -26,7 +26,7 @@
             const canvas = document.createElement('canvas');
             canvas.id = 'roboscape-canvas';
             canvas.style.width = 'calc(100% - 32px)';
-            canvas.style.height = 'calc(100% - 32px)';
+            canvas.style.height = 'calc(100% - 48px)';
             element.querySelector('content').appendChild(canvas);
             setupDialog(element);
             

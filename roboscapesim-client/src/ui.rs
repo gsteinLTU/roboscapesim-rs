@@ -51,6 +51,7 @@ pub(crate) fn init_ui() {
             send_message(&ClientMessage::ClaimRobot(robot));
         }
     }));
+    let claim_text = create_text("Claimed by: None");
 
 
     eval("
@@ -82,7 +83,7 @@ pub(crate) fn init_ui() {
         ").unwrap();
 }
 
-
+/// Add a button to the 3D view button bar
 pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys::Element {
     let document = document();
     let button = document.create_element("button").unwrap();
@@ -92,12 +93,23 @@ pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys:
     button
 }
 
+/// Add text to the 3D view button bar
+pub(crate) fn create_text(text: &str) -> web_sys::Element {
+    let document = document();
+    let span = document.create_element("span").unwrap();
+    span.set_text_content(Some(text));
+    document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&span).unwrap();
+    span
+}
+
+/// Set title of 3D view
 pub(crate) fn set_title(title: &str) {
     let dialog = get_nb_externalvar("roboscapedialog").unwrap();
     let f = get_window_fn("setDialogTitle").unwrap();
     f.call2(&JsValue::NULL, &dialog, &JsValue::from_str(title)).unwrap();
 }
 
+/// Holds information about a text message displayed overlaying the 3D view
 struct TextBlock {
     pub id: Rc<RefCell<String>>,
     pub js_value: RefCell<JsValue>,
