@@ -301,8 +301,12 @@ impl RoomData {
                                 robot_resets.push(robot_id);
                             }
                         },
-                        ClientMessage::ClaimRobot(robot_id) => {},
-                        ClientMessage::EncryptRobot(robot_id) => {},
+                        ClientMessage::ClaimRobot(robot_id) => {
+
+                        },
+                        ClientMessage::EncryptRobot(robot_id) => {
+                            
+                        },
                         _ => {}
                     }
                 }

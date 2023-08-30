@@ -4,7 +4,7 @@ use neo_babylon::prelude::Color3;
 use roboscapesim_common::ClientMessage;
 use web_sys::window;
 
-use crate::{util::*, console_log};
+use crate::{util::*, console_log, GAME};
 
 use super::send_message;
 
@@ -51,8 +51,10 @@ pub(crate) fn init_ui() {
             send_message(&ClientMessage::ClaimRobot(robot));
         }
     }));
-    let claim_text = create_text("Claimed by: None");
-
+    GAME.with(|game| {
+        let claim_text = create_text("Claimed by: None");
+        game.borrow().claim_text.borrow_mut().insert(claim_text);
+    });
 
     eval("
         var setupJS = () => {
