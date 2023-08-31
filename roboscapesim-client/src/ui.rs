@@ -30,16 +30,25 @@ pub(crate) fn init_ui() {
         
         game.borrow().ui_elements.borrow_mut().insert("chase".into(), create_button("Chase Cam", Closure::new(|| { 
             console_log!("Chase Cam");
-
+            
+            GAME.with(|game| {
+                game.borrow().scene.borrow().set_active_camera((*game.borrow().follow_camera).clone().unchecked_into());
+            });
         })));
 
         game.borrow().ui_elements.borrow_mut().insert("fps".into(),create_button("First Person Cam", Closure::new(|| { 
             console_log!("First Person Cam");
-
+            GAME.with(|game| {
+                game.borrow().scene.borrow().set_active_camera((*game.borrow().first_person_camera).clone().unchecked_into());
+            });
         })));
 
         game.borrow().ui_elements.borrow_mut().insert("free".into(),create_button("Free Cam", Closure::new(|| { 
             console_log!("Free Cam");
+
+            GAME.with(|game| {
+                game.borrow().scene.borrow().set_active_camera((*game.borrow().main_camera).clone().unchecked_into());
+            });
         })));
 
         game.borrow().ui_elements.borrow_mut().insert("encrypt".into(), create_button("Encrypt", Closure::new(|| { 
