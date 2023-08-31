@@ -32,14 +32,19 @@ pub(crate) fn init_ui() {
             console_log!("Chase Cam");
             
             GAME.with(|game| {
-                game.borrow().scene.borrow().set_active_camera((*game.borrow().follow_camera).clone().unchecked_into());
+                if let Some(robot_id) = get_selected_robot() {
+                    if let Some(robot) = game.borrow().models.borrow().get(&("robot_".to_owned() + &robot_id)) {
+                        game.borrow().follow_camera.set_locked_target(Some(robot.get_mesh_as_js_value()));
+                        game.borrow().scene.borrow().set_active_camera(game.borrow().follow_camera.as_ref());
+                    }
+                }
             });
         })));
 
         game.borrow().ui_elements.borrow_mut().insert("fps".into(),create_button("First Person Cam", Closure::new(|| { 
             console_log!("First Person Cam");
             GAME.with(|game| {
-                game.borrow().scene.borrow().set_active_camera((*game.borrow().first_person_camera).clone().unchecked_into());
+                game.borrow().scene.borrow().set_active_camera(game.borrow().first_person_camera.as_ref());
             });
         })));
 
@@ -47,7 +52,7 @@ pub(crate) fn init_ui() {
             console_log!("Free Cam");
 
             GAME.with(|game| {
-                game.borrow().scene.borrow().set_active_camera((*game.borrow().main_camera).clone().unchecked_into());
+                game.borrow().scene.borrow().set_active_camera(game.borrow().main_camera.as_ref());
             });
         })));
 

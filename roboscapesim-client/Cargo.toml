@@ -24,7 +24,7 @@ web-sys = { version = "0.3.64", features = [
     "WebSocket",
     "CssStyleDeclaration"] }
 roboscapesim-common = { path = "../roboscapesim-common" }
-neo-babylon = "0.1.9"
+neo-babylon = "0.1.12"
 netsblox-extension-macro = "0.1"
 netsblox-extension-util = "^0.1.4"
 console_error_panic_hook = "0.1.7"

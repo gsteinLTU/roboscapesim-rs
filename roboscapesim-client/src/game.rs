@@ -44,7 +44,7 @@ impl Game {
         let follow_camera = Rc::new(FollowCamera::new("followcam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));
         follow_camera.set_height_offset(1.25);
         follow_camera.set_radius(2.0);
-        follow_camera.set_rotation_offset(0.0);
+        follow_camera.set_rotation_offset(-90.0);
         follow_camera.set_camera_acceleration(0.2);
         follow_camera.set_max_camera_speed(50.0);
         follow_camera.set_min_z(0.01);
