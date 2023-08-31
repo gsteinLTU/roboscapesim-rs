@@ -2,7 +2,7 @@ use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
 use neo_babylon::prelude::*;
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::JsValue;
-use web_sys::Element;
+use web_sys::HtmlElement;
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -19,7 +19,7 @@ pub(crate) struct Game {
     pub(crate) beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
     pub(crate) room_state: Rc<RefCell<Option<RoomState>>>,
     pub(crate) name_tags: Rc<RefCell<HashMap<String, JsValue>>>,
-    pub(crate) ui_elements: Rc<RefCell<HashMap<String, Element>>>,
+    pub(crate) ui_elements: Rc<RefCell<HashMap<String, HtmlElement>>>,
     pub(crate) main_camera: Rc<UniversalCamera>,
     pub(crate) follow_camera: Rc<FollowCamera>,
     pub(crate) first_person_camera: Rc<UniversalCamera>,

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use neo_babylon::prelude::Color3;
 use roboscapesim_common::ClientMessage;
-use web_sys::window;
+use web_sys::{window, HtmlElement};
 
 use crate::{util::*, console_log, GAME};
 
@@ -61,6 +61,14 @@ pub(crate) fn init_ui() {
         game.borrow().ui_elements.borrow_mut().insert("claim_text".into(), create_text("Claimed by: None"));
     });
 
+    
+    let robotmenu: HtmlElement = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
+    robotmenu.set_onchange(Some(Closure::<dyn Fn() >::new(|| {
+        update_robot_buttons_visibility();
+    }).into_js_value().unchecked_ref()));
+
+    update_robot_buttons_visibility();
+
     eval("
         var setupJS = () => {
 
@@ -91,22 +99,22 @@ pub(crate) fn init_ui() {
 }
 
 /// Add a button to the 3D view button bar
-pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys::Element {
+pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys::HtmlElement {
     let document = document();
     let button = document.create_element("button").unwrap();
     button.set_text_content(Some(text));
     button.add_event_listener_with_callback("click", &callback.into_js_value().into()).unwrap();
     document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&button).unwrap();
-    button
+    button.unchecked_into()
 }
 
 /// Add text to the 3D view button bar
-pub(crate) fn create_text(text: &str) -> web_sys::Element {
+pub(crate) fn create_text(text: &str) -> web_sys::HtmlElement {
     let document = document();
     let span = document.create_element("span").unwrap();
     span.set_text_content(Some(text));
     document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&span).unwrap();
-    span
+    span.unchecked_into()
 }
 
 /// Set title of 3D view
@@ -260,4 +268,27 @@ pub(crate) fn create_label(text: &str, font: Option<&str>, color: Option<&str>, 
     js_set(&plane, "material", mat).unwrap();
 
     plane
+}
+
+pub(crate) fn update_robot_buttons_visibility() {
+    GAME.with(|game| {
+        match get_selected_robot() {
+            None => {
+                // Hide  
+                game.borrow().ui_elements.borrow().get("chase").unwrap().style().set_property("display", "none").unwrap();
+                game.borrow().ui_elements.borrow().get("fps").unwrap().style().set_property("display", "none").unwrap();
+                game.borrow().ui_elements.borrow().get("encrypt").unwrap().style().set_property("display", "none").unwrap();
+                game.borrow().ui_elements.borrow().get("claim").unwrap().style().set_property("display", "none").unwrap();
+                game.borrow().ui_elements.borrow().get("claim_text").unwrap().style().set_property("display", "none").unwrap();
+            }
+            Some(_) => {
+                // Show  
+                game.borrow().ui_elements.borrow().get("chase").unwrap().style().remove_property("display").unwrap();
+                game.borrow().ui_elements.borrow().get("fps").unwrap().style().remove_property("display").unwrap();
+                game.borrow().ui_elements.borrow().get("encrypt").unwrap().style().remove_property("display").unwrap();
+                game.borrow().ui_elements.borrow().get("claim").unwrap().style().remove_property("display").unwrap();
+                game.borrow().ui_elements.borrow().get("claim_text").unwrap().style().remove_property("display").unwrap();
+            }
+        }
+    });
 }
