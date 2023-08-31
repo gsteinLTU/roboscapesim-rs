@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use neo_babylon::prelude::Color3;
 use roboscapesim_common::ClientMessage;
-use web_sys::{window, HtmlElement};
+use web_sys::{window, HtmlElement, Event};
 
 use crate::{util::*, console_log, GAME};
 
@@ -118,6 +118,7 @@ pub(crate) fn create_button(text: &str, callback: Closure<dyn Fn()>) -> web_sys:
     let button = document.create_element("button").unwrap();
     button.set_text_content(Some(text));
     button.add_event_listener_with_callback("click", &callback.into_js_value().into()).unwrap();
+    button.add_event_listener_with_callback("mousedown", &Closure::<dyn Fn(Event)>::new(|e: Event| { e.prevent_default(); }).into_js_value().into()).unwrap();
     document.get_element_by_id("roboscapebuttonbar").unwrap().append_child(&button).unwrap();
     button.unchecked_into()
 }
