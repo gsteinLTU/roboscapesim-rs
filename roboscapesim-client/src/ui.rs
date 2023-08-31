@@ -13,47 +13,52 @@ use wasm_bindgen::{prelude::Closure, JsValue, JsCast};
 
 /// Set up UI elements for the 3D view window
 pub(crate) fn init_ui() {
-    create_button("Reset", Closure::new(|| { 
-        console_log!("Reset");
-
-        // Send reset message
-        match get_selected_robot() {
-            None => {
-                send_message(&ClientMessage::ResetAll);
-            }
-            Some(robot) => {
-                send_message(&ClientMessage::ResetRobot(robot));
-            }
-        }
-    }));
-    create_button("Chase Cam", Closure::new(|| { 
-        console_log!("Chase Cam");
-
-    }));
-    create_button("First Person Cam", Closure::new(|| { 
-        console_log!("First Person Cam");
-
-    }));
-    create_button("Free Cam", Closure::new(|| { 
-        console_log!("Free Cam");
-    }));
-    create_button("Encrypt", Closure::new(|| { 
-        console_log!("Encrypt");
-
-        if let Some(robot) = get_selected_robot() {
-            send_message(&ClientMessage::EncryptRobot(robot));
-        }
-    }));
-    create_button("Claim", Closure::new(|| { 
-        console_log!("Claim");
-
-        if let Some(robot) = get_selected_robot() {
-            send_message(&ClientMessage::ClaimRobot(robot));
-        }
-    }));
     GAME.with(|game| {
-        let claim_text = create_text("Claimed by: None");
-        game.borrow().claim_text.borrow_mut().insert(claim_text);
+        game.borrow().ui_elements.borrow_mut().insert("reset".into(), create_button("Reset", Closure::new(|| { 
+            console_log!("Reset");
+
+            // Send reset message
+            match get_selected_robot() {
+                None => {
+                    send_message(&ClientMessage::ResetAll);
+                }
+                Some(robot) => {
+                    send_message(&ClientMessage::ResetRobot(robot));
+                }
+            }
+        })));
+        
+        game.borrow().ui_elements.borrow_mut().insert("chase".into(), create_button("Chase Cam", Closure::new(|| { 
+            console_log!("Chase Cam");
+
+        })));
+
+        game.borrow().ui_elements.borrow_mut().insert("fps".into(),create_button("First Person Cam", Closure::new(|| { 
+            console_log!("First Person Cam");
+
+        })));
+
+        game.borrow().ui_elements.borrow_mut().insert("free".into(),create_button("Free Cam", Closure::new(|| { 
+            console_log!("Free Cam");
+        })));
+
+        game.borrow().ui_elements.borrow_mut().insert("encrypt".into(), create_button("Encrypt", Closure::new(|| { 
+            console_log!("Encrypt");
+
+            if let Some(robot) = get_selected_robot() {
+                send_message(&ClientMessage::EncryptRobot(robot));
+            }
+        })));
+        
+        game.borrow().ui_elements.borrow_mut().insert("claim".into(), create_button("Claim", Closure::new(|| { 
+            console_log!("Claim");
+
+            if let Some(robot) = get_selected_robot() {
+                send_message(&ClientMessage::ClaimRobot(robot));
+            }
+        })));
+        
+        game.borrow().ui_elements.borrow_mut().insert("claim_text".into(), create_text("Claimed by: None"));
     });
 
     eval("
