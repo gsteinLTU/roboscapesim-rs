@@ -5,7 +5,7 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
-use nalgebra::{point,vector, Vector3, UnitQuaternion};
+use nalgebra::{vector, Vector3, UnitQuaternion};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
@@ -79,29 +79,16 @@ impl RoomData {
         obj.services.push(service);
 
         // Ground
-        let rigid_body = RigidBodyBuilder::fixed().translation(vector![0.0, -0.1, 0.0]);
-        let floor_handle = obj.sim.rigid_body_set.insert(rigid_body);
-        let collider = ColliderBuilder::cuboid(100.0, 0.1, 100.0);
-        obj.sim.collider_set.insert_with_parent(collider, floor_handle, &mut obj.sim.rigid_body_set);
-        obj.sim.rigid_body_labels.insert("ground".into(), floor_handle);
-        
+        RoomData::add_block_kinematic(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45)), vector![100.0, 0.1, 100.0]);
 
         // Test cube
-        add_block(&mut obj, "cube", vector![1.2, 2.5, 0.0], vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0], None, None);
+        RoomData::add_block(&mut obj, "cube", vector![1.2, 2.5, 0.0], vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0], None, None);
 
         // Create robot 1
-        add_robot(&mut obj, vector![0.0, 1.0, 0.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
+        RoomData::add_robot(&mut obj, vector![0.0, 1.0, 0.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
 
         // Create robot 2
-        add_robot(&mut obj, vector![1.0, 1.0, 1.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
-
-        obj.objects.insert("ground".into(), ObjectData {
-            name: "ground".into(),
-            transform: Transform { scaling: vector![100.0, 0.4, 100.0], position: point![0.0, 0.1, 0.0], ..Default::default() },
-            visual_info: Some(VisualInfo::Color(0.8, 0.6, 0.45)),
-            is_kinematic: false,
-            updated: true,
-        });
+        RoomData::add_robot(&mut obj, vector![1.0, 1.0, 1.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
 
         obj
     }
@@ -347,84 +334,106 @@ impl RoomData {
         self.last_interaction_time = Utc::now().timestamp();
     }
 
+    /// Test if a client is allowed to interact with a robot (for encrypt, reset)
     fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
         // TODO: check robot claim
+        // Make sure not only claim matches but also that claimant is still in-room
         true
     }
-}
 
-fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) {
-    let mut robot = RobotData::create_robot_body(&mut room.sim, None, Some(position), Some(orientation));
-    let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
-    room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
-    room.objects.insert(robot_id.clone(), ObjectData {
-        name: robot_id.clone(),
-        transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
-        visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
-        is_kinematic: false,
-        updated: true,
-    });
-    RobotData::setup_robot_socket(&mut robot);
-        
-    let service = create_position_service(&robot.id, &robot.body_handle);
-    room.services.push(service);
-        
-    let service = create_lidar_service(&robot.id, &robot.body_handle);
-    room.services.push(service);
-    room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
-        
-    // Wheel debug
-    if wheel_debug {
-        let mut i = 0;
-        for wheel in &robot.wheel_bodies {
-            room.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
-            room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
-                name: format!("wheel_{}", i).into(),
-                transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
-                visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
-                is_kinematic: false,
-                updated: true,
-            });
-            i += 1;
+    /// Add a robot to a room
+    fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) {
+        let mut robot = RobotData::create_robot_body(&mut room.sim, None, Some(position), Some(orientation));
+        let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
+        room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
+        room.objects.insert(robot_id.clone(), ObjectData {
+            name: robot_id.clone(),
+            transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
+            visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
+            is_kinematic: false,
+            updated: true,
+        });
+        RobotData::setup_robot_socket(&mut robot);
+            
+        let service = create_position_service(&robot.id, &robot.body_handle);
+        room.services.push(service);
+            
+        let service = create_lidar_service(&robot.id, &robot.body_handle);
+        room.services.push(service);
+        room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
+            
+        // Wheel debug
+        if wheel_debug {
+            let mut i = 0;
+            for wheel in &robot.wheel_bodies {
+                room.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
+                room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
+                    name: format!("wheel_{}", i).into(),
+                    transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
+                    visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
+                    is_kinematic: false,
+                    updated: true,
+                });
+                i += 1;
+            }
         }
+
+        room.robots.insert(robot.id.to_string(), robot);
+
     }
 
-    room.robots.insert(robot.id.to_string(), robot);
+    /// Add a cuboid object to the room
+    fn add_block(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>) {
+        let body_name = room.name.to_owned() + &"_" + name;
+        let rigid_body = RigidBodyBuilder::dynamic()
+            .ccd_enabled(true)
+            .translation(position)
+            .rotation(rotation)
+            .build();
+        
+        if size.is_none() {
+            size = Some(vector![0.5, 0.5, 0.5]);
+        }
 
-}
+        let size = size.unwrap();
 
-fn add_block(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>) {
-    let body_name = room.name.to_owned() + &"_" + name;
-    let rigid_body = RigidBodyBuilder::dynamic()
-        .ccd_enabled(true)
-        .translation(position)
-        .rotation(rotation)
-        .build();
-    
-    if size.is_none() {
-        size = Some(vector![0.5, 0.5, 0.5]);
+        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).restitution(0.3).density(0.1).build();
+        let cube_body_handle = room.sim.rigid_body_set.insert(rigid_body);
+        room.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut room.sim.rigid_body_set);
+        room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+
+        if visual_info.is_none() {
+            visual_info = Some(VisualInfo::Color(1.0, 1.0, 1.0));
+        }
+
+        room.objects.insert(body_name.clone(), ObjectData {
+            name: body_name.clone(),
+            transform: Transform { ..Default::default() },
+            visual_info,
+            is_kinematic: false,
+            updated: true,
+        });
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &room.sim)));
+
+        let service = create_entity_service(&body_name, &cube_body_handle);
+        room.services.push(service);
     }
 
-    let size = size.unwrap();
 
-    let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).restitution(0.3).density(0.1).build();
-    let cube_body_handle = room.sim.rigid_body_set.insert(rigid_body);
-    room.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut room.sim.rigid_body_set);
-    room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+    fn add_block_kinematic(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Vector3<Real>) {
+        let rigid_body = RigidBodyBuilder::fixed().translation(position).rotation(rotation);
+        let floor_handle = room.sim.rigid_body_set.insert(rigid_body);
+        let collider = ColliderBuilder::cuboid(size.x * 0.5, size.y * 0.5, size.z * 0.5);
+        room.sim.collider_set.insert_with_parent(collider, floor_handle, &mut room.sim.rigid_body_set);
+        room.sim.rigid_body_labels.insert(name.into(), floor_handle);
 
-    if visual_info.is_none() {
-        visual_info = Some(VisualInfo::Color(1.0, 1.0, 1.0));
+        room.objects.insert("ground".into(), ObjectData {
+            name: name.into(),
+            transform: Transform { scaling: size * 3.0, position: position.into(), rotation: Orientation::Euler(rotation), ..Default::default() },
+            visual_info: visual_info,
+            is_kinematic: true,
+            updated: true,
+        });
     }
 
-    room.objects.insert(body_name.clone(), ObjectData {
-        name: body_name.clone(),
-        transform: Transform { ..Default::default() },
-        visual_info,
-        is_kinematic: false,
-        updated: true,
-    });
-    room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &room.sim)));
-
-    let service = create_entity_service(&body_name, &cube_body_handle);
-    room.services.push(service);
 }

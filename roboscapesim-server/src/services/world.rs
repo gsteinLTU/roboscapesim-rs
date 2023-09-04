@@ -219,6 +219,12 @@ pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
         "clearText" => {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone())).await;
         },
+        "addBlock" => {
+            
+        },
+        "addRobot" => {
+
+        },
         f => {
             info!("Unrecognized function {}", f);
         }
