@@ -310,7 +310,7 @@ impl RoomData {
     }
 
     /// Reset entire room
-    pub fn reset(&mut self){
+    pub(crate) fn reset(&mut self){
         // Reset robots
         for mut r in self.robots.iter_mut() {
             r.reset(&mut self.sim);
@@ -324,7 +324,7 @@ impl RoomData {
     }
 
     /// Reset single robot
-    pub fn reset_robot(&mut self, id: &str){
+    pub(crate) fn reset_robot(&mut self, id: &str){
         if self.robots.contains_key(&id.to_string()) {
             self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim);
         } else {
@@ -335,14 +335,14 @@ impl RoomData {
     }
 
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
-    fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
+    pub(crate) fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
         // TODO: check robot claim
         // Make sure not only claim matches but also that claimant is still in-room
         true
     }
 
     /// Add a robot to a room
-    fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) {
+    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) -> String {
         let mut robot = RobotData::create_robot_body(&mut room.sim, None, Some(position), Some(orientation));
         let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
         room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
@@ -378,12 +378,13 @@ impl RoomData {
             }
         }
 
+        let id = robot.id.to_string();
         room.robots.insert(robot.id.to_string(), robot);
-
+        id
     }
 
     /// Add a cuboid object to the room
-    fn add_block(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>) {
+    pub(crate) fn add_block(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>) {
         let body_name = room.name.to_owned() + &"_" + name;
         let rigid_body = RigidBodyBuilder::dynamic()
             .ccd_enabled(true)
@@ -408,7 +409,7 @@ impl RoomData {
 
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
-            transform: Transform { ..Default::default() },
+            transform: Transform { scaling: size * 2.0, ..Default::default() },
             visual_info,
             is_kinematic: false,
             updated: true,
@@ -420,7 +421,7 @@ impl RoomData {
     }
 
 
-    fn add_block_kinematic(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Vector3<Real>) {
+    pub(crate) fn add_block_kinematic(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Vector3<Real>) {
         let rigid_body = RigidBodyBuilder::fixed().translation(position).rotation(rotation);
         let floor_handle = room.sim.rigid_body_set.insert(rigid_body);
         let collider = ColliderBuilder::cuboid(size.x * 0.5, size.y * 0.5, size.z * 0.5);

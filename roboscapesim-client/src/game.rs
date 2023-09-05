@@ -36,9 +36,9 @@ impl Game {
             Some(&scene.borrow())
         ));
         main_camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
-        main_camera.set_min_z(0.01);
-        main_camera.set_max_z(300.0);
-        main_camera.set_speed(0.35);
+        main_camera.set_min_z(0.05);
+        main_camera.set_max_z(200.0);
+        main_camera.set_speed(0.3);
         
         // Other cameras
         let follow_camera = Rc::new(FollowCamera::new("followcam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));
@@ -47,11 +47,11 @@ impl Game {
         follow_camera.set_rotation_offset(-90.0);
         follow_camera.set_camera_acceleration(0.2);
         follow_camera.set_max_camera_speed(50.0);
-        follow_camera.set_min_z(0.01);
+        follow_camera.set_min_z(0.05);
         follow_camera.set_max_z(200.0);
 
         let first_person_camera = Rc::new(UniversalCamera::new("firstPersonCam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));
-        first_person_camera.set_min_z(0.01);
+        first_person_camera.set_min_z(0.05);
         first_person_camera.set_max_z(150.0);
 
         // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions

@@ -2,6 +2,9 @@ use std::{collections::BTreeMap, time::{Instant, Duration}};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
+use nalgebra::{vector, UnitQuaternion, Vector3};
+use rand::random;
+use rapier3d::prelude::AngVector;
 use roboscapesim_common::UpdateMessage;
 
 use crate::room::RoomData;
@@ -57,7 +60,7 @@ pub fn create_world_service(id: &str) -> Service {
             ],
             returns: MethodReturns {
                 documentation: None,
-                r#type: vec![],
+                r#type: vec!["string".to_owned()],
             },
         },
     );
@@ -112,7 +115,7 @@ pub fn create_world_service(id: &str) -> Service {
             ],
             returns: MethodReturns {
                 documentation: None,
-                r#type: vec![],
+                r#type: vec!["string".to_owned()],
             },
         },
     );
@@ -220,10 +223,31 @@ pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone())).await;
         },
         "addBlock" => {
-            
+            let x = msg.params[0].as_f64().unwrap() as f32;
+            let y = msg.params[1].as_f64().unwrap() as f32;
+            let z = msg.params[2].as_f64().unwrap() as f32;
+            let heading = msg.params[3].as_f64().unwrap() as f32;
+            let name = "block".to_string() + &room.objects.len().to_string();
+            let width = msg.params[4].as_f64().unwrap() as f32;
+            let height = msg.params[5].as_f64().unwrap() as f32;
+            let depth = msg.params[6].as_f64().unwrap() as f32;
+            RoomData::add_block(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]));
+            let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+            if let Some(s) = s {
+                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![name]));      
+            }
         },
         "addRobot" => {
+            let x = msg.params[0].as_f64().unwrap() as f32;
+            let y = msg.params[1].as_f64().unwrap() as f32;
+            let z = msg.params[2].as_f64().unwrap() as f32;
+            let heading = msg.params[3].as_f64().unwrap() as f32;
 
+            let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
+            let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+            if let Some(s) = s {
+                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![id]));      
+            }
         },
         f => {
             info!("Unrecognized function {}", f);
