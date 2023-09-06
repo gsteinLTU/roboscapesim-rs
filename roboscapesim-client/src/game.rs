@@ -1,8 +1,9 @@
 use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
+use js_sys::Reflect;
 use neo_babylon::prelude::*;
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::JsValue;
-use web_sys::HtmlElement;
+use web_sys::{HtmlElement, window};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -29,6 +30,7 @@ impl Game {
     pub(crate) fn new() -> Self {
         let scene = neo_babylon::api::create_scene("#roboscape-canvas");
         
+        Reflect::set(&window().unwrap(), &JsValue::from_str("BABYLON.Engine.LastCreatedEngine.useReverseDepthBuffer"), &JsValue::from_bool(true)).unwrap();
         // Add a camera to the scene and attach it to the canvas
         let main_camera = Rc::new(UniversalCamera::new(
             "Camera",

@@ -41,6 +41,8 @@
             robotmenu_label.innerText = 'Robot ID:';
             buttonbar.appendChild(robotmenu_label);
             const robotmenu = document.createElement('select');
+            robotmenu.className = 'inset';
+            robotmenu.onmousedown = (e) => { e.stopPropagation(); };
             const nonchoice = document.createElement('option');
             robotmenu.appendChild(nonchoice);
             buttonbar.appendChild(robotmenu);
