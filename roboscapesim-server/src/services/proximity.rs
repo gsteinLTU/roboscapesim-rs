@@ -62,6 +62,8 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
     let announce_period = Duration::from_secs(30);
 
     let attached_rigid_bodies = DashMap::new();
+    attached_rigid_bodies.insert("main".into(), rigid_body.clone());
+    attached_rigid_bodies.insert("target".into(), target.clone());
 
     Service {
         id: id.to_string(),
@@ -77,29 +79,26 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
     let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
-            if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
-                match msg.function.as_str() {
-                    "getX" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string()]));                   
-                    },
-                    "getY" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().y.to_string()]));
-                    },
-                    "getZ" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().z.to_string()]));        
-                    },
-                    "getPosition" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()]));              
-                    },
-                    "getHeading" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.rotation().euler_angles().1.to_string()]));                          
-                    },
-                    f => {
-                        info!("Unrecognized function {}", f);
+            if let Some(target_body) = s.attached_rigid_bodies.get("target") {
+                if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
+                    if let Some(t) = room.sim.rigid_body_set.get(target_body.clone()) {
+                        match msg.function.as_str() {
+                            "getIntensity" => {
+                                // TODO: apply some function
+                                let dist = (t.translation() - o.translation()).norm();
+                                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![dist.to_string()]));                   
+                            },
+                            "dig" => {
+                                    
+                            },
+                            f => {
+                                info!("Unrecognized function {}", f);
+                            }
+                        };
                     }
-                };
-            } else {
-                info!("Unrecognized object {}", msg.device);
+                } else {
+                    info!("Unrecognized object {}", msg.device);
+                }
             }
         }
     } else {
