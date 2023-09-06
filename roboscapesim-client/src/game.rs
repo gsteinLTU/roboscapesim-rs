@@ -53,7 +53,7 @@ impl Game {
         follow_camera.set_max_z(200.0);
 
         let first_person_camera = Rc::new(UniversalCamera::new("firstPersonCam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));
-        first_person_camera.set_min_z(0.05);
+        first_person_camera.set_min_z(0.01);
         first_person_camera.set_max_z(150.0);
 
         // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions

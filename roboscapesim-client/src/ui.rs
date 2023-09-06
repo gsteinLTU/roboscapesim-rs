@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
-use neo_babylon::prelude::Color3;
+use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_common::ClientMessage;
 use web_sys::{window, HtmlElement, Event};
 
@@ -44,7 +44,14 @@ pub(crate) fn init_ui() {
         game.borrow().ui_elements.borrow_mut().insert("fps".into(),create_button("First Person Cam", Closure::new(|| { 
             console_log!("First Person Cam");
             GAME.with(|game| {
-                game.borrow().scene.borrow().set_active_camera(game.borrow().first_person_camera.as_ref());
+                if let Some(robot_id) = get_selected_robot() {
+                    if let Some(robot) = game.borrow().models.borrow().get(&("robot_".to_owned() + &robot_id)) {
+                        game.borrow().scene.borrow().set_active_camera(game.borrow().first_person_camera.as_ref());
+                        js_set(game.borrow().first_person_camera.as_ref(), "parent", robot.get_mesh_as_js_value()).unwrap();
+                        game.borrow().first_person_camera.set_position(&Vector3::new(0.035, 0.05, 0.0));
+                        game.borrow().first_person_camera.set_rotation(&Vector3::new(0.0, std::f64::consts::FRAC_PI_2, 0.0));
+                    }
+                }
             });
         })));
 
