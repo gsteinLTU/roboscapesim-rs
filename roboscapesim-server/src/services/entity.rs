@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}};
 
+use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
 use log::info;
 use rapier3d::prelude::RigidBodyHandle;
@@ -79,13 +80,16 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
     let last_announce = Instant::now();
     let announce_period = Duration::from_secs(30);
 
+    let attached_rigid_bodies = DashMap::new();
+    attached_rigid_bodies.insert("main".into(), rigid_body.clone());
+
     Service {
         id: id.to_string(),
         service_type: ServiceType::Entity,
         service,
         last_announce,
         announce_period,
-        attached_rigid_body: Some(rigid_body.to_owned()),
+        attached_rigid_bodies,
     }
 }
 

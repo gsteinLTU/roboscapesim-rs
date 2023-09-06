@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::FRAC_PI_2};
 
+use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 
 use log::trace;
@@ -64,13 +65,16 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     let last_announce = Instant::now();
     let announce_period = Duration::from_secs(30);
 
+    let attached_rigid_bodies = DashMap::new();
+    attached_rigid_bodies.insert("main".into(), rigid_body.clone());
+
     Service {
         id: id.to_string(),
         service_type: ServiceType::LIDAR,
         service,
         last_announce,
         announce_period,
-        attached_rigid_body: Some(rigid_body.to_owned()),
+        attached_rigid_bodies,
     }
 }
 
@@ -97,8 +101,8 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
     let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
-        if let Some(body) = s.attached_rigid_body.clone() {
-            if let Some(o) = room.sim.rigid_body_set.get(body) {
+        if let Some(body) = s.attached_rigid_bodies.get("main") {
+            if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
                 if !room.lidar_configs.contains_key(&s.id) {
                     room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
                 }
@@ -109,7 +113,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                 
                 // Raycast each ray
                 let solid = true;
-                let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(body);
+                let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(body.clone());
 
                 let mut distances = vec![];
                 for ray in rays {

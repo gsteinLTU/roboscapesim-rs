@@ -9,8 +9,7 @@ use crate::room::RoomData;
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
-
-pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: &RigidBodyHandle, override_name: Option<&str>) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -28,9 +27,9 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
 
     // Define methods
     definition.methods.insert(
-        "getPosition".to_owned(),
+        "getIntensity".to_owned(),
         MethodDescription {
-            documentation: Some("Get XYZ coordinate position of object".to_owned()),
+            documentation: Some("Get sensor reading at current position".to_owned()),
             params: vec![],
             returns: MethodReturns {
                 documentation: None,
@@ -39,58 +38,19 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
         },
     );
 
-
     definition.methods.insert(
-        "getX".to_owned(),
-        MethodDescription {
-            documentation: Some("Get X coordinate position of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned()],
-            },
-        },
-    );
-
-
-    definition.methods.insert(
-        "getY".to_owned(),
-        MethodDescription {
-            documentation: Some("Get Y coordinate position of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned()],
-            },
-        },
-    );
-
-
-    definition.methods.insert(
-        "getZ".to_owned(),
-        MethodDescription {
-            documentation: Some("Get Z coordinate position of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned()],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "getHeading".to_owned(),
+        "dig".to_owned(),
         MethodDescription {
             documentation: Some("Get heading direction (yaw) of object".to_owned()),
             params: vec![],
             returns: MethodReturns {
                 documentation: None,
-                r#type: vec!["number".to_owned()],
+                r#type: vec![],
             },
         },
     );
     
-    let service = setup_service(definition, ServiceType::PositionSensor, None);
+    let service = setup_service(definition, ServiceType::ProximitySensor, override_name);
 
     service
         .lock()
@@ -102,7 +62,6 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
     let announce_period = Duration::from_secs(30);
 
     let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), rigid_body.clone());
 
     Service {
         id: id.to_string(),
@@ -114,8 +73,8 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
     }
 }
 
-pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) {
-    let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
+    let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
             if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {

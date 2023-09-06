@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}};
 
+use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
-use rand::random;
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::UpdateMessage;
 
@@ -204,7 +204,7 @@ pub fn create_world_service(id: &str) -> Service {
         service,
         last_announce,
         announce_period,
-        attached_rigid_body: None,
+        attached_rigid_bodies: DashMap::new(),
     }
 }
 

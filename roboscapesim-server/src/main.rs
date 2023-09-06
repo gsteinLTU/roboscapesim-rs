@@ -69,7 +69,7 @@ async fn main() {
     let server = axum::Server::bind(&addr)
         .serve(app.into_make_service());
 
-    let update_fps = 30;
+    let update_fps = 45;
 
     // Loop listening for new WS connections
     let _ws_loop = task::spawn(async move {
@@ -82,11 +82,10 @@ async fn main() {
     });
 
     // Loop sending/receiving and adding to channels
-    let _ws_update_loop = task::spawn(async move {
+    let _ws_update_loop_rx = task::spawn(async move {
         loop {
             // Get client updates
             for client in CLIENTS.iter() {
-
                 // RX
                 if let Some(Some(Ok(msg))) = client.value().stream.lock().await.next().now_or_never() {
                     trace!("Websocket message from {}: {:?}", client.key(), msg);
@@ -104,7 +103,14 @@ async fn main() {
                         }                    
                     }
                 }
-                
+            }
+        }
+    });
+
+    let _ws_update_loop_tx = task::spawn(async move {
+        loop {
+            // Get client updates
+            for client in CLIENTS.iter() {                
                 // TX
                 if client.rx1.lock().await.len() > 0 {
                     while client.rx1.lock().await.len() > 0 {

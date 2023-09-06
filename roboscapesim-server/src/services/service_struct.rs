@@ -1,5 +1,6 @@
 use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, hash::Hash};
 
+use dashmap::DashMap;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition};
 use rapier3d::prelude::RigidBodyHandle;
@@ -18,7 +19,7 @@ pub struct Service {
     pub service: Arc<Mutex<IoTScapeService>>,
     pub last_announce: Instant,
     pub announce_period: Duration,
-    pub attached_rigid_body: Option<RigidBodyHandle>,
+    pub attached_rigid_bodies: DashMap<String, RigidBodyHandle>,
 }
 
 impl Hash for Service {
