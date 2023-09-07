@@ -14,24 +14,25 @@ base64 = "0.21"
 serde = { version = "1.0" }
 serde_json = "1.0"
 uuid = { version = "1.4", features = ["v4"] }
-bytes = "1.4"
+bytes = "1.5"
 rand = "0.8"
 axum = {version = "0.6", features = ["headers"]}
 tower-http = { version = "0.4", features = ["cors"] }
-dashmap = { version = "5.5", features = ["serde", "rayon"] }
+dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
 once_cell = { version = "1.18", features = ["parking_lot"] }
 nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
 chrono = { version = "0.4", features = ["serde"] }
 simple_logger = "4.2"
 log = "0.4"
-derivative = "2.2.0"
+derivative = "2.2"
 iotscape = "0.1.2"
 dotenvy = "0.15"
 netsblox-vm = { version = "0.2", default-features = false, features = ["std"] }
 axum-macros = "0.3.8"
-reqwest = "0.11.18"
+reqwest = "0.11"
 futures = "0.3.28"
-tokio-tungstenite = "0.20.0"
+tokio-tungstenite = "0.20"
+rayon = "1.7.0"
 
 [dev-dependencies]
-float-cmp = "0.9.0"
+float-cmp = "0.9"

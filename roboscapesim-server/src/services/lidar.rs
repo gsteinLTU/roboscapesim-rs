@@ -107,8 +107,8 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                     room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
                 }
 
-                let get = &room.lidar_configs.get(&s.id).unwrap();
-                let config = get.value();
+                let get = room.lidar_configs.get(&s.id).unwrap();
+                let config = get;
                 let rays = calculate_rays(config, o.rotation(), o.translation());
                 
                 // Raycast each ray

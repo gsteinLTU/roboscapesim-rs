@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use std::time::{Duration, Instant};
 
@@ -38,15 +39,15 @@ pub struct RoomData {
     pub last_full_update: i64,
     pub last_sim_update: Instant,
     pub roomtime: f64,
-    pub robots: DashMap<String, RobotData>,
+    pub robots: HashMap<String, RobotData>,
     #[derivative(Debug = "ignore")]
     pub sim: Simulation,
     #[derivative(Debug = "ignore")]
-    pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
+    pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
     pub services: Vec<Service>,
     #[derivative(Debug = "ignore")]
-    pub lidar_configs: DashMap<String, LIDARConfig>,
+    pub lidar_configs: HashMap<String, LIDARConfig>,
 }
 
 impl RoomData {
@@ -64,10 +65,10 @@ impl RoomData {
             roomtime: 0.0,
             sim: Simulation::new(),
             last_update: Instant::now(),
-            robots: DashMap::new(),
-            reseters: DashMap::new(),
+            robots: HashMap::new(),
+            reseters: HashMap::new(),
             services: vec![],
-            lidar_configs: DashMap::new(),
+            lidar_configs: HashMap::new(),
             last_sim_update: Instant::now(),
         };
 
@@ -137,7 +138,7 @@ impl RoomData {
     pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
             Self::send_to_client(
-                &UpdateMessage::Update(self.roomtime, true, self.objects.clone()),
+                &UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),
                 client,
             ).await;
         } else {
@@ -153,7 +154,7 @@ impl RoomData {
                             val.visual_info = None;
                             (mvp.key().clone(), val)
                         })
-                        .collect::<DashMap<String, ObjectData>>(),
+                        .collect::<HashMap<String, ObjectData>>(),
                 ),
                 client,
             ).await;
@@ -220,7 +221,10 @@ impl RoomData {
                             // TODO: Claim robot
                         },
                         ClientMessage::EncryptRobot(robot_id) => {
-                            // TODO: Send button message to main server
+                            if let Some(robot) = self.robots.get_mut(&robot_id) {
+                                robot.send_roboscape_message(&[b'P', 1]).unwrap();
+                                robot.send_roboscape_message(&[b'P', 0]).unwrap();
+                            }
                         },
                         _ => {}
                     }
@@ -238,8 +242,8 @@ impl RoomData {
 
         let time = Utc::now().timestamp();
 
-        for mut robot in self.robots.iter_mut() {
-            if RobotData::robot_update(robot.value_mut(), &mut self.sim, &self.sockets, delta_time).await {
+        for robot in self.robots.iter_mut() {
+            if RobotData::robot_update(robot.1, &mut self.sim, &self.sockets, delta_time).await {
                 self.last_interaction_time = Utc::now().timestamp();
             }
         }
@@ -314,11 +318,11 @@ impl RoomData {
     pub(crate) fn reset(&mut self){
         // Reset robots
         for mut r in self.robots.iter_mut() {
-            r.reset(&mut self.sim);
+            r.1.reset(&mut self.sim);
         }
 
         for mut resetter in self.reseters.iter_mut() {
-            resetter.value_mut().reset(&mut self.sim);
+            resetter.1.reset(&mut self.sim);
         }
 
         self.last_interaction_time = Utc::now().timestamp();

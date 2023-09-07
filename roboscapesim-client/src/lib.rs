@@ -113,8 +113,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
             });
         },
         Ok(UpdateMessage::Update(t, full_update, roomdata)) => {
-            let view = roomdata.to_owned();
-            for obj in view.into_read_only().iter() {
+            for obj in roomdata.iter() {
                 let name = obj.0;
                 let obj = obj.1;
 
@@ -133,7 +132,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 game.borrow().last_state.borrow_mut().insert(entry.0.to_owned(), entry.1.clone());
             }
             for entry in &roomdata {
-                game.borrow().state.borrow_mut().insert(entry.key().to_owned(), entry.value().clone());
+                game.borrow().state.borrow_mut().insert(entry.0.to_owned(), entry.1.clone());
             }
 
             // TODO: handle removed entities (server needs way to notify, full updates should also be able to remove)

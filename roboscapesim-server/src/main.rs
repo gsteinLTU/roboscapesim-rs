@@ -135,18 +135,18 @@ async fn main() {
             let update_time = Utc::now();
             // Perform updates
             for kvp in ROOMS.iter() {
-                let mut lock = kvp.value().write().await;
-                if !lock.hibernating {
+                if !kvp.value().read().await.hibernating {
+                    let mut lock = kvp.value().write().await;
                     // Check timeout
                     if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
                         lock.hibernating = true;
                         info!("{} is now hibernating", kvp.key());
-                        return;
+                        continue;
                     }
                 }
 
                 // Perform update
-                lock.update().await;
+                kvp.value().write().await.update().await;
             }
         }
     });

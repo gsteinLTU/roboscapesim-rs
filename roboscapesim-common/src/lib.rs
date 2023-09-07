@@ -1,4 +1,4 @@
-use dashmap::DashMap;
+use std::collections::HashMap;
 use nalgebra::{Quaternion, Vector3, vector, Point3};
 use serde::{Deserialize, Serialize};
 
@@ -130,7 +130,7 @@ pub enum UpdateMessage {
     /// Sending information about the current room
     RoomInfo(RoomState),
     /// Sending information about objects in the room
-    Update(f64, bool, DashMap<String, ObjectData>),
+    Update(f64, bool, HashMap<String, ObjectData>),
     /// Tell client to display text for a duration
     DisplayText(String, String, Option<f64>),
     /// Clear all text displayed

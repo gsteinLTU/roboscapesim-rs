@@ -35,6 +35,7 @@ pub struct RobotData {
     pub distance_r: f64,
     pub initial_transform: Transform,
     pub claimed_by: Option<String>,
+    pub claimable: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -202,6 +203,7 @@ impl RobotData {
             distance_r: 0.0,
             initial_transform: Transform { position: box_center.to_owned(), rotation: roboscapesim_common::Orientation::Quaternion(box_rotation.quaternion().to_owned()), ..Default::default() },
             claimed_by: None,
+            claimable: true,
         }
     }
 
