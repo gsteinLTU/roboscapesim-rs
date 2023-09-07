@@ -1,5 +1,5 @@
 use std::net::UdpSocket;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
 
 use chrono::Utc;
 use dashmap::DashMap;
@@ -36,6 +36,7 @@ pub struct RobotData {
     pub initial_transform: Transform,
     pub claimed_by: Option<String>,
     pub claimable: bool,
+    pub start_time: SystemTime,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -59,7 +60,7 @@ impl RobotData {
         buf.append(&mut mac);
 
         // Timestamp
-        let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as u32;
+        let time = SystemTime::now().duration_since(self.start_time).unwrap().as_secs() as u32;
         buf.append(&mut Vec::from(time.to_be_bytes()));
 
         // Message
@@ -204,6 +205,7 @@ impl RobotData {
             initial_transform: Transform { position: box_center.to_owned(), rotation: roboscapesim_common::Orientation::Quaternion(box_rotation.quaternion().to_owned()), ..Default::default() },
             claimed_by: None,
             claimable: true,
+            start_time: SystemTime::now(),
         }
     }
 
@@ -249,14 +251,14 @@ impl RobotData {
 
             // Stop robot if distance reached
             if f64::abs(robot.distance_l) < f64::abs(robot.speed_l as f64 * -32.0 * dt) {
-                info!("Distance reached L");
+                trace!("Distance reached L");
                 robot.speed_l = 0.0;
             } else {
                 robot.distance_l -= (robot.speed_l * -32.0) as f64 * dt;
             }
 
             if f64::abs(robot.distance_r) < f64::abs(robot.speed_r as f64 * -32.0 * dt) {
-                info!("Distance reached R");
+                trace!("Distance reached R");
                 robot.speed_r = 0.0;
             } else {
                 robot.distance_r -= (robot.speed_r * -32.0) as f64 * dt;
@@ -447,6 +449,7 @@ impl Resettable for RobotData {
         self.speed_r = 0.0;
         self.whisker_states = [false, false];
         self.ticks = [0.0, 0.0];
+        self.start_time = SystemTime::now();
 
         self.last_heartbeat = Utc::now().timestamp();
         

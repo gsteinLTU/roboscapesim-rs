@@ -217,10 +217,11 @@ impl RoomData {
 
         trace!("Updating {}", self.name);
 
-        let max_delta_time = 1.0 / 30.0;
+        //let max_delta_time = 1.0 / 30.0;
         let now = Instant::now();
-        let delta_time = (now - self.last_sim_update).as_secs_f64();
-        let delta_time = f64::min(max_delta_time, delta_time);
+        /*let delta_time = (now - self.last_sim_update).as_secs_f64();
+        let delta_time = f64::min(max_delta_time, delta_time);*/
+        let delta_time = 1.0 / 60.0;
         self.last_sim_update = now;
 
         // Handle client messages

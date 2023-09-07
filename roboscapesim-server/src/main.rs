@@ -8,7 +8,7 @@ use socket::SocketInfo;
 use tokio_tungstenite::tungstenite::Message;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::{time::{Duration, self}, task, sync::RwLock, net::TcpListener};
+use tokio::{time::{Duration, self, sleep}, task::{self, yield_now}, sync::RwLock, net::TcpListener};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -85,7 +85,7 @@ async fn main() {
 }
 
 async fn update_fn() {
-    let update_fps = 45;
+    let update_fps = 60;
     let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
 
     loop {
@@ -94,18 +94,19 @@ async fn update_fn() {
         let update_time = Utc::now();
         // Perform updates
         for kvp in ROOMS.iter() {
-            if !kvp.value().read().await.hibernating {
-                let mut lock = kvp.value().write().await;
-                // Check timeout
-                if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
-                    lock.hibernating = true;
-                    info!("{} is now hibernating", kvp.key());
-                    continue;
+            task::spawn(async move {
+                if !kvp.value().read().await.hibernating {
+                    let mut lock = kvp.value().write().await;
+                    // Check timeout
+                    if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
+                        lock.hibernating = true;
+                        info!("{} is now hibernating", kvp.key());
+                    }
                 }
-            }
 
-            // Perform update
-            kvp.value().write().await.update().await;
+                // Perform update
+                kvp.value().write().await.update().await;
+            });
         }
     }
 }
@@ -132,6 +133,8 @@ async fn ws_rx() {
                 }
             }
         }
+
+        sleep(Duration::from_nanos(50)).await;
     }
 }
 
@@ -152,6 +155,8 @@ async fn ws_tx() {
                 }
             }
         }
+        
+        sleep(Duration::from_nanos(50)).await;
     }
 }
 
