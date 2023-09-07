@@ -161,32 +161,38 @@ impl RoomData {
         }
     }
 
-    pub async fn send_state_to_all_clients(&self, full_update: bool) {
+    pub async fn send_to_all_clients(&self, msg: &UpdateMessage) {
         for client in &self.sockets {
-            let update_msg: UpdateMessage;
-            if full_update {
-                update_msg = UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
-            } else {
-                update_msg = UpdateMessage::Update(
-                    self.roomtime,
-                    false,
-                    self.objects
-                        .iter()
-                        .filter(|mvp| mvp.value().updated)
-                        .map(|mvp| {
-                            let mut val = mvp.value().clone();
-                            val.visual_info = None;
-                            (mvp.key().clone(), val)
-                        })
-                        .collect::<HashMap<String, ObjectData>>(),
-                );
-            }
-
             Self::send_to_client(
-                &update_msg,
+                msg,
                 client.value().to_owned(),
             ).await;
         }
+    }
+
+    pub async fn send_state_to_all_clients(&self, full_update: bool) {
+        let update_msg: UpdateMessage;
+        if full_update {
+            update_msg = UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
+        } else {
+            update_msg = UpdateMessage::Update(
+                self.roomtime,
+                false,
+                self.objects
+                    .iter()
+                    .filter(|mvp| mvp.value().updated)
+                    .map(|mvp| {
+                        let mut val = mvp.value().clone();
+                        val.visual_info = None;
+                        (mvp.key().clone(), val)
+                    })
+                    .collect::<HashMap<String, ObjectData>>(),
+            );
+        }
+
+        self.send_to_all_clients(
+            &update_msg
+        ).await;
 
         for mut obj in self.objects.iter_mut() {
             obj.value_mut().updated = false;

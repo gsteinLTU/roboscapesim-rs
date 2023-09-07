@@ -379,6 +379,8 @@ impl RobotData {
                 },
                 _ => {}
             }
+            // Return to sender
+            robot.send_roboscape_message(&buf[0..size]).unwrap();
         }
 
         // Apply calculated speeds to wheels

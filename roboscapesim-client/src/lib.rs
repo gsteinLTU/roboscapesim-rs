@@ -160,6 +160,11 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 console_log!("Beep received, but beeps are disabled");
             }
         },
+        Ok(UpdateMessage::Hibernating) => {
+            console_log!("Hibernating");
+            // TODO: Handle better
+            set_title("Disconnected");
+        },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
 }

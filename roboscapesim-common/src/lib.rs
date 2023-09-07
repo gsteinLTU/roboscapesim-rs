@@ -137,6 +137,8 @@ pub enum UpdateMessage {
     ClearText,
     /// Tell client to play a beep from a given object, with a frequency and duration
     Beep(String, u16, u16),
+    /// Hibernation started
+    Hibernating,
 }
 
 /// Struct containing possible message types sent to the server

@@ -100,6 +100,9 @@ async fn update_fn() {
                     // Check timeout
                     if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
                         lock.hibernating = true;
+                        // Kick all users out
+                        lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating).await;
+                        lock.sockets.clear();
                         info!("{} is now hibernating", kvp.key());
                     }
                 }
