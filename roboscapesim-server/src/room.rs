@@ -163,7 +163,29 @@ impl RoomData {
 
     pub async fn send_state_to_all_clients(&self, full_update: bool) {
         for client in &self.sockets {
-            self.send_state_to_client(full_update, client.value().to_owned()).await;
+            let update_msg: UpdateMessage;
+            if full_update {
+                update_msg = UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
+            } else {
+                update_msg = UpdateMessage::Update(
+                    self.roomtime,
+                    false,
+                    self.objects
+                        .iter()
+                        .filter(|mvp| mvp.value().updated)
+                        .map(|mvp| {
+                            let mut val = mvp.value().clone();
+                            val.visual_info = None;
+                            (mvp.key().clone(), val)
+                        })
+                        .collect::<HashMap<String, ObjectData>>(),
+                );
+            }
+
+            Self::send_to_client(
+                &update_msg,
+                client.value().to_owned(),
+            ).await;
         }
 
         for mut obj in self.objects.iter_mut() {
@@ -222,8 +244,8 @@ impl RoomData {
                         },
                         ClientMessage::EncryptRobot(robot_id) => {
                             if let Some(robot) = self.robots.get_mut(&robot_id) {
-                                robot.send_roboscape_message(&[b'P', 1]).unwrap();
                                 robot.send_roboscape_message(&[b'P', 0]).unwrap();
+                                robot.send_roboscape_message(&[b'P', 1]).unwrap();
                             }
                         },
                         _ => {}
@@ -317,11 +339,11 @@ impl RoomData {
     /// Reset entire room
     pub(crate) fn reset(&mut self){
         // Reset robots
-        for mut r in self.robots.iter_mut() {
+        for r in self.robots.iter_mut() {
             r.1.reset(&mut self.sim);
         }
 
-        for mut resetter in self.reseters.iter_mut() {
+        for resetter in self.reseters.iter_mut() {
             resetter.1.reset(&mut self.sim);
         }
 

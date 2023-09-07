@@ -61,7 +61,7 @@ async fn main() {
         .allow_methods([Method::GET, Method::POST])
         // allow requests from any origin
         .allow_origin(Any)
-	.allow_headers([header::CONTENT_TYPE]));
+	    .allow_headers([header::CONTENT_TYPE]));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("Running server on port 3000 ...");
@@ -69,90 +69,98 @@ async fn main() {
     let server = axum::Server::bind(&addr)
         .serve(app.into_make_service());
 
-    let update_fps = 45;
-
     // Loop listening for new WS connections
-    let _ws_loop = task::spawn(async move {
-        let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
-
-        loop {
-            let (conn, _) = listener.accept().await.unwrap();
-            accept_connection(conn).await;
-        }
-    });
+    let _ws_loop = task::spawn(ws_accept());
 
     // Loop sending/receiving and adding to channels
-    let _ws_update_loop_rx = task::spawn(async move {
-        loop {
-            // Get client updates
-            for client in CLIENTS.iter() {
-                // RX
-                if let Some(Some(Ok(msg))) = client.value().stream.lock().await.next().now_or_never() {
-                    trace!("Websocket message from {}: {:?}", client.key(), msg);
-                    if let Ok(msg) = msg.to_text() {
+    let _ws_update_loop_tx = task::spawn(ws_rx());
+    let _ws_update_loop_rx = task::spawn(ws_tx());
 
-                        if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
-                            match msg {
-                                ClientMessage::JoinRoom(id, username, password) => {
-                                    join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).await.unwrap();
-                                },
-                                _ => {
-                                    client.tx1.lock().await.send(msg.to_owned()).unwrap();
-                                }
-                            }
-                        }                    
-                    }
-                }
-            }
-        }
-    });
-
-    let _ws_update_loop_tx = task::spawn(async move {
-        loop {
-            // Get client updates
-            for client in CLIENTS.iter() {                
-                // TX
-                if client.rx1.lock().await.len() > 0 {
-                    while client.rx1.lock().await.len() > 0 {
-                        let recv = client.rx1.lock().await.try_recv();
-                        
-                        if let Ok(msg) = recv {
-                            let msg = serde_json::to_string(&msg).unwrap();
-                            client.sink.lock().await.send(Message::Text(msg)).now_or_never();
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    let _update_loop = task::spawn(async move {
-        let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
-
-        loop {
-            interval.tick().await;
-
-            let update_time = Utc::now();
-            // Perform updates
-            for kvp in ROOMS.iter() {
-                if !kvp.value().read().await.hibernating {
-                    let mut lock = kvp.value().write().await;
-                    // Check timeout
-                    if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
-                        lock.hibernating = true;
-                        info!("{} is now hibernating", kvp.key());
-                        continue;
-                    }
-                }
-
-                // Perform update
-                kvp.value().write().await.update().await;
-            }
-        }
-    });
+    // Update simulations
+    let _update_loop = task::spawn(update_fn());
 
     if let Err(err) = server.await {
         error!("server error: {}", err);
+    }
+}
+
+async fn update_fn() {
+    let update_fps = 45;
+    let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
+
+    loop {
+        interval.tick().await;
+
+        let update_time = Utc::now();
+        // Perform updates
+        for kvp in ROOMS.iter() {
+            if !kvp.value().read().await.hibernating {
+                let mut lock = kvp.value().write().await;
+                // Check timeout
+                if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
+                    lock.hibernating = true;
+                    info!("{} is now hibernating", kvp.key());
+                    continue;
+                }
+            }
+
+            // Perform update
+            kvp.value().write().await.update().await;
+        }
+    }
+}
+
+async fn ws_rx() {
+    loop {
+        // Get client updates
+        for client in CLIENTS.iter() {
+            // RX
+            if let Some(Some(Ok(msg))) = client.value().stream.lock().await.next().now_or_never() {
+                trace!("Websocket message from {}: {:?}", client.key(), msg);
+                if let Ok(msg) = msg.to_text() {
+
+                    if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
+                        match msg {
+                            ClientMessage::JoinRoom(id, username, password) => {
+                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).await.unwrap();
+                            },
+                            _ => {
+                                client.tx1.lock().await.send(msg.to_owned()).unwrap();
+                            }
+                        }
+                    }                    
+                }
+            }
+        }
+    }
+}
+
+async fn ws_tx() {
+    loop {
+        // Get client updates
+        for client in CLIENTS.iter() {                
+            // TX
+            let mut receiver = client.rx1.lock().await;
+            if receiver.len() > 0 {
+                while receiver.len() > 0 {
+                    let recv = receiver.try_recv();
+                    
+                    if let Ok(msg) = recv {
+                        let msg = serde_json::to_string(&msg).unwrap();
+                        client.sink.lock().await.send(Message::Text(msg)).now_or_never();
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn ws_accept() {
+    let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
+
+    loop {
+        let (conn, _) = listener.accept().await.unwrap();
+        accept_connection(conn).await;
     }
 }
 
