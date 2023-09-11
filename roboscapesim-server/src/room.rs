@@ -6,7 +6,7 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
-use nalgebra::{vector, Vector3, UnitQuaternion};
+use nalgebra::{vector, Vector3, UnitQuaternion, point};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
@@ -80,10 +80,10 @@ impl RoomData {
         obj.services.push(service);
 
         // Ground
-        RoomData::add_block_kinematic(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45)), vector![100.0, 0.1, 100.0]);
+        RoomData::add_shape(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45, Shape::Box)), Some(vector![10.0, 0.1, 10.0]), true);
 
         // Test cube
-        RoomData::add_block(&mut obj, "cube", vector![1.2, 2.5, 0.0], vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0], None, None);
+        RoomData::add_shape(&mut obj, "cube", vector![1.2, 2.5, 0.0], vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0], None, None, false);
 
         // Create robot 1
         RoomData::add_robot(&mut obj, vector![0.0, 1.0, 0.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
@@ -332,7 +332,7 @@ impl RoomData {
         self.roomtime += delta_time;
 
         if time - self.last_full_update < 60 {
-            if (now - self.last_update) > Duration::from_millis(100) {
+            if (now - self.last_update) > Duration::from_millis(120) {
                 self.send_state_to_all_clients(false).await;
                 self.last_update = now;
             }
@@ -404,7 +404,7 @@ impl RoomData {
                 room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
                     name: format!("wheel_{}", i).into(),
                     transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
-                    visual_info: Some(VisualInfo::Color(1.0, 1.0, 1.0)),
+                    visual_info: Some(VisualInfo::default()),
                     is_kinematic: false,
                     updated: true,
                 });
@@ -418,9 +418,9 @@ impl RoomData {
     }
 
     /// Add a cuboid object to the room
-    pub(crate) fn add_block(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>) {
+    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>, is_kinematic: bool) {
         let body_name = room.name.to_owned() + &"_" + name;
-        let rigid_body = RigidBodyBuilder::dynamic()
+        let rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
             .ccd_enabled(true)
             .translation(position)
             .rotation(rotation)
@@ -430,45 +430,55 @@ impl RoomData {
             size = Some(vector![0.5, 0.5, 0.5]);
         }
 
-        let size = size.unwrap();
+        let mut size = size.unwrap();
 
-        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).restitution(0.3).density(0.1).build();
+        if visual_info.is_none() {
+            visual_info = Some(VisualInfo::default());
+        }
+        
+        let shape = match visual_info {
+            Some(VisualInfo::Color(_, _, _, s)) => {
+                s
+            },
+            Some(VisualInfo::Texture(_, s)) => {
+                s
+            },
+            _ => Shape::Box
+        };
+
+        let collider = match shape {
+            Shape::Box => ColliderBuilder::cuboid(size.x, size.y, size.z),
+            Shape::Sphere => {
+                size.y = size.x;
+                size.z = size.x;
+                ColliderBuilder::ball(size.x)
+            },
+            Shape::Cylinder => {
+                size.z = size.x;
+                ColliderBuilder::cylinder(size.y, size.x)
+            },
+            Shape::Capsule => {
+                size.z = size.x;
+                ColliderBuilder::capsule_y(size.y, size.x)
+            },
+        };
+
+        let collider = collider.restitution(0.3).density(0.1).build();
         let cube_body_handle = room.sim.rigid_body_set.insert(rigid_body);
         room.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut room.sim.rigid_body_set);
         room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
 
-        if visual_info.is_none() {
-            visual_info = Some(VisualInfo::Color(1.0, 1.0, 1.0));
-        }
-
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
-            transform: Transform { scaling: size * 2.0, ..Default::default() },
+            transform: Transform { position: position.into(), scaling: size * 2.0, rotation: Orientation::Euler(rotation), ..Default::default() },
             visual_info,
-            is_kinematic: false,
+            is_kinematic,
             updated: true,
         });
+
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &room.sim)));
 
         let service = create_entity_service(&body_name, &cube_body_handle);
         room.services.push(service);
     }
-
-
-    pub(crate) fn add_block_kinematic(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Vector3<Real>) {
-        let rigid_body = RigidBodyBuilder::fixed().translation(position).rotation(rotation);
-        let floor_handle = room.sim.rigid_body_set.insert(rigid_body);
-        let collider = ColliderBuilder::cuboid(size.x * 0.5, size.y * 0.5, size.z * 0.5);
-        room.sim.collider_set.insert_with_parent(collider, floor_handle, &mut room.sim.rigid_body_set);
-        room.sim.rigid_body_labels.insert(name.into(), floor_handle);
-
-        room.objects.insert("ground".into(), ObjectData {
-            name: name.into(),
-            transform: Transform { scaling: size * 3.0, position: position.into(), rotation: Orientation::Euler(rotation), ..Default::default() },
-            visual_info: visual_info,
-            is_kinematic: true,
-            updated: true,
-        });
-    }
-
 }

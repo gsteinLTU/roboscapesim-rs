@@ -204,13 +204,22 @@ fn create_beep(game: &Rc<RefCell<Game>>, id: String, freq: u16, duration: u16) {
 fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>) {
     match obj.visual_info.as_ref().unwrap() {
         roboscapesim_common::VisualInfo::None => {},
-        roboscapesim_common::VisualInfo::Color(r, g, b) => {
-            let m = Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                depth: Some(obj.transform.scaling.z.into()),
-                height: Some(obj.transform.scaling.y.into()),
-                width: Some(obj.transform.scaling.x.into()),
-                ..Default::default()
-            }));
+        roboscapesim_common::VisualInfo::Color(r, g, b, shape) => {
+            let m = match shape {
+                roboscapesim_common::Shape::Box => Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
+                    depth: Some(obj.transform.scaling.z.into()),
+                    height: Some(obj.transform.scaling.y.into()),
+                    width: Some(obj.transform.scaling.x.into()),
+                    ..Default::default()
+                })),
+                roboscapesim_common::Shape::Sphere => Rc::new(BabylonMesh::create_sphere(&game.borrow().scene.borrow(), &obj.name, SphereOptions { 
+                    diameterX: Some(obj.transform.scaling.x.into()),
+                    diameterY: Some(obj.transform.scaling.y.into()),
+                    diameterZ: Some(obj.transform.scaling.z.into()),
+                    ..Default::default() 
+                })),
+                _ => { todo!() }
+            };
             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
             material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
             m.set_material(&material);
@@ -220,7 +229,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             game.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
             console_log!("Created box");
         },
-        roboscapesim_common::VisualInfo::Texture(tex) => {
+        roboscapesim_common::VisualInfo::Texture(tex, shape) => {
             // TODO: create material and apply
         },
         roboscapesim_common::VisualInfo::Mesh(mesh) => {

@@ -87,17 +87,22 @@ impl From<(f32, f32, f32)> for Orientation {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum Shape {
+    Box, Sphere, Cylinder, Capsule
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VisualInfo {
     None,
-    Color(f32, f32, f32),
-    Texture(String),
+    Color(f32, f32, f32, Shape),
+    Texture(String, Shape),
     Mesh(String),
 }
 
 impl Default for VisualInfo {
     fn default() -> Self {
-        Self::Color(1.0, 1.0, 1.0)
+        Self::Color(1.0, 1.0, 1.0, Shape::Box)
     }
 }
 

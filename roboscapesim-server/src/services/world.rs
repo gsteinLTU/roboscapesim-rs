@@ -231,7 +231,7 @@ pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
             let width = msg.params[4].as_f64().unwrap() as f32;
             let height = msg.params[5].as_f64().unwrap() as f32;
             let depth = msg.params[6].as_f64().unwrap() as f32;
-            RoomData::add_block(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]));
+            RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), false);
             let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
             if let Some(s) = s {
                 s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![name]));      

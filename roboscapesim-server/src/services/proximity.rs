@@ -89,7 +89,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
                                 s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![dist.to_string()]));                   
                             },
                             "dig" => {
-                                    
+                                // TODO:
                             },
                             f => {
                                 info!("Unrecognized function {}", f);

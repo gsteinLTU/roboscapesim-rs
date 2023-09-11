@@ -21,6 +21,9 @@ pub struct Simulation {
     pub rigid_body_labels: DashMap<String, RigidBodyHandle>,
 }
 
+pub const SCALE: f32 = 3.0;
+
+
 impl Simulation {
     /// Instantiate the simulation objects with default settings
     pub fn new() -> Simulation {

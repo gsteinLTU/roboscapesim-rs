@@ -7,7 +7,7 @@ use log::trace;
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
-use crate::room::RoomData;
+use crate::{room::RoomData, simulation::SCALE};
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
@@ -119,12 +119,12 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                 for ray in rays {
                     let mut distance = config.max_distance * 100.0;
                     if let Some((handle, toi)) = room.sim.query_pipeline.cast_ray(&room.sim.rigid_body_set,
-                        &room.sim.collider_set, &ray, config.max_distance, solid, filter
+                        &room.sim.collider_set, &ray, config.max_distance * SCALE, solid, filter
                     ) {
                         // The first collider hit has the handle `handle` and it hit after
                         // the ray travelled a distance equal to `ray.dir * toi`.
                         let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-                        distance = toi * 100.0;
+                        distance = toi * 100.0 / SCALE;
                         trace!("Collider {:?} hit at point {}", handle, hit_point);
                     }
                     distances.push(distance);

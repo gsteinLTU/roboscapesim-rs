@@ -1,5 +1,5 @@
 use std::net::UdpSocket;
-use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
+use std::time::{SystemTime, Duration};
 
 use chrono::Utc;
 use dashmap::DashMap;
@@ -10,7 +10,7 @@ use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
 use crate::room::RoomData;
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
 use crate::util::traits::resettable::Resettable;
 use crate::util::util::bytes_to_hex_string;
@@ -77,17 +77,16 @@ impl RobotData {
         /*
         * Vehicle we will control manually.
         */
-        let scale = 3.0;
-        let hw = 0.07 * scale;
-        let hh = 0.027 * scale;
-        let hd = 0.03 * scale;
+        let hw = 0.07 * SCALE;
+        let hh = 0.027 * SCALE;
+        let hd = 0.03 * SCALE;
 
         let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
         let mut box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         // TODO: use rotation
 
         let rigid_body = RigidBodyBuilder::dynamic()
-            .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
+            .translation(vector![box_center.x * SCALE, box_center.y * SCALE, box_center.z * SCALE])
             .linear_damping(2.0)
             .angular_damping(2.0)
             .ccd_enabled(true)
@@ -100,11 +99,11 @@ impl RobotData {
 
         //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
         let wheel_positions = [
-            point![hw * 0.5, -hh + 0.015 * scale, hd + 0.01  * scale],
-            point![hw * 0.5, -hh + 0.015 * scale, -hd - 0.01  * scale],
+            point![hw * 0.5, -hh + 0.015 * SCALE, hd + 0.01  * SCALE],
+            point![hw * 0.5, -hh + 0.015 * SCALE, -hd - 0.01  * SCALE],
         ];
 
-        let ball_wheel_radius = 0.015 * scale;
+        let ball_wheel_radius = 0.015 * SCALE;
         let ball_wheel_positions = [
             point![-hw * 0.75, -hh, 0.0]
         ];
@@ -127,7 +126,7 @@ impl RobotData {
                     ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
             );
 
-            let collider = ColliderBuilder::cylinder(0.01  * scale, 0.03  * scale).friction(0.8).density(10.0);
+            let collider = ColliderBuilder::cylinder(0.01  * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
             //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
             sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set);
 
@@ -435,6 +434,8 @@ impl Resettable for RobotData {
         // Reset position
         let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
         body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], true);
+        body.set_linvel(vector![0.0, 0.0, 0.0], true);
+        body.set_angvel(vector![0.0, 0.0, 0.0], true);
 
         match self.initial_transform.rotation {
             Orientation::Quaternion(q) => {

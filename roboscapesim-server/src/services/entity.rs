@@ -96,7 +96,7 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
 pub fn handle_entity_message(room: &mut RoomData, msg: Request) {
     match msg.function.as_str() {
         "reset" => {
-            if let Some(mut r) = room.reseters.get_mut(msg.device.as_str()) {
+            if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
                 r.reset(&mut room.sim);
             } else {
                 info!("Unrecognized device {}", msg.device);
