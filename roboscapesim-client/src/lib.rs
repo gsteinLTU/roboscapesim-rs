@@ -207,15 +207,9 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
         roboscapesim_common::VisualInfo::Color(r, g, b, shape) => {
             let m = match shape {
                 roboscapesim_common::Shape::Box => Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
-                    depth: Some(obj.transform.scaling.z.into()),
-                    height: Some(obj.transform.scaling.y.into()),
-                    width: Some(obj.transform.scaling.x.into()),
                     ..Default::default()
                 })),
                 roboscapesim_common::Shape::Sphere => Rc::new(BabylonMesh::create_sphere(&game.borrow().scene.borrow(), &obj.name, SphereOptions { 
-                    diameterX: Some(obj.transform.scaling.x.into()),
-                    diameterY: Some(obj.transform.scaling.y.into()),
-                    diameterZ: Some(obj.transform.scaling.z.into()),
                     ..Default::default() 
                 })),
                 _ => { todo!() }
