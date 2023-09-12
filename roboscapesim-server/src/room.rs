@@ -300,7 +300,6 @@ impl RoomData {
         }
         
         for (service_type, msg) in msgs {
-            info!("{:?}", msg);
             match service_type {
                 ServiceType::World => handle_world_msg(self, msg).await,
                 ServiceType::Entity => handle_entity_message(self, msg),
@@ -414,6 +413,7 @@ impl RoomData {
 
         let id = robot.id.to_string();
         room.robots.insert(robot.id.to_string(), robot);
+        room.last_full_update = 0;
         id
     }
 
@@ -480,5 +480,6 @@ impl RoomData {
 
         let service = create_entity_service(&body_name, &cube_body_handle);
         room.services.push(service);
+        room.last_full_update = 0;
     }
 }

@@ -419,6 +419,8 @@ impl RobotData {
             robot.whisker_states = new_whisker_states;
             // Whiskers in message are inverted
             let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
+
+            trace!("Whisker states: {:?}", robot.whisker_states);
             
             if let Err(e) = robot.send_roboscape_message(&message) {
                 error!("{}", e);

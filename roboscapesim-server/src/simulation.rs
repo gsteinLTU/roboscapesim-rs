@@ -30,7 +30,7 @@ impl Simulation {
         Simulation {
             rigid_body_set: RigidBodySet::new(),
             collider_set: ColliderSet::new(),
-            gravity: vector![0.0, -9.81, 0.0],
+            gravity: vector![0.0, -9.81 * 3.0, 0.0],
             integration_parameters: IntegrationParameters { max_ccd_substeps: 8, max_stabilization_iterations: 2, ..Default::default() },
             physics_pipeline: PhysicsPipeline::new(),
             island_manager: IslandManager::new(),
