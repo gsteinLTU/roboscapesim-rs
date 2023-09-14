@@ -30,7 +30,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
-        if r.read().await.hibernating {
+        if r.lock().unwrap().hibernating {
             hibernating_rooms += 1;
         }
     }
@@ -44,12 +44,12 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 
 #[debug_handler]
 pub(crate) async fn rooms_list() -> impl IntoResponse {
-    let rooms = get_rooms(None, true).await;
+    let rooms = get_rooms(None, true);
     Json(rooms)
 }
 
 /// Get list of rooms, optionally filtering to a specific user
-async fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<RoomInfo> {
+fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<RoomInfo> {
     let mut rooms = vec![];
     
     let server = EXTERNAL_IP.lock().unwrap().clone().unwrap_or_else(|| "127.0.0.1".into());
@@ -57,7 +57,7 @@ async fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Ve
     let user_filter = user_filter.unwrap_or_default();
 
     for r in ROOMS.iter() {
-        let room_data = r.read().await;
+        let room_data = r.lock().unwrap();
         // Skip if user not in visitors
         if user_filter.len() > 0 && room_data.visitors.contains(&user_filter) {
             continue;

@@ -208,7 +208,7 @@ pub fn create_world_service(id: &str) -> Service {
     }
 }
 
-pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
+pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
     match msg.function.as_str() {
         "reset" => {
             room.reset();
@@ -217,10 +217,10 @@ pub async fn handle_world_msg(room: &mut RoomData, msg: Request) {
             let id = msg.params[0].as_str().unwrap().to_owned();
             let text = msg.params[1].as_str().unwrap().to_owned();
             let timeout = msg.params[2].as_f64();
-            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone())).await;
+            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone()));
         },
         "clearText" => {
-            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone())).await;
+            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
         },
         "addBlock" => {
             let x = msg.params[0].as_f64().unwrap() as f32;

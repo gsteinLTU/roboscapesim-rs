@@ -229,7 +229,7 @@ impl RobotData {
         }
     }
 
-    pub async fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> bool {
+    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> bool {
         if robot.socket.is_none() {
             return false;
         }
@@ -318,7 +318,7 @@ impl RobotData {
                         let duration = u16::from_le_bytes([buf[3], buf[4]]);
 
                         // Beep is only on client-side
-                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone())).await;
+                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone()));
                     }
                 },
                 b'L' => { 

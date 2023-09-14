@@ -14,6 +14,7 @@ use roboscapesim_common::*;
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
 use crate::services::position::{handle_position_sensor_message, create_position_service};
+use crate::services::proximity::handle_proximity_sensor_message;
 use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
@@ -95,23 +96,23 @@ impl RoomData {
     }
 
     /// Send UpdateMessage to a client
-    pub async fn send_to_client(msg: &UpdateMessage, client_id: u128) {
+    pub fn send_to_client(msg: &UpdateMessage, client_id: u128) {
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {
-            client.value().tx.lock().await.send(msg.clone()).unwrap();
+            client.value().tx.lock().unwrap().send(msg.clone()).unwrap();
         } else {
             error!("Client {} not found!", client_id);
         }
     }
 
     /// Send UpdateMessage to all clients in list
-    pub async fn send_to_clients(msg: &UpdateMessage, clients: impl Iterator<Item = u128>) {
+    pub fn send_to_clients(msg: &UpdateMessage, clients: impl Iterator<Item = u128>) {
         for client_id in clients {
             let client = CLIENTS.get(&client_id);
             
             if let Some(client) = client {
-                client.value().tx.lock().await.send(msg.clone()).unwrap();
+                client.value().tx.lock().unwrap().send(msg.clone()).unwrap();
             } else {
                 error!("Client {} not found!", client_id);
             }
@@ -119,7 +120,7 @@ impl RoomData {
     }
 
     /// Send the room's current state data to a specific client
-    pub async fn send_info_to_client(&self, client: u128) {
+    pub fn send_info_to_client(&self, client: u128) {
         let mut users = vec![];
 
         for user in self.visitors.iter() {
@@ -131,7 +132,7 @@ impl RoomData {
                 RoomState { name: self.name.clone(), roomtime: self.roomtime, users }
             ),
             client,
-        ).await;
+        );
     }
 
     /// Send the room's current state data to a specific client
@@ -140,7 +141,7 @@ impl RoomData {
             Self::send_to_client(
                 &UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),
                 client,
-            ).await;
+            );
         } else {
             Self::send_to_client(
                 &UpdateMessage::Update(
@@ -157,20 +158,20 @@ impl RoomData {
                         .collect::<HashMap<String, ObjectData>>(),
                 ),
                 client,
-            ).await;
+            );
         }
     }
 
-    pub async fn send_to_all_clients(&self, msg: &UpdateMessage) {
+    pub fn send_to_all_clients(&self, msg: &UpdateMessage) {
         for client in &self.sockets {
             Self::send_to_client(
                 msg,
                 client.value().to_owned(),
-            ).await;
+            );
         }
     }
 
-    pub async fn send_state_to_all_clients(&self, full_update: bool) {
+    pub fn send_state_to_all_clients(&self, full_update: bool) {
         let update_msg: UpdateMessage;
         if full_update {
             update_msg = UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
@@ -192,7 +193,7 @@ impl RoomData {
 
         self.send_to_all_clients(
             &update_msg
-        ).await;
+        );
 
         for mut obj in self.objects.iter_mut() {
             obj.value_mut().updated = false;
@@ -208,7 +209,7 @@ impl RoomData {
         ("Room".to_owned() + &s).to_owned()
     }
 
-    pub async fn update(&mut self) {
+    pub fn update(&mut self) {
         // Check if room empty/not empty
         if !self.hibernating && self.sockets.len() == 0 {
             self.hibernating = true;
@@ -237,8 +238,8 @@ impl RoomData {
             let client = CLIENTS.get(client.value());
 
             if let Some(client) = client {
-                while client.rx.lock().await.len() > 0 {
-                    let msg = client.rx.lock().await.recv().await.unwrap();
+                let receiver = &mut client.rx.lock().unwrap();
+                while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
                     match msg {
                         ClientMessage::ResetAll => { needs_reset = true; },
                         ClientMessage::ResetRobot(robot_id) => {
@@ -272,7 +273,7 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for robot in self.robots.iter_mut() {
-            if RobotData::robot_update(robot.1, &mut self.sim, &self.sockets, delta_time).await {
+            if RobotData::robot_update(robot.1, &mut self.sim, &self.sockets, delta_time) {
                 self.last_interaction_time = Utc::now().timestamp();
             }
         }
@@ -301,10 +302,11 @@ impl RoomData {
         
         for (service_type, msg) in msgs {
             match service_type {
-                ServiceType::World => handle_world_msg(self, msg).await,
+                ServiceType::World => handle_world_msg(self, msg),
                 ServiceType::Entity => handle_entity_message(self, msg),
                 ServiceType::PositionSensor => handle_position_sensor_message(self, msg),
                 ServiceType::LIDAR => handle_lidar_message(self, msg),
+                ServiceType::ProximitySensor => handle_proximity_sensor_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
                 }
@@ -332,11 +334,11 @@ impl RoomData {
 
         if time - self.last_full_update < 60 {
             if (now - self.last_update) > Duration::from_millis(120) {
-                self.send_state_to_all_clients(false).await;
+                self.send_state_to_all_clients(false);
                 self.last_update = now;
             }
         } else {
-            self.send_state_to_all_clients(true).await;
+            self.send_state_to_all_clients(true);
             self.last_full_update = time;
             self.last_update = now;
         }

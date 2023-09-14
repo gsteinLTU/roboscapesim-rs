@@ -1,10 +1,10 @@
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
 use log::info;
-use tokio::{net::TcpStream, sync::{broadcast::{Receiver, Sender, self}, Mutex}};
+use tokio::net::TcpStream;
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
 
 use crate::CLIENTS;
 
@@ -37,8 +37,8 @@ pub async fn accept_connection(stream: TcpStream) -> u128 {
     let id = rand::random();
     info!("New WebSocket connection id {} ({})", id, addr);
     
-    let (tx, rx1) = broadcast::channel(16);
-    let (tx1, rx) = broadcast::channel(16);
+    let (tx, rx1) = mpsc::channel();
+    let (tx1, rx) = mpsc::channel();
     CLIENTS.insert(id, SocketInfo { 
         tx: Arc::new(Mutex::new(tx)), 
         tx1: Arc::new(Mutex::new(tx1)), 

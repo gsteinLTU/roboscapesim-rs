@@ -6,7 +6,7 @@ use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
 use tokio_tungstenite::tungstenite::Message;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
 use tokio::{time::{Duration, self, sleep}, task, sync::RwLock, net::TcpListener};
 use tower_http::cors::{Any, CorsLayer};
@@ -31,7 +31,7 @@ mod socket;
 
 const MAX_ROOMS: usize = 64;
 
-static ROOMS: Lazy<DashMap<String, Arc<RwLock<RoomData>>>> = Lazy::new(|| {
+static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
     DashMap::new()
 });
 
@@ -94,22 +94,25 @@ async fn update_fn() {
         let update_time = Utc::now();
         // Perform updates
         for kvp in ROOMS.iter() {
-            task::spawn(async move {
-                if !kvp.value().read().await.hibernating {
-                    let mut lock = kvp.value().write().await;
-                    // Check timeout
-                    if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
-                        lock.hibernating = true;
-                        // Kick all users out
-                        lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating).await;
-                        lock.sockets.clear();
-                        info!("{} is now hibernating", kvp.key());
-                    }
+            let m = kvp.value().clone();
+            if !m.lock().unwrap().hibernating {
+                let lock = &mut m.lock().unwrap();
+                // Check timeout
+                if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
+                    lock.hibernating = true;
+                    // Kick all users out
+                    lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
+                    lock.sockets.clear();
+                    info!("{} is now hibernating", kvp.key());
                 }
+            }
 
-                // Perform update
-                kvp.value().write().await.update().await;
-            });
+            task::spawn(
+                async move {
+                    let room_data = &mut m.lock().unwrap();
+                    room_data.update();
+                }
+            );
         }
     }
 }
@@ -119,17 +122,17 @@ async fn ws_rx() {
         // Get client updates
         for client in CLIENTS.iter() {
             // RX
-            if let Some(Some(Ok(msg))) = client.value().stream.lock().await.next().now_or_never() {
+            while let Some(Some(Ok(msg))) = client.value().stream.lock().unwrap().next().now_or_never() {
                 trace!("Websocket message from {}: {:?}", client.key(), msg);
                 if let Ok(msg) = msg.to_text() {
 
                     if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
                         match msg {
                             ClientMessage::JoinRoom(id, username, password) => {
-                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).await.unwrap();
+                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
                             },
                             _ => {
-                                client.tx1.lock().await.send(msg.to_owned()).unwrap();
+                                client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
                             }
                         }
                     }                    
@@ -146,20 +149,14 @@ async fn ws_tx() {
         // Get client updates
         for client in CLIENTS.iter() {                
             // TX
-            let mut receiver = client.rx1.lock().await;
-            if receiver.len() > 0 {
-                while receiver.len() > 0 {
-                    let recv = receiver.try_recv();
-                    
-                    if let Ok(msg) = recv {
-                        let msg = serde_json::to_string(&msg).unwrap();
-                        client.sink.lock().await.send(Message::Text(msg)).now_or_never();
-                    }
-                }
+            let receiver = client.rx1.lock().unwrap();
+            while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
+                let msg = serde_json::to_string(&msg).unwrap();
+                client.sink.lock().unwrap().send(Message::Text(msg)).now_or_never();
             }
         }
         
-        sleep(Duration::from_nanos(50)).await;
+        sleep(Duration::from_nanos(25)).await;
     }
 }
 
@@ -172,7 +169,7 @@ async fn ws_accept() {
     }
 }
 
-async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
+fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
     info!("User {} (peer id {}), attempting to join room {}", username, peer_id, room_id);
 
     if !ROOMS.contains_key(room_id) {
@@ -180,7 +177,7 @@ async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str)
     }
 
     let room = ROOMS.get(room_id).unwrap();
-    let room = room.read().await;
+    let room = room.lock().unwrap();
     
     // Check password
     if room.password.clone().is_some_and(|pass| pass != password) {
@@ -190,18 +187,18 @@ async fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str)
     // Setup connection to room
     room.visitors.insert(username.to_owned());
     room.sockets.insert(peer_id.to_string(), peer_id);
-    room.send_info_to_client(peer_id).await;
-    room.send_state_to_client(true, peer_id).await;
+    room.send_info_to_client(peer_id);
+    room.send_state_to_client(true, peer_id);
     Ok(())
 }
 
 async fn create_room(password: Option<String>) -> String {
-    let room = Arc::new(RwLock::new(RoomData::new(None, password)));
+    let room = Arc::new(Mutex::new(RoomData::new(None, password)));
     
     // Set last interaction to creation time
-    room.write().await.last_interaction_time = Utc::now().timestamp();
+    room.lock().unwrap().last_interaction_time = Utc::now().timestamp();
 
-    let room_id = room.read().await.name.clone();
+    let room_id = room.lock().unwrap().name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     room_id
 }
