@@ -25,7 +25,7 @@ chrono = { version = "0.4", features = ["serde"] }
 simple_logger = "4.2"
 log = "0.4"
 derivative = "2.2"
-iotscape = "0.1.2"
+iotscape = "0.2.0"
 dotenvy = "0.15"
 netsblox-vm = { version = "0.2", default-features = false, features = ["std"] }
 axum-macros = "0.3.8"

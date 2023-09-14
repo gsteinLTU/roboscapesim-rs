@@ -6,7 +6,7 @@ use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
-use nalgebra::{vector, Vector3, UnitQuaternion, point};
+use nalgebra::{vector, Vector3, UnitQuaternion};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
@@ -136,7 +136,7 @@ impl RoomData {
     }
 
     /// Send the room's current state data to a specific client
-    pub async fn send_state_to_client(&self, full_update: bool, client: u128) {
+    pub fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
             Self::send_to_client(
                 &UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),

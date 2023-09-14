@@ -8,7 +8,7 @@ use socket::SocketInfo;
 use tokio_tungstenite::tungstenite::Message;
 use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
-use tokio::{time::{Duration, self, sleep}, task, sync::RwLock, net::TcpListener};
+use tokio::{time::{Duration, self, sleep}, task, net::TcpListener};
 use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
