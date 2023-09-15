@@ -33,7 +33,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 use crate::CLIENTS;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
-use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, load_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
+use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
 
 #[derive(Derivative)]
 #[derivative(Debug)]

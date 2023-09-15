@@ -223,14 +223,15 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
         },
         "addBlock" => {
-            let x = msg.params[0].as_f64().unwrap() as f32;
-            let y = msg.params[1].as_f64().unwrap() as f32;
-            let z = msg.params[2].as_f64().unwrap() as f32;
-            let heading = msg.params[3].as_f64().unwrap() as f32;
+            let x = if msg.params[0].is_f64() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
+            let y = if msg.params[1].is_f64() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
+            let z = if msg.params[2].is_f64() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
+            let heading = if msg.params[3].is_f64() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
             let name = "block".to_string() + &room.objects.len().to_string();
-            let width = msg.params[4].as_f64().unwrap() as f32;
-            let height = msg.params[5].as_f64().unwrap() as f32;
-            let depth = msg.params[6].as_f64().unwrap() as f32;
+            let width = if msg.params[4].is_f64() {msg.params[4].as_f64().unwrap() } else { msg.params[4].as_str().unwrap().parse().unwrap() } as f32;
+            let height = if msg.params[5].is_f64() {msg.params[5].as_f64().unwrap() } else { msg.params[5].as_str().unwrap().parse().unwrap() } as f32;
+            let depth = if msg.params[6].is_f64() {msg.params[6].as_f64().unwrap() } else { msg.params[6].as_str().unwrap().parse().unwrap() } as f32;
+
             RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), false);
             let lock = &room.services.lock().unwrap();
             let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
@@ -239,11 +240,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
             }
         },
         "addRobot" => {
-            let x = msg.params[0].as_f64().unwrap() as f32;
-            let y = msg.params[1].as_f64().unwrap() as f32;
-            let z = msg.params[2].as_f64().unwrap() as f32;
-            let heading = msg.params[3].as_f64().unwrap() as f32;
-
+            let x = if msg.params[0].is_f64() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
+            let y = if msg.params[1].is_f64() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
+            let z = if msg.params[2].is_f64() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
+            let heading = if msg.params[3].is_f64() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
+            
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
             let lock = &room.services.lock().unwrap();
             let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
