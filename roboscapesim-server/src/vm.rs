@@ -1,8 +1,7 @@
-use std::{fmt, rc::Rc, sync::{Arc, Mutex}, borrow::BorrowMut};
+use std::{fmt, rc::Rc};
 use std::time::Duration;
 use netsblox_vm::{ast, real_time::UtcOffset, runtime::{Config, CustomTypes, Value, GetType, Key, EntityKind, IntermediateType, ErrorCause, FromAstError, Settings, RequestStatus, Request, ToJsonError}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::{Json, json}, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
-
-use crate::{room::RoomData, services::world::handle_world_msg};
+use std::sync::mpsc::Sender;
 
 pub const SAMPLE_PROJECT: &'static str = include_str!("Default Scenario.xml");
 
@@ -19,10 +18,10 @@ pub struct Env<'gc, C: CustomTypes<StdSystem<C>>> {
 }
 pub type EnvArena<S> = Arena<Rootable![Env<'_, S>]>;
 
-fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: Rc<StdSystem<C>>) -> Result<EnvArena<C>, FromAstError> {
+pub fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: StdSystem<C>) -> Result<EnvArena<C>, FromAstError> {
     let (bytecode, init_info, locs, _) = ByteCode::compile(role).unwrap();
     Ok(EnvArena::new(Default::default(), |mc| {
-        let proj = Project::from_init(mc, &init_info, Rc::new(bytecode), Settings::default(), system);
+        let proj = Project::from_init(mc, &init_info, Rc::new(bytecode), Settings::default(), Rc::new(system));
         Env { proj: Gc::new(mc, RefLock::new(proj)), locs }
     }))
 }
@@ -113,44 +112,24 @@ pub fn open_project<'a>(content: &str) -> Result<(String, ast::Role), OpenProjec
     Ok((parsed.name, role))
 }
 
-pub fn load_project(project_name: &str, role: &ast::Role, room: Arc<Mutex<RoomData>>) -> Result<EnvArena<C>, String> {
-    let room = room.clone();
+pub async fn load_project(project_name: &str, role: &ast::Role, iotscape_tx: Sender<iotscape::Request>) -> Result<EnvArena<C>, String> {
 
-    let config = Config::default().fallback(&Config {
+    let config = Config {
         request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
             match &request {
                 Request::Rpc { service, rpc, args } => {
                     match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
                         Ok(args) => {
                             match service.as_str() {
-                                "RoboScapeWorld" => {
+                                "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
                                     println!("{:?}", (service, rpc, &args));
-                                    
-                                    let device = room.lock().unwrap().name.to_owned();
-                                    
-                                    handle_world_msg(room.lock().unwrap().borrow_mut(), iotscape::Request { id: "".into(), service: service.to_owned(), device, function: rpc.to_owned(), params: args.clone() });
-                                    key.complete(Ok(Intermediate::Json(json!(""))));
-                                },
-                                "RoboScapeEntity" => {
-                                    println!("{:?}", (service, rpc, args));
-                                    key.complete(Ok(Intermediate::Json(json!(""))));
-                                },
-                                "RoboScape" => {
-                                    println!("{:?}", (service, rpc, args));
-                                    key.complete(Ok(Intermediate::Json(json!(""))));
-                                },
-                                "PositionSensor" => {
-                                    println!("{:?}", (service, rpc, args));
-                                    key.complete(Ok(Intermediate::Json(json!(""))));
-                                },
-                                "LIDAR" => {
-                                    println!("{:?}", (service, rpc, args));
+                                    iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
                                     key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 _ => return RequestStatus::UseDefault { key, request },
                             }
                         },
-                        Err(err) => key.complete(Err(format!("failed to convert RPC args to json: {err:?}"))),
+                        Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
                     }
                     RequestStatus::Handled
                 }
@@ -158,9 +137,9 @@ pub fn load_project(project_name: &str, role: &ast::Role, room: Arc<Mutex<RoomDa
             }
         })),
         command: None,
-    });
+    };
 
-    let system = Rc::new(StdSystem::new(DEFAULT_BASE_URL.to_owned(), Some(project_name), config, UtcOffset::UTC));
+    let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(project_name), config, UtcOffset::UTC).await;
     println!(">>> public id: {}\n", system.get_public_id());
 
     match get_env(role, system) {

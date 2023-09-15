@@ -99,7 +99,8 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 }
 
 pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
-    let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+    let binding = room.services.lock().unwrap();
+    let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
             if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {

@@ -1,13 +1,11 @@
 use anyhow::Result;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use chrono::Utc;
-use fragile::Sticky;
 use roboscapesim_common::ClientMessage;
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
 use tokio_tungstenite::tungstenite::Message;
-use vm::{SAMPLE_PROJECT, open_project, load_project, EnvArena, C};
 use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
 use tokio::{time::{Duration, self, sleep}, task, net::TcpListener};
@@ -203,10 +201,5 @@ async fn create_room(password: Option<String>) -> String {
 
     let room_id = room.lock().unwrap().name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
-
-    let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
-
-    let env: EnvArena<C> = load_project(&project_name, &role, room.clone()).unwrap();
-    room.lock().unwrap().vm_env = Some(Sticky::new(Arc::new(Mutex::new(env))));
     room_id
 }

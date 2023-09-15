@@ -1,24 +1,33 @@
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
-use fragile::Sticky;
+use futures::executor::block_on;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::project::{ProjectStep, IdleAction};
+use netsblox_vm::real_time::UtcOffset;
+use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key};
+use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
+use serde_json::json;
+use tokio::spawn;
+use tokio::time::sleep;
+use std::sync::{mpsc, Arc, Mutex};
+use tokio::task;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
 use crate::services::position::{handle_position_sensor_message, create_position_service};
 use crate::services::proximity::handle_proximity_sensor_message;
-use crate::services::service_struct::{Service, ServiceType};
+use crate::services::service_struct::Service;
 use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
@@ -26,7 +35,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 use crate::CLIENTS;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
-use crate::vm::{EnvArena, C, STEPS_PER_IO_ITER};
+use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, load_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -50,17 +59,18 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Vec<Service>,
+    pub services: Arc<Mutex<Vec<Service>>>,
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
-    pub vm_env: Option<Sticky<Arc<Mutex<EnvArena<C>>>>>,
+    pub iotscape_rx: mpsc::Receiver<iotscape::Request>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>) -> RoomData {
+        let (iotscape_tx, iotscape_rx) = mpsc::channel::<iotscape::Request>();
 
-        let mut obj = RoomData {
+        let obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
@@ -75,10 +85,10 @@ impl RoomData {
             last_update: Instant::now(),
             robots: HashMap::new(),
             reseters: HashMap::new(),
-            services: vec![],
+            services: Arc::new(Mutex::new(vec![])),
             lidar_configs: HashMap::new(),
             last_sim_update: Instant::now(),
-            vm_env: None,
+            iotscape_rx,
         };
 
         info!("Room {} created", obj.name);
@@ -86,9 +96,122 @@ impl RoomData {
         // Setup test room
         // Create IoTScape service
         let service = world::create_world_service(obj.name.as_str());
-        obj.services.push(service);
+        obj.services.lock().unwrap().push(service);
 
-        // Ground
+
+        // Channels needed
+
+        // IoTScape and VM in tasks created in new
+        // MPSC channels to send IoTScape messages to be received in update
+        // Also channels to get responses to be sent either way
+        // key in VM Config is Arc<Mutex<AsyncResult>>, can hold on to them to complete later
+
+        
+        // Create IoTScape network I/O Task
+        let net_iotscape_tx = iotscape_tx.clone();
+        let services = obj.services.clone();
+        task::spawn(async move {
+            loop {
+                for service in services.lock().unwrap().iter_mut() {
+                    // Handle messages
+                    if service.update() > 0 {
+                        loop {
+                            if service.service.lock().unwrap().rx_queue.len() == 0 {
+                                break;
+                            }
+        
+                            let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
+        
+                            net_iotscape_tx.send(msg).unwrap();
+                        }
+                    }
+                }
+
+                sleep(Duration::from_nanos(50)).await;
+            }
+        });
+        
+        // Create VM Task
+        let vm_iotscape_tx = iotscape_tx.clone();
+        spawn(async move {
+            
+            let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
+            info!("Loading project {}", project_name);
+            let iotscape_tx = vm_iotscape_tx.clone();
+            
+
+            let config = Config {
+                request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
+                    match &request {
+                        netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
+                            match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
+                                Ok(args) => {
+                                    match service.as_str() {
+                                        "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
+                                            println!("{:?}", (service, rpc, &args));
+                                            iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
+                                            key.complete(Ok(Intermediate::Json(json!(""))));
+                                        },
+                                        _ => return RequestStatus::UseDefault { key, request },
+                                    }
+                                },
+                                Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+                            }
+                            RequestStatus::Handled
+                        }
+                        _ => RequestStatus::UseDefault { key, request },
+                    }
+                })),
+                command: None,
+            };
+        
+            let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), config, UtcOffset::UTC).await;
+            println!(">>> public id: {}\n", system.get_public_id());
+        
+            let system = match get_env(&role, system) {
+                Ok(x) => Ok(x),
+                Err(e) => {
+                    Err(format!(">>> error loading project: {e:?}").to_owned())         
+                }
+            };
+
+            let system = system.unwrap();
+
+            info!("Loaded");
+
+            let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
+            
+            // Start program
+            system.mutate(|mc, env| {
+                let mut proj = env.proj.borrow_mut(mc);
+                proj.input(mc, netsblox_vm::project::Input::Start);
+            });
+
+            // Run program
+            loop {
+                system.mutate(|mc, env| {
+                    let mut proj = env.proj.borrow_mut(mc);
+                    for _ in 0..STEPS_PER_IO_ITER {
+                        let res = proj.step(mc);
+                        if let ProjectStep::Error { error, proc } = &res {
+                            println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                        }
+                        match &res {
+                            ProjectStep::Idle => { info!("Idle")},
+                            ProjectStep::Yield => { info!("Yield")},
+                            ProjectStep::Normal => { info!("Normal")},
+                            ProjectStep::ProcessTerminated { result, proc } => { info!("ProcessTerminated")},
+                            ProjectStep::Error { error, proc } => { info!("Error")},
+                            ProjectStep::Watcher { create, watcher } => { info!("Watcher")},
+                            ProjectStep::Pause => { info!("Pause")},
+                        }
+                        idle_sleeper.consume(&res);
+                    }
+                });
+            }
+        });
+
+        /*// Ground
         RoomData::add_shape(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45, Shape::Box)), Some(vector![10.0, 0.1, 10.0]), true);
 
         // Test cube
@@ -98,7 +221,7 @@ impl RoomData {
         RoomData::add_robot(&mut obj, vector![0.0, 1.0, 0.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
 
         // Create robot 2
-        RoomData::add_robot(&mut obj, vector![1.0, 1.0, 1.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
+        RoomData::add_robot(&mut obj, vector![1.0, 1.0, 1.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);*/
 
         obj
     }
@@ -285,55 +408,27 @@ impl RoomData {
                 self.last_interaction_time = Utc::now().timestamp();
             }
         }
+        
+        let mut msgs: Vec<iotscape::Request> = vec![];
 
-        let mut msgs = vec![];
-        for service in self.services.iter_mut() {
-            // Handle messages
-            if service.update() > 0 {
-                loop {
-                    if service.service.lock().unwrap().rx_queue.len() == 0 {
-                        break;
-                    }
-
-                    let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
-
-                    msgs.push((service.service_type, msg));
-                }
-            }
-        }
-
-        if msgs.len() > 0 {
-            if msgs.iter().filter(|msg| msg.1.function != "heartbeat").count() > 0 {
+        while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
+            if msgs.iter().filter(|msg| msg.function != "heartbeat").count() > 0 {
                 self.last_interaction_time = Utc::now().timestamp();
+                msgs.push(msg);
             }
         }
         
-        for (service_type, msg) in msgs {
-            match service_type {
-                ServiceType::World => handle_world_msg(self, msg),
-                ServiceType::Entity => handle_entity_message(self, msg),
-                ServiceType::PositionSensor => handle_position_sensor_message(self, msg),
-                ServiceType::LIDAR => handle_lidar_message(self, msg),
-                ServiceType::ProximitySensor => handle_proximity_sensor_message(self, msg),
+        for msg in msgs {
+            match msg.service.as_str() {
+                "RoboScapeWorld" => handle_world_msg(self, msg),
+                "RoboScapeEntity" => handle_entity_message(self, msg),
+                "PositionSensor" => handle_position_sensor_message(self, msg),
+                "LIDAR" => handle_lidar_message(self, msg),
+                "ProximitySensor" => handle_proximity_sensor_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
                 }
             }
-        }
-
-        if let Some(vm) = &self.vm_env {
-
-            fragile::stack_token!(tok);
-            vm.get(tok).lock().unwrap().mutate(|mc, env| {
-                let mut proj = env.proj.borrow_mut(mc);
-                for _ in 0..STEPS_PER_IO_ITER {
-                    let res = proj.step(mc);
-                    if let ProjectStep::Error { error, proc } = &res {
-                        println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
-                    }
-                    //idle_sleeper.consume(&res);
-                }
-            });
         }
         
         self.sim.update(delta_time);
@@ -413,11 +508,12 @@ impl RoomData {
         });
         RobotData::setup_robot_socket(&mut robot);
             
+        let services = &mut room.services.lock().unwrap();
         let service = create_position_service(&robot.id, &robot.body_handle);
-        room.services.push(service);
+        services.push(service);
             
         let service = create_lidar_service(&robot.id, &robot.body_handle);
-        room.services.push(service);
+        services.push(service);
         room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
             
         // Wheel debug
@@ -504,7 +600,7 @@ impl RoomData {
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &room.sim)));
 
         let service = create_entity_service(&body_name, &cube_body_handle);
-        room.services.push(service);
+        room.services.lock().unwrap().push(service);
         room.last_full_update = 0;
     }
 }

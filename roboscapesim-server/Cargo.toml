@@ -27,14 +27,13 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.2.0"
 dotenvy = "0.15"
-netsblox-vm = { version = "0.2", default-features = false, features = ["std"] }
+netsblox-vm = { version = "0.2.7", default-features = false, features = ["std", "native-tls"] }
 axum-macros = "0.3.8"
 reqwest = "0.11"
 futures = "0.3.28"
-tokio-tungstenite = "0.20"
+tokio-tungstenite = { version = "0.20", features = ["native-tls", "tokio-native-tls"] }
 rayon = "1.7.0"
 gc-arena = "0.3.0"
-fragile = "2.0.0"
 
 [dev-dependencies]
 float-cmp = "0.9"

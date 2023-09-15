@@ -151,7 +151,8 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
 }
 
 pub fn handle_entity_message(room: &mut RoomData, msg: Request) {
-    let s = room.services.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::Entity);
+    let binding = room.services.lock().unwrap();
+    let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::Entity);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
             if let Some(o) = room.sim.rigid_body_set.get_mut(body.clone()) {
