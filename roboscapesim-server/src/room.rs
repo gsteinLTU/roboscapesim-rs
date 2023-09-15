@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
-use futures::executor::block_on;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::project::{ProjectStep, IdleAction};
@@ -21,7 +20,6 @@ use serde_json::json;
 use tokio::spawn;
 use tokio::time::sleep;
 use std::sync::{mpsc, Arc, Mutex};
-use tokio::task;
 
 use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
@@ -110,7 +108,7 @@ impl RoomData {
         // Create IoTScape network I/O Task
         let net_iotscape_tx = iotscape_tx.clone();
         let services = obj.services.clone();
-        task::spawn(async move {
+        spawn(async move {
             loop {
                 for service in services.lock().unwrap().iter_mut() {
                     // Handle messages
@@ -133,83 +131,77 @@ impl RoomData {
         
         // Create VM Task
         let vm_iotscape_tx = iotscape_tx.clone();
-        spawn(async move {
-            
-            let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
-            info!("Loading project {}", project_name);
-            let iotscape_tx = vm_iotscape_tx.clone();
-            
-
-            let config = Config {
-                request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
-                    match &request {
-                        netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
-                            match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
-                                Ok(args) => {
-                                    match service.as_str() {
-                                        "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
-                                            println!("{:?}", (service, rpc, &args));
-                                            iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
-                                            key.complete(Ok(Intermediate::Json(json!(""))));
-                                        },
-                                        _ => return RequestStatus::UseDefault { key, request },
-                                    }
-                                },
-                                Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+        
+        
+        thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
+                let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
+                info!("Loading project {}", project_name);
+                let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
+                    request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
+                        match &request {
+                            netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
+                                match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
+                                    Ok(args) => {
+                                        match service.as_str() {
+                                            "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
+                                                //println!("{:?}", (service, rpc, &args));
+                                                vm_iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
+                                                key.complete(Ok(Intermediate::Json(json!(""))));
+                                            },
+                                            _ => return RequestStatus::UseDefault { key, request },
+                                        }
+                                    },
+                                    Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+                                }
+                                RequestStatus::Handled
                             }
-                            RequestStatus::Handled
+                            _ => RequestStatus::UseDefault { key, request },
                         }
-                        _ => RequestStatus::UseDefault { key, request },
-                    }
-                })),
-                command: None,
-            };
-        
-            let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), config, UtcOffset::UTC).await;
-            println!(">>> public id: {}\n", system.get_public_id());
-        
-            let system = match get_env(&role, system) {
-                Ok(x) => Ok(x),
-                Err(e) => {
-                    Err(format!(">>> error loading project: {e:?}").to_owned())         
-                }
-            };
+                    })),
+                    command: None,
+                }, UtcOffset::UTC).await;
 
-            let system = system.unwrap();
-
-            info!("Loaded");
-
-            let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
+                println!(">>> public id: {}\n", system.get_public_id());
             
-            // Start program
-            system.mutate(|mc, env| {
-                let mut proj = env.proj.borrow_mut(mc);
-                proj.input(mc, netsblox_vm::project::Input::Start);
-            });
+                let system = match get_env(&role, system) {
+                    Ok(x) => Ok(x),
+                    Err(e) => {
+                        Err(format!(">>> error loading project: {e:?}").to_owned())         
+                    }
+                };
 
-            // Run program
-            loop {
+                let system = system.unwrap();
+
+                info!("Loaded");
+                // Start program
                 system.mutate(|mc, env| {
                     let mut proj = env.proj.borrow_mut(mc);
-                    for _ in 0..STEPS_PER_IO_ITER {
-                        let res = proj.step(mc);
-                        if let ProjectStep::Error { error, proc } = &res {
-                            println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
-                        }
-                        match &res {
-                            ProjectStep::Idle => { info!("Idle")},
-                            ProjectStep::Yield => { info!("Yield")},
-                            ProjectStep::Normal => { info!("Normal")},
-                            ProjectStep::ProcessTerminated { result, proc } => { info!("ProcessTerminated")},
-                            ProjectStep::Error { error, proc } => { info!("Error")},
-                            ProjectStep::Watcher { create, watcher } => { info!("Watcher")},
-                            ProjectStep::Pause => { info!("Pause")},
-                        }
-                        idle_sleeper.consume(&res);
-                    }
+                    proj.input(mc, netsblox_vm::project::Input::Start);
                 });
-            }
-        });
+
+                // Run program
+                loop {
+                    // TODO: Detect hibernation and stop VM
+
+                    system.mutate(|mc, env| {
+                        let mut proj = env.proj.borrow_mut(mc);
+                        for _ in 0..STEPS_PER_IO_ITER {
+                            let res = proj.step(mc);
+                            if let ProjectStep::Error { error, proc } = &res {
+                                println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                            }
+                            idle_sleeper.consume(&res);
+                        }
+                    });
+                }
+            });
+        }); 
 
         /*// Ground
         RoomData::add_shape(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45, Shape::Box)), Some(vector![10.0, 0.1, 10.0]), true);
@@ -412,13 +404,15 @@ impl RoomData {
         let mut msgs: Vec<iotscape::Request> = vec![];
 
         while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
-            if msgs.iter().filter(|msg| msg.function != "heartbeat").count() > 0 {
+            if msg.function != "heartbeat" {
                 self.last_interaction_time = Utc::now().timestamp();
                 msgs.push(msg);
             }
         }
         
         for msg in msgs {
+            info!("{:?}", msg);
+
             match msg.service.as_str() {
                 "RoboScapeWorld" => handle_world_msg(self, msg),
                 "RoboScapeEntity" => handle_entity_message(self, msg),
