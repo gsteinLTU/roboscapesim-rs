@@ -34,6 +34,7 @@ futures = "0.3.28"
 tokio-tungstenite = "0.20"
 rayon = "1.7.0"
 gc-arena = "0.3.0"
+fragile = "2.0.0"
 
 [dev-dependencies]
 float-cmp = "0.9"

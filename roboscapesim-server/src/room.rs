@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
+use fragile::Sticky;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
+use netsblox_vm::project::{ProjectStep, IdleAction};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
@@ -23,6 +26,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 use crate::CLIENTS;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
+use crate::vm::{EnvArena, C, STEPS_PER_IO_ITER};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -49,10 +53,13 @@ pub struct RoomData {
     pub services: Vec<Service>,
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
+    #[derivative(Debug = "ignore")]
+    pub vm_env: Option<Sticky<Arc<Mutex<EnvArena<C>>>>>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>) -> RoomData {
+
         let mut obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
@@ -71,6 +78,7 @@ impl RoomData {
             services: vec![],
             lidar_configs: HashMap::new(),
             last_sim_update: Instant::now(),
+            vm_env: None,
         };
 
         info!("Room {} created", obj.name);
@@ -311,6 +319,21 @@ impl RoomData {
                     info!("Service type {:?} not yet implemented.", t);
                 }
             }
+        }
+
+        if let Some(vm) = &self.vm_env {
+
+            fragile::stack_token!(tok);
+            vm.get(tok).lock().unwrap().mutate(|mc, env| {
+                let mut proj = env.proj.borrow_mut(mc);
+                for _ in 0..STEPS_PER_IO_ITER {
+                    let res = proj.step(mc);
+                    if let ProjectStep::Error { error, proc } = &res {
+                        println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                    }
+                    //idle_sleeper.consume(&res);
+                }
+            });
         }
         
         self.sim.update(delta_time);

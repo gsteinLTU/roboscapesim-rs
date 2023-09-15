@@ -1,21 +1,21 @@
-use std::{fmt, fs::File, io::{BufReader, BufWriter}, rc::Rc, cell::RefCell, thread, sync::{Arc, Mutex}};
+use std::{fmt, rc::Rc, sync::{Arc, Mutex}, borrow::BorrowMut};
 use std::time::Duration;
-use netsblox_vm::{ast, real_time::UtcOffset, runtime::{Config, CustomTypes, Value, GetType, Key, EntityKind, IntermediateType, ErrorCause, FromAstError, Settings, RequestStatus, Request, ToJsonError}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::{Json, json}, project::{ProjectStep, Input, IdleAction, Project}, bytecode::{Locations, ByteCode}, std_system::StdSystem};
+use netsblox_vm::{ast, real_time::UtcOffset, runtime::{Config, CustomTypes, Value, GetType, Key, EntityKind, IntermediateType, ErrorCause, FromAstError, Settings, RequestStatus, Request, ToJsonError}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::{Json, json}, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
 
-use crate::room::RoomData;
+use crate::{room::RoomData, services::world::handle_world_msg};
 
 pub const SAMPLE_PROJECT: &'static str = include_str!("Default Scenario.xml");
 
-const DEFAULT_BASE_URL: &'static str = "https://editor.netsblox.org";
-const STEPS_PER_IO_ITER: usize = 64;
-const YIELDS_BEFORE_IDLE_SLEEP: usize = 256;
-const IDLE_SLEEP_TIME: Duration = Duration::from_micros(500);
+pub const DEFAULT_BASE_URL: &'static str = "https://editor.netsblox.org";
+pub const STEPS_PER_IO_ITER: usize = 64;
+pub const YIELDS_BEFORE_IDLE_SLEEP: usize = 256;
+pub const IDLE_SLEEP_TIME: Duration = Duration::from_micros(500);
 
 #[derive(Collect)]
 #[collect(no_drop, bound = "")]
 pub struct Env<'gc, C: CustomTypes<StdSystem<C>>> {
-                               proj: Gc<'gc, RefLock<Project<'gc, C, StdSystem<C>>>>,
-    #[collect(require_static)] locs: Locations,
+                               pub proj: Gc<'gc, RefLock<Project<'gc, C, StdSystem<C>>>>,
+    #[collect(require_static)] pub locs: Locations,
 }
 pub type EnvArena<S> = Arena<Rootable![Env<'_, S>]>;
 
@@ -30,7 +30,7 @@ fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: Rc<StdSystem<
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeValue {}
 impl GetType for NativeValue {
     type Output = NativeType;
@@ -39,7 +39,7 @@ impl GetType for NativeValue {
     }
 }
 
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntityState;
 impl From<EntityKind<'_, '_, C, StdSystem<C>>> for EntityState {
     fn from(_: EntityKind<'_, '_, C, StdSystem<C>>) -> Self {
@@ -47,6 +47,7 @@ impl From<EntityKind<'_, '_, C, StdSystem<C>>> for EntityState {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intermediate {
     Json(Json),
     Image(Vec<u8>),
@@ -64,6 +65,7 @@ impl IntermediateType for Intermediate {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct C;
 impl CustomTypes<StdSystem<C>> for C {
     type NativeValue = NativeValue;
@@ -112,28 +114,38 @@ pub fn open_project<'a>(content: &str) -> Result<(String, ast::Role), OpenProjec
 }
 
 pub fn load_project(project_name: &str, role: &ast::Role, room: Arc<Mutex<RoomData>>) -> Result<EnvArena<C>, String> {
+    let room = room.clone();
+
     let config = Config::default().fallback(&Config {
-        request: Some(Rc::new(|system: &StdSystem<C>, _, key, request, _| {
+        request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
             match &request {
                 Request::Rpc { service, rpc, args } => {
                     match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
                         Ok(args) => {
                             match service.as_str() {
                                 "RoboScapeWorld" => {
-                                    println!("{:?}", (service, rpc, args));
+                                    println!("{:?}", (service, rpc, &args));
+                                    
+                                    let device = room.lock().unwrap().name.to_owned();
+                                    
+                                    handle_world_msg(room.lock().unwrap().borrow_mut(), iotscape::Request { id: "".into(), service: service.to_owned(), device, function: rpc.to_owned(), params: args.clone() });
                                     key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 "RoboScapeEntity" => {
                                     println!("{:?}", (service, rpc, args));
+                                    key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 "RoboScape" => {
                                     println!("{:?}", (service, rpc, args));
+                                    key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 "PositionSensor" => {
                                     println!("{:?}", (service, rpc, args));
+                                    key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 "LIDAR" => {
                                     println!("{:?}", (service, rpc, args));
+                                    key.complete(Ok(Intermediate::Json(json!(""))));
                                 },
                                 _ => return RequestStatus::UseDefault { key, request },
                             }
