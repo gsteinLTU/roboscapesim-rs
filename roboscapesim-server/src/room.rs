@@ -3,6 +3,7 @@ use std::f32::consts::FRAC_PI_2;
 use std::rc::Rc;
 use std::thread;
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
 use dashmap::{DashMap, DashSet};
@@ -44,7 +45,7 @@ pub struct RoomData {
     pub password: Option<String>,
     pub timeout: i64,
     pub last_interaction_time: i64,
-    pub hibernating: bool,
+    pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, u128>,
     pub visitors: DashSet<String>,
     pub last_update: Instant,
@@ -65,16 +66,16 @@ pub struct RoomData {
 }
 
 impl RoomData {
-    pub fn new(name: Option<String>, password: Option<String>) -> RoomData {
+    pub fn new(name: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
         let (iotscape_tx, iotscape_rx) = mpsc::channel::<iotscape::Request>();
 
         let obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
-            timeout: 60 * 15,
+            timeout: 60 * 1,
             last_interaction_time: Utc::now().timestamp(),
-            hibernating: false,
+            hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
             visitors: DashSet::new(),
             last_full_update: 0,
@@ -97,8 +98,6 @@ impl RoomData {
         obj.services.lock().unwrap().push(service);
 
 
-        // Channels needed
-
         // IoTScape and VM in tasks created in new
         // MPSC channels to send IoTScape messages to be received in update
         // Also channels to get responses to be sent either way
@@ -108,102 +107,114 @@ impl RoomData {
         // Create IoTScape network I/O Task
         let net_iotscape_tx = iotscape_tx.clone();
         let services = obj.services.clone();
+        let hibernating = obj.hibernating.clone();
         spawn(async move {
             loop {
-                for service in services.lock().unwrap().iter_mut() {
-                    // Handle messages
-                    if service.update() > 0 {
-                        loop {
-                            if service.service.lock().unwrap().rx_queue.len() == 0 {
-                                break;
+                if hibernating.load(Ordering::Relaxed) {
+                    sleep(Duration::from_millis(50)).await;
+                } else {
+                    for service in services.lock().unwrap().iter_mut() {
+                        // Handle messages
+                        if service.update() > 0 {
+                            loop {
+                                if service.service.lock().unwrap().rx_queue.len() == 0 {
+                                    break;
+                                }
+            
+                                let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
+            
+                                net_iotscape_tx.send(msg).unwrap();
                             }
-        
-                            let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
-        
-                            net_iotscape_tx.send(msg).unwrap();
                         }
                     }
-                }
 
-                sleep(Duration::from_nanos(50)).await;
+                    sleep(Duration::from_nanos(100)).await;
+                }
             }
         });
         
         // Create VM Task
-        let vm_iotscape_tx = iotscape_tx.clone();
-        
-        
-        thread::spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
-                let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
-                info!("Loading project {}", project_name);
-                let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
-                    request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
-                        match &request {
-                            netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
-                                match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
-                                    Ok(args) => {
-                                        match service.as_str() {
-                                            "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
-                                                //println!("{:?}", (service, rpc, &args));
-                                                vm_iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
-                                                key.complete(Ok(Intermediate::Json(json!(""))));
-                                            },
-                                            _ => return RequestStatus::UseDefault { key, request },
-                                        }
-                                    },
-                                    Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+        if !edit_mode {
+            let vm_iotscape_tx = iotscape_tx.clone();
+            let hibernating = obj.hibernating.clone();
+
+            thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    // Setup VM
+                    let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
+                    let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
+                    info!("Loading project {}", project_name);
+                    let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
+                        request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
+                            match &request {
+                                netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
+                                    match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
+                                        Ok(args) => {
+                                            match service.as_str() {
+                                                "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
+                                                    //println!("{:?}", (service, rpc, &args));
+                                                    vm_iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
+                                                    key.complete(Ok(Intermediate::Json(json!(""))));
+                                                },
+                                                _ => return RequestStatus::UseDefault { key, request },
+                                            }
+                                        },
+                                        Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+                                    }
+                                    RequestStatus::Handled
                                 }
-                                RequestStatus::Handled
+                                _ => RequestStatus::UseDefault { key, request },
                             }
-                            _ => RequestStatus::UseDefault { key, request },
+                        })),
+                        command: None,
+                    }, UtcOffset::UTC).await;
+
+                    println!(">>> public id: {}\n", system.get_public_id());
+                
+                    let system = match get_env(&role, system) {
+                        Ok(x) => Ok(x),
+                        Err(e) => {
+                            Err(format!(">>> error loading project: {e:?}").to_owned())         
                         }
-                    })),
-                    command: None,
-                }, UtcOffset::UTC).await;
+                    };
 
-                println!(">>> public id: {}\n", system.get_public_id());
-            
-                let system = match get_env(&role, system) {
-                    Ok(x) => Ok(x),
-                    Err(e) => {
-                        Err(format!(">>> error loading project: {e:?}").to_owned())         
-                    }
-                };
+                    let system = system.unwrap();
 
-                let system = system.unwrap();
-
-                info!("Loaded");
-                // Start program
-                system.mutate(|mc, env| {
-                    let mut proj = env.proj.borrow_mut(mc);
-                    proj.input(mc, netsblox_vm::project::Input::Start);
-                });
-
-                // Run program
-                loop {
-                    // TODO: Detect hibernation and stop VM
-
+                    info!("Loaded");
+                    // Start program
                     system.mutate(|mc, env| {
                         let mut proj = env.proj.borrow_mut(mc);
-                        for _ in 0..STEPS_PER_IO_ITER {
-                            let res = proj.step(mc);
-                            if let ProjectStep::Error { error, proc } = &res {
-                                println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
-                            }
-                            idle_sleeper.consume(&res);
-                        }
+                        proj.input(mc, netsblox_vm::project::Input::Start);
                     });
-                }
-            });
-        }); 
 
-        /*// Ground
+                    // Run program
+                    loop {
+                        if hibernating.load(Ordering::Relaxed) {
+                            sleep(Duration::from_millis(50)).await;
+                        } else {
+                            system.mutate(|mc, env| {
+                                let mut proj = env.proj.borrow_mut(mc);
+                                for _ in 0..STEPS_PER_IO_ITER {
+                                    let res = proj.step(mc);
+                                    if let ProjectStep::Error { error, proc } = &res {
+                                        println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                                    }
+                                    idle_sleeper.consume(&res);
+                                }
+                            });
+                        }
+                    }
+                });
+            }); 
+        }
+
+        /*
+        // Old default setup
+        // Ground
         RoomData::add_shape(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45, Shape::Box)), Some(vector![10.0, 0.1, 10.0]), true);
 
         // Test cube
@@ -334,14 +345,14 @@ impl RoomData {
 
     pub fn update(&mut self) {
         // Check if room empty/not empty
-        if !self.hibernating && self.sockets.len() == 0 {
-            self.hibernating = true;
+        if !self.hibernating.load(Ordering::Relaxed) && self.sockets.len() == 0 {
+            self.hibernating.store(true, Ordering::Relaxed);
             return;
-        } else if self.hibernating && self.sockets.len() > 0 {
-            self.hibernating = false;
+        } else if self.hibernating.load(Ordering::Relaxed) && self.sockets.len() > 0 {
+            self.hibernating.store(false, Ordering::Relaxed);
         }
 
-        if self.hibernating {
+        if self.hibernating.load(Ordering::Relaxed) {
             return;
         }
 

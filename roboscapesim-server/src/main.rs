@@ -96,11 +96,11 @@ async fn update_fn() {
         // Perform updates
         for kvp in ROOMS.iter() {
             let m = kvp.value().clone();
-            if !m.lock().unwrap().hibernating {
+            if !m.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed) {
                 let lock = &mut m.lock().unwrap();
                 // Check timeout
                 if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
-                    lock.hibernating = true;
+                    lock.hibernating.store(true, std::sync::atomic::Ordering::Relaxed);
                     // Kick all users out
                     lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
                     lock.sockets.clear();
@@ -194,7 +194,7 @@ fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Re
 }
 
 async fn create_room(password: Option<String>) -> String {
-    let room = Arc::new(Mutex::new(RoomData::new(None, password)));
+    let room = Arc::new(Mutex::new(RoomData::new(None, password, false)));
     
     // Set last interaction to creation time
     room.lock().unwrap().last_interaction_time = Utc::now().timestamp();

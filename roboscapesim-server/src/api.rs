@@ -30,7 +30,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
-        if r.lock().unwrap().hibernating {
+        if r.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             hibernating_rooms += 1;
         }
     }
@@ -63,7 +63,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
             continue;
         }
 
-        if !include_hibernating && room_data.hibernating {
+        if !include_hibernating && room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             continue;
         }
 
