@@ -62,8 +62,8 @@
 
             element = createDialog('Create a Session', false, ['Create', 'Close']);
             element.querySelector('content').innerHTML += `
-            <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input class="inset"/></div>
-            <div><label>Environment:&nbsp;</label><input class="inset"/></div>
+            <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
+            <div><label>Environment:&nbsp;</label><input id="roboscapedialog-new-environment" class="inset"/></div>
             `;
 
             setupDialog(element, false);

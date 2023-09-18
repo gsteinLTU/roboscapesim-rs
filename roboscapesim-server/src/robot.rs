@@ -434,10 +434,16 @@ impl RobotData {
 impl Resettable for RobotData {
     fn reset(&mut self, sim: &mut Simulation) {
         // Reset position
+        for wheel in &self.wheel_bodies {
+            let body = sim.rigid_body_set.get_mut(wheel.clone()).unwrap();
+            body.set_linvel(vector![0.0, 0.0, 0.0], false);
+            body.set_angvel(vector![0.0, 0.0, 0.0], false);
+        }
+
         let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
-        body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], true);
-        body.set_linvel(vector![0.0, 0.0, 0.0], true);
-        body.set_angvel(vector![0.0, 0.0, 0.0], true);
+        body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
+        body.set_linvel(vector![0.0, 0.0, 0.0], false);
+        body.set_angvel(vector![0.0, 0.0, 0.0], false);
 
         match self.initial_transform.rotation {
             Orientation::Quaternion(q) => {

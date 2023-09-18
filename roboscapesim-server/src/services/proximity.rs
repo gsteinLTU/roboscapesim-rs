@@ -5,7 +5,7 @@ use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription,
 use log::info;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::room::RoomData;
+use crate::{room::RoomData, vm::Intermediate};
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
@@ -75,7 +75,9 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
     }
 }
 
-pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
+pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+    let mut response = vec![];
+
     let binding = room.services.lock().unwrap();
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
     if let Some(s) = s {
@@ -87,7 +89,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
                             "getIntensity" => {
                                 // TODO: apply some function
                                 let dist = (t.translation() - o.translation()).norm();
-                                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![dist.to_string()]));                   
+                                response = vec![dist.to_string()];
                             },
                             "dig" => {
                                 // TODO:
@@ -105,4 +107,12 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) {
     } else {
         info!("No service found for {}", msg.device);
     }
+
+    let lock = &room.services.lock().unwrap();
+    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
+    if let Some(s) = s {
+        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    }
+
+    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }

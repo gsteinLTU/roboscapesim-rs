@@ -12,7 +12,7 @@ use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::project::{ProjectStep, IdleAction};
 use netsblox_vm::real_time::UtcOffset;
-use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key};
+use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, Command, System};
 use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
@@ -62,18 +62,18 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
-    pub iotscape_rx: mpsc::Receiver<iotscape::Request>,
+    pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
-        let (iotscape_tx, iotscape_rx) = mpsc::channel::<iotscape::Request>();
+        let (iotscape_tx, iotscape_rx) = mpsc::channel::<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>();
 
         let obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
-            timeout: 60 * 1,
+            timeout: 60 * 10,
             last_interaction_time: Utc::now().timestamp(),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
@@ -116,19 +116,14 @@ impl RoomData {
                     for service in services.lock().unwrap().iter_mut() {
                         // Handle messages
                         if service.update() > 0 {
-                            loop {
-                                if service.service.lock().unwrap().rx_queue.len() == 0 {
-                                    break;
-                                }
-            
+                            while service.service.lock().unwrap().rx_queue.len() > 0 {
                                 let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
-            
-                                net_iotscape_tx.send(msg).unwrap();
+                                net_iotscape_tx.send((msg, None)).unwrap();
                             }
                         }
                     }
 
-                    sleep(Duration::from_nanos(100)).await;
+                    sleep(Duration::from_millis(2)).await;
                 }
             }
         });
@@ -137,7 +132,7 @@ impl RoomData {
         if !edit_mode {
             let vm_iotscape_tx = iotscape_tx.clone();
             let hibernating = obj.hibernating.clone();
-
+            let id_clone = obj.name.clone();
             thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -155,9 +150,13 @@ impl RoomData {
                                     match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
-                                                "RoboScapeWorld" | "RoboScapeEntity" | "RoboScape" | "PositionSensor" | "LIDAR" => {
+                                                "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDAR" => {
+                                                    // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
-                                                    vm_iotscape_tx.send(iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }).unwrap();
+                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
+                                                },
+                                                "RoboScape" => {
+                                                    // TODO: RoboScape service but in Rust
                                                     key.complete(Ok(Intermediate::Json(json!(""))));
                                                 },
                                                 _ => return RequestStatus::UseDefault { key, request },
@@ -166,7 +165,22 @@ impl RoomData {
                                         Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
                                     }
                                     RequestStatus::Handled
-                                }
+                                },
+                                netsblox_vm::runtime::Request::UnknownBlock { name, args } => {
+                                    match name.as_str() {
+                                        "roomID" => {
+                                            key.complete(Ok(Intermediate::Json(json!(format!("\"{id_clone}\"")))));
+                                            RequestStatus::Handled
+                                        },
+                                        "robotsInRoom" => {
+
+                                            RequestStatus::Handled
+                                        },
+                                        _ => {
+                                            RequestStatus::UseDefault { key, request }
+                                        }
+                                    }
+                                },
                                 _ => RequestStatus::UseDefault { key, request },
                             }
                         })),
@@ -412,19 +426,19 @@ impl RoomData {
             }
         }
         
-        let mut msgs: Vec<iotscape::Request> = vec![];
+        let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
 
         while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
-            if msg.function != "heartbeat" {
+            if msg.0.function != "heartbeat" {
                 self.last_interaction_time = Utc::now().timestamp();
                 msgs.push(msg);
             }
         }
         
-        for msg in msgs {
+        for (msg, key) in msgs {
             info!("{:?}", msg);
 
-            match msg.service.as_str() {
+            let response = match msg.service.as_str() {
                 "RoboScapeWorld" => handle_world_msg(self, msg),
                 "RoboScapeEntity" => handle_entity_message(self, msg),
                 "PositionSensor" => handle_position_sensor_message(self, msg),
@@ -432,7 +446,12 @@ impl RoomData {
                 "ProximitySensor" => handle_proximity_sensor_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
+                    Err(format!("Service type {:?} not yet implemented.", t))
                 }
+            };
+
+            if let Some(key) = key {
+                key.complete(response);
             }
         }
         
@@ -544,7 +563,7 @@ impl RoomData {
     }
 
     /// Add a cuboid object to the room
-    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>, is_kinematic: bool) {
+    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
         let body_name = room.name.to_owned() + &"_" + name;
         let rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
             .ccd_enabled(true)
@@ -607,5 +626,6 @@ impl RoomData {
         let service = create_entity_service(&body_name, &cube_body_handle);
         room.services.lock().unwrap().push(service);
         room.last_full_update = 0;
+        body_name
     }
 }

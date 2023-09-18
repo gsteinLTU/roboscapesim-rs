@@ -5,7 +5,7 @@ use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription,
 use log::info;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::room::RoomData;
+use crate::{room::RoomData, vm::Intermediate};
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
@@ -114,7 +114,9 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
     }
 }
 
-pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) {
+pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String>  {
+    let mut response = vec![];
+    
     let binding = room.services.lock().unwrap();
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
@@ -122,19 +124,19 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) {
             if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
                 match msg.function.as_str() {
                     "getX" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string()]));                   
+                            response = vec![o.translation().x.to_string()];
                     },
                     "getY" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().y.to_string()]));
+                            response = vec![o.translation().y.to_string()];
                     },
                     "getZ" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().z.to_string()]));        
+                            response = vec![o.translation().z.to_string()];
                     },
                     "getPosition" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()]));              
+                            response = vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()];
                     },
                     "getHeading" => {
-                            s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![o.rotation().euler_angles().1.to_string()]));                          
+                            response = vec![o.rotation().euler_angles().1.to_string()];
                     },
                     f => {
                         info!("Unrecognized function {}", f);
@@ -147,4 +149,12 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) {
     } else {
         info!("No service found for {}", msg.device);
     }
+
+    let lock = &room.services.lock().unwrap();
+    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+    if let Some(s) = s {
+        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    }
+
+    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }

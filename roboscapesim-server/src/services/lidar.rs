@@ -7,7 +7,7 @@ use log::trace;
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
-use crate::{room::RoomData, simulation::SCALE};
+use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
 
 use super::service_struct::{setup_service, ServiceType, Service};
 
@@ -98,7 +98,9 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
     rays
 }
 
-pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
+pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+    let mut response = vec![];
+
     let binding = room.services.lock().unwrap();
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
@@ -131,13 +133,18 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) {
                     distances.push(distance);
                 }
 
-                let distances = distances.iter().map(|f| f.to_string() ).collect();
-
-                // Send result
-                s.service.lock().unwrap().enqueue_response_to(msg, Ok(distances));      
+                response = distances.iter().map(|f| f.to_string() ).collect();     
             }
         }
     }
+
+    let lock = &room.services.lock().unwrap();
+    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::LIDAR);
+    if let Some(s) = s {
+        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    }
+
+    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }
 
 #[cfg(test)]

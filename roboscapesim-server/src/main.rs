@@ -194,7 +194,7 @@ fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Re
 }
 
 async fn create_room(password: Option<String>) -> String {
-    let room = Arc::new(Mutex::new(RoomData::new(None, password, false)));
+    let room = Arc::new(Mutex::new(RoomData::new(None, password, true)));
     
     // Set last interaction to creation time
     room.lock().unwrap().last_interaction_time = Utc::now().timestamp();

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_common::ClientMessage;
-use web_sys::{window, HtmlElement, Event};
+use web_sys::{window, HtmlElement, Event, HtmlDialogElement};
 
 use crate::{util::*, console_log, GAME};
 
@@ -117,6 +117,12 @@ pub(crate) fn init_ui() {
         });
         observer.observe(window.externalVariables.roboscapedialog);
         ").unwrap();
+
+    let new_confirm_button = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector("button").unwrap().unwrap();
+
+    new_confirm_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
+        get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
+    }).into_js_value().unchecked_ref()).unwrap();
 }
 
 /// Add a button to the 3D view button bar

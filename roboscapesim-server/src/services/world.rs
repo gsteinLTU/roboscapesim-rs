@@ -7,7 +7,7 @@ use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::UpdateMessage;
 
-use crate::room::RoomData;
+use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val}};
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
@@ -112,6 +112,18 @@ pub fn create_world_service(id: &str) -> Service {
                     r#type: "number".to_owned(),
                     optional: false,
                 },
+                MethodParam {
+                    name: "kinematic".to_owned(),
+                    documentation: Some("Should the block be unaffected by physics".to_owned()),
+                    r#type: "boolean".to_owned(),
+                    optional: true,
+                },
+                MethodParam {
+                    name: "visualInfo".to_owned(),
+                    documentation: Some("Visual appearance of the object, hex color or texture".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: true,
+                },
             ],
             returns: MethodReturns {
                 documentation: None,
@@ -208,7 +220,9 @@ pub fn create_world_service(id: &str) -> Service {
     }
 }
 
-pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
+pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+    let mut response = vec![];
+
     match msg.function.as_str() {
         "reset" => {
             room.reset();
@@ -223,37 +237,40 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
         },
         "addBlock" => {
-            let x = if msg.params[0].is_f64() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
-            let y = if msg.params[1].is_f64() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
-            let z = if msg.params[2].is_f64() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
-            let heading = if msg.params[3].is_f64() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
+            let x = num_val(&msg.params[0]);
+            let y = num_val(&msg.params[1]);
+            let z = num_val(&msg.params[2]);
+            let heading = num_val(&msg.params[3]);
             let name = "block".to_string() + &room.objects.len().to_string();
-            let width = if msg.params[4].is_f64() {msg.params[4].as_f64().unwrap() } else { msg.params[4].as_str().unwrap().parse().unwrap() } as f32;
-            let height = if msg.params[5].is_f64() {msg.params[5].as_f64().unwrap() } else { msg.params[5].as_str().unwrap().parse().unwrap() } as f32;
-            let depth = if msg.params[6].is_f64() {msg.params[6].as_f64().unwrap() } else { msg.params[6].as_str().unwrap().parse().unwrap() } as f32;
+            let width = num_val(&msg.params[4]);
+            let height = num_val(&msg.params[5]);
+            let depth = num_val(&msg.params[6]);
+            let kinematic = bool_val(&msg.params[7]);
+            let visualinfo = &msg.params[8];
 
-            RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), false);
-            let lock = &room.services.lock().unwrap();
-            let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
-            if let Some(s) = s {
-                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![name]));      
-            }
+            let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), kinematic);
+            response = vec![id];            
         },
         "addRobot" => {
-            let x = if msg.params[0].is_f64() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
-            let y = if msg.params[1].is_f64() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
-            let z = if msg.params[2].is_f64() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
-            let heading = if msg.params[3].is_f64() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
+            let x = if msg.params[0].is_number() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
+            let y = if msg.params[1].is_number() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
+            let z = if msg.params[2].is_number() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
+            let heading = if msg.params[3].is_number() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
             
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
-            let lock = &room.services.lock().unwrap();
-            let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
-            if let Some(s) = s {
-                s.service.lock().unwrap().enqueue_response_to(msg, Ok(vec![id]));      
-            }
+            response = vec![id];
         },
         f => {
             info!("Unrecognized function {}", f);
+
         }
     };
+    
+    let lock = &room.services.lock().unwrap();
+    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::World);
+    if let Some(s) = s {
+        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    }
+
+    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }

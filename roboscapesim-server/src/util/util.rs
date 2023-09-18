@@ -1,3 +1,13 @@
+use serde_json::Value;
+
+pub(crate) fn num_val(val: &Value) -> f32 {
+    (if val.is_number() { val.as_f64().unwrap() } else { val.as_str().unwrap().parse().unwrap() }) as f32
+}
+
+pub(crate) fn bool_val(val: &Value) -> bool {
+    if val.is_string() { if val.to_string() == "true" { true } else { false } } else { if val.is_boolean() { val.as_bool().unwrap() } else { false }} 
+}
+
 pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
     let mut result = String::new();
 
