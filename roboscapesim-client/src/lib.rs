@@ -165,6 +165,9 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
             // TODO: Handle better
             set_title("Disconnected");
         },
+        Ok(UpdateMessage::RemoveObject(obj)) => {
+            game.borrow().models.borrow_mut().remove(&obj);
+        },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
 }

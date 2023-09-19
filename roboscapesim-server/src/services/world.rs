@@ -6,7 +6,7 @@ use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo};
-use serde_json::{json, Number};
+use serde_json::Number;
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val}};
 
@@ -134,6 +134,26 @@ pub fn create_world_service(id: &str) -> Service {
     );
 
     definition.methods.insert(
+        "removeEntity".to_owned(),
+        MethodDescription {
+            documentation: Some("Show a text message on the client displays".to_owned()),
+            params: vec![
+                MethodParam {
+                    name: "entity".to_owned(),
+                    documentation: Some("ID of entity to remove".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: false,
+                },
+            ],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec![],
+            },
+        },
+    );
+
+
+    definition.methods.insert(
         "reset".to_owned(),
         MethodDescription {
             documentation: Some("Reset conditions of World".to_owned()),
@@ -234,6 +254,12 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let timeout = msg.params[2].as_f64();
             RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone()));
         },
+        "removeEntity" => {
+            let id = msg.params[0].as_str().unwrap().to_owned();
+            if room.objects.contains_key(&id) {
+                room.remove(&id);
+            }
+        },
         "clearText" => {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
         },
@@ -261,11 +287,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
 
                                 if let Ok(color) = r {
                                     parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
-                                } else if let Err(e) = r {
+                                } else if let Err(_) = r {
                                     let r = colorsys::Rgb::from_hex_str(s);
                                     if let Ok(color) = r {
                                         parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
-                                    } else if let Err(e) = r {
+                                    } else if let Err(_) = r {
                                         info!("Failed to parse {s} as color");
                                     }
                                 }

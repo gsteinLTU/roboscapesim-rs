@@ -628,4 +628,16 @@ impl RoomData {
         room.last_full_update = 0;
         body_name
     }
+
+    pub(crate) fn remove(&mut self, id: &String) {
+        self.objects.remove(id);
+
+        if self.sim.rigid_body_labels.contains_key(id) {
+            let handle = self.sim.rigid_body_labels.get(id).unwrap().clone();
+            self.sim.rigid_body_labels.remove(id);
+            self.sim.rigid_body_set.remove(handle, &mut self.sim.island_manager, &mut self.sim.collider_set, &mut self.sim.impulse_joint_set, &mut self.sim.multibody_joint_set, true);
+        }
+
+        self.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));
+    }
 }

@@ -144,6 +144,8 @@ pub enum UpdateMessage {
     Beep(String, u16, u16),
     /// Hibernation started
     Hibernating,
+    /// Client should remove an object with a given id
+    RemoveObject(String),
 }
 
 /// Struct containing possible message types sent to the server
