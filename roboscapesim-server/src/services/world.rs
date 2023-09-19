@@ -5,7 +5,7 @@ use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription,
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
-use roboscapesim_common::UpdateMessage;
+use roboscapesim_common::{UpdateMessage, VisualInfo};
 use serde_json::{json, Number};
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val}};
@@ -247,9 +247,47 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let height = num_val(&msg.params[5]);
             let depth = num_val(&msg.params[6]);
             let kinematic = bool_val(&msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
-            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::String("".to_string()));
+            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), kinematic);
+            let mut parsed_visualinfo = VisualInfo::default();
+
+            if !visualinfo.is_null() {
+                match visualinfo {
+                    serde_json::Value::String(s) => { 
+                        if s.starts_with('#') || s.starts_with("rgb") {
+                            // attempt to parse as hex/CSS color
+                            let r: Result<colorsys::Rgb, _> = s.parse();
+
+                            if let Ok(color) = r {
+                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                            } else if let Err(e) = r {
+                                let r = colorsys::Rgb::from_hex_str(s);
+                                if let Ok(color) = r {
+                                    parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                                } else if let Err(e) = r {
+                                    info!("Failed to parse {s} as color");
+                                }
+                            }
+                        } else {
+                            // attempt to parse as color name
+                            let color = color_name::Color::val().by_string(s.to_owned());
+
+                            if let Ok(color) = color {
+                                parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
+                            }
+                        }
+                    },
+                    serde_json::Value::Array(a) =>  { 
+                        // Complex visual info, allows setting texture, shape, etc
+                    },
+                    _ => {
+                        info!("Received invalid visualinfo");
+                    }
+                }
+            }
+            info!("{:?}", visualinfo);
+
+            let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
             response = vec![id];            
         },
         "addRobot" => {

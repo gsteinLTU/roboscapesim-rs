@@ -6,7 +6,7 @@ use log::info;
 use nalgebra::{vector, UnitQuaternion};
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::{room::RoomData, vm::Intermediate};
+use crate::{room::RoomData, vm::Intermediate, util::util::num_val};
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
@@ -167,15 +167,15 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
                         }
                     },
                     "setPosition" => {
-                        let x = msg.params[0].as_f64().unwrap() as f32;
-                        let y = msg.params[1].as_f64().unwrap() as f32;
-                        let z = msg.params[2].as_f64().unwrap() as f32;
+                        let x = num_val(&msg.params[0]) as f32;
+                        let y = num_val(&msg.params[1]) as f32;
+                        let z = num_val(&msg.params[2]) as f32;
                         o.set_translation(vector![x, y, z], true)
                     },
                     "setRotation" => {
-                        let pitch = msg.params[1].as_f64().unwrap() as f32;
-                        let yaw = msg.params[2].as_f64().unwrap() as f32;
-                        let roll = msg.params[0].as_f64().unwrap() as f32;
+                        let pitch = num_val(&msg.params[1]) as f32;
+                        let yaw = num_val(&msg.params[2]) as f32;
+                        let roll = num_val(&msg.params[0]) as f32;
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                     },
                     "getPosition" => {
