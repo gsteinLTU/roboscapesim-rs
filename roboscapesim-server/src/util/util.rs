@@ -5,7 +5,14 @@ pub(crate) fn num_val(val: &Value) -> f32 {
 }
 
 pub(crate) fn bool_val(val: &Value) -> bool {
-    if val.is_string() { if val.to_string() == "true" { true } else { false } } else { if val.is_boolean() { val.as_bool().unwrap() } else { false }} 
+    match val {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().unwrap() != 0.0,
+        Value::String(s) => s == "true",
+        Value::Array(a) => a.len() > 0,
+        Value::Object(_) => true, 
+    }
 }
 
 pub fn bytes_to_hex_string(bytes: &[u8]) -> String {

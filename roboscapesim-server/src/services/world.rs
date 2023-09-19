@@ -6,6 +6,7 @@ use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::UpdateMessage;
+use serde_json::{json, Number};
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val}};
 
@@ -245,17 +246,17 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let width = num_val(&msg.params[4]);
             let height = num_val(&msg.params[5]);
             let depth = num_val(&msg.params[6]);
-            let kinematic = bool_val(&msg.params[7]);
-            let visualinfo = &msg.params[8];
+            let kinematic = bool_val(&msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
+            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::String("".to_string()));
 
             let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), None, Some(vector![width, height, depth]), kinematic);
             response = vec![id];            
         },
         "addRobot" => {
-            let x = if msg.params[0].is_number() {msg.params[0].as_f64().unwrap() } else { msg.params[0].as_str().unwrap().parse().unwrap() } as f32;
-            let y = if msg.params[1].is_number() {msg.params[1].as_f64().unwrap() } else { msg.params[1].as_str().unwrap().parse().unwrap() } as f32;
-            let z = if msg.params[2].is_number() {msg.params[2].as_f64().unwrap() } else { msg.params[2].as_str().unwrap().parse().unwrap() } as f32;
-            let heading = if msg.params[3].is_number() {msg.params[3].as_f64().unwrap() } else { msg.params[3].as_str().unwrap().parse().unwrap() } as f32;
+            let x = num_val(&msg.params[0]);
+            let y = num_val(&msg.params[1]);
+            let z = num_val(&msg.params[2]);
+            let heading = num_val(&msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0))));
             
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
             response = vec![id];
