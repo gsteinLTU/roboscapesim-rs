@@ -254,26 +254,28 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             if !visualinfo.is_null() {
                 match visualinfo {
                     serde_json::Value::String(s) => { 
-                        if s.starts_with('#') || s.starts_with("rgb") {
-                            // attempt to parse as hex/CSS color
-                            let r: Result<colorsys::Rgb, _> = s.parse();
+                        if s.len() > 0 {
+                            if s.starts_with('#') || s.starts_with("rgb") {
+                                // attempt to parse as hex/CSS color
+                                let r: Result<colorsys::Rgb, _> = s.parse();
 
-                            if let Ok(color) = r {
-                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
-                            } else if let Err(e) = r {
-                                let r = colorsys::Rgb::from_hex_str(s);
                                 if let Ok(color) = r {
                                     parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
                                 } else if let Err(e) = r {
-                                    info!("Failed to parse {s} as color");
+                                    let r = colorsys::Rgb::from_hex_str(s);
+                                    if let Ok(color) = r {
+                                        parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                                    } else if let Err(e) = r {
+                                        info!("Failed to parse {s} as color");
+                                    }
                                 }
-                            }
-                        } else {
-                            // attempt to parse as color name
-                            let color = color_name::Color::val().by_string(s.to_owned());
+                            } else {
+                                // attempt to parse as color name
+                                let color = color_name::Color::val().by_string(s.to_owned());
 
-                            if let Ok(color) = color {
-                                parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
+                                if let Ok(color) = color {
+                                    parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
+                                }
                             }
                         }
                     },
