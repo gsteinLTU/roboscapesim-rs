@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
 use std::rc::Rc;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -10,14 +10,14 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::project::{ProjectStep, IdleAction};
+use netsblox_vm::project::{ProjectStep, IdleAction, Input};
 use netsblox_vm::real_time::UtcOffset;
 use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, Command, System};
 use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::spawn;
 use tokio::time::sleep;
 use std::sync::{mpsc, Arc, Mutex};
@@ -63,13 +63,22 @@ pub struct RoomData {
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
+    #[derivative(Debug = "ignore")]
+    pub netsblox_msg_tx: mpsc::Sender<(String, Vec<(String, Value)>)>,
+    #[derivative(Debug = "ignore")]
+    pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<(String, Vec<(String, Value)>)>>>,
+    pub edit_mode: bool,
+    pub vm_thread: Option<JoinHandle<()>>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
+        let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel::<(String, Vec<(String, Value)>)>();
         let (iotscape_tx, iotscape_rx) = mpsc::channel::<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>();
+        let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
+        let vm_netsblox_msg_rx = netsblox_msg_rx.clone();
 
-        let obj = RoomData {
+        let mut obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             password,
@@ -88,6 +97,10 @@ impl RoomData {
             lidar_configs: HashMap::new(),
             last_sim_update: Instant::now(),
             iotscape_rx,
+            netsblox_msg_tx,
+            netsblox_msg_rx,
+            edit_mode,
+            vm_thread: None,
         };
 
         info!("Room {} created", obj.name);
@@ -133,7 +146,7 @@ impl RoomData {
             let vm_iotscape_tx = iotscape_tx.clone();
             let hibernating = obj.hibernating.clone();
             let id_clone = obj.name.clone();
-            thread::spawn(move || {
+            obj.vm_thread = Some(thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -143,7 +156,7 @@ impl RoomData {
                     let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
                     let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
                     info!("Loading project {}", project_name);
-                    let system = StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
+                    let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
                         request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
                             match &request {
                                 netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
@@ -185,22 +198,22 @@ impl RoomData {
                             }
                         })),
                         command: None,
-                    }, UtcOffset::UTC).await;
+                    }, UtcOffset::UTC).await);
 
                     println!(">>> public id: {}\n", system.get_public_id());
                 
-                    let system = match get_env(&role, system) {
+                    let env = match get_env(&role, system.clone()) {
                         Ok(x) => Ok(x),
                         Err(e) => {
                             Err(format!(">>> error loading project: {e:?}").to_owned())         
                         }
                     };
 
-                    let system = system.unwrap();
+                    let env = env.unwrap();
 
                     info!("Loaded");
                     // Start program
-                    system.mutate(|mc, env| {
+                    env.mutate(|mc, env| {
                         let mut proj = env.proj.borrow_mut(mc);
                         proj.input(mc, netsblox_vm::project::Input::Start);
                     });
@@ -210,8 +223,14 @@ impl RoomData {
                         if hibernating.load(Ordering::Relaxed) {
                             sleep(Duration::from_millis(50)).await;
                         } else {
-                            system.mutate(|mc, env| {
+
+                            if let Ok((msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                                system.inject_message(msg_type, values);
+                            }
+
+                            env.mutate(|mc, env| {
                                 let mut proj = env.proj.borrow_mut(mc);
+
                                 for _ in 0..STEPS_PER_IO_ITER {
                                     let res = proj.step(mc);
                                     if let ProjectStep::Error { error, proc } = &res {
@@ -223,7 +242,7 @@ impl RoomData {
                         }
                     }
                 });
-            }); 
+            })); 
         }
 
         /*
@@ -497,9 +516,12 @@ impl RoomData {
             resetter.1.reset(&mut self.sim);
         }
 
+        // Send
+        self.netsblox_msg_tx.send(("reset".to_string(), vec![])).unwrap();
+
         self.last_interaction_time = Utc::now().timestamp();
     }
-
+    
     /// Reset single robot
     pub(crate) fn reset_robot(&mut self, id: &str){
         if self.robots.contains_key(&id.to_string()) {
@@ -636,6 +658,11 @@ impl RoomData {
             let handle = self.sim.rigid_body_labels.get(id).unwrap().clone();
             self.sim.rigid_body_labels.remove(id);
             self.sim.rigid_body_set.remove(handle, &mut self.sim.island_manager, &mut self.sim.collider_set, &mut self.sim.impulse_joint_set, &mut self.sim.multibody_joint_set, true);
+        }
+
+        if self.robots.contains_key(id) {
+            // TODO: Test remove robot
+            self.robots.remove(id);
         }
 
         self.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));

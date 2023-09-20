@@ -8,7 +8,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo};
 use serde_json::Number;
 
-use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val}};
+use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
@@ -244,6 +244,8 @@ pub fn create_world_service(id: &str) -> Service {
 pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
     let mut response = vec![];
 
+    info!("{:?}", msg);
+
     match msg.function.as_str() {
         "reset" => {
             room.reset();
@@ -255,7 +257,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone()));
         },
         "removeEntity" => {
-            let id = msg.params[0].as_str().unwrap().to_owned();
+            let id = str_val(&msg.params[0]).to_owned();
             if room.objects.contains_key(&id) {
                 room.remove(&id);
             }

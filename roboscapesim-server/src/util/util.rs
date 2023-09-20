@@ -15,6 +15,16 @@ pub(crate) fn bool_val(val: &Value) -> bool {
     }
 }
 
+pub(crate) fn str_val(val: &Value) -> String {
+    match val {
+        Value::Bool(b) => if *b { "true".to_string() } else  { false.to_string() },
+        Value::Number(n) => n.as_f64().unwrap().to_string(),
+        Value::String(s) => s.clone(),
+        Value::Array(a) => if a.len() > 0 { str_val( &a[0]) } else { String::new() },
+        _ => String::new(),
+    }
+}
+
 pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
     let mut result = String::new();
 
