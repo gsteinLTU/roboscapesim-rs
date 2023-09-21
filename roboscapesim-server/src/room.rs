@@ -667,4 +667,22 @@ impl RoomData {
 
         self.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));
     }
+
+    pub(crate) fn remove_all(&mut self) {
+        for obj in self.objects.iter() {
+            self.send_to_all_clients(&UpdateMessage::RemoveObject(obj.key().to_string()));
+        }
+        self.objects.clear();
+
+        for l in self.sim.rigid_body_labels.iter() {
+            let handle = l.value().clone();
+            self.sim.rigid_body_set.remove(handle, &mut self.sim.island_manager, &mut self.sim.collider_set, &mut self.sim.impulse_joint_set, &mut self.sim.multibody_joint_set, true);
+        }
+        self.sim.rigid_body_labels.clear();
+
+        for r in self.robots.iter() {
+            self.send_to_all_clients(&UpdateMessage::RemoveObject(r.0.to_string()));
+        }
+        self.robots.clear();
+    }
 }

@@ -60,7 +60,7 @@ pub fn create_world_service(id: &str) -> Service {
                 },
             ],
             returns: MethodReturns {
-                documentation: None,
+                documentation: Some("ID of created entity".to_owned()),
                 r#type: vec!["string".to_owned()],
             },
         },
@@ -127,16 +127,100 @@ pub fn create_world_service(id: &str) -> Service {
                 },
             ],
             returns: MethodReturns {
-                documentation: None,
+                documentation: Some("ID of created entity".to_owned()),
                 r#type: vec!["string".to_owned()],
             },
         },
     );
 
     definition.methods.insert(
+        "addEntity".to_owned(),
+        MethodDescription {
+            documentation: Some("Add an entity to the World".to_owned()),
+            params: vec![
+                MethodParam {
+                    name: "type".to_owned(),
+                    documentation: Some("Type of entity (block, ball, trigger, robot)".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "x".to_owned(),
+                    documentation: Some("X position".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "y".to_owned(),
+                    documentation: Some("Y position".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "z".to_owned(),
+                    documentation: Some("Z position".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "rotation".to_owned(),
+                    documentation: Some("Yaw or list of pitch, yaw, roll".to_owned()),
+                    r#type: "number".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "options".to_owned(),
+                    documentation: Some("Two-dimensional list of options, e.g. visualInfo, size, isKinematic".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: true,
+                },
+            ],
+            returns: MethodReturns {
+                documentation: Some("ID of created entity".to_owned()),
+                r#type: vec!["string".to_owned()],
+            },
+        },
+    );
+
+    
+    definition.methods.insert(
+        "instantiateEntities".to_owned(),
+        MethodDescription {
+            documentation: Some("Add a list of Entities to the World".to_owned()),
+            params: vec![
+                MethodParam {
+                    name: "entities".to_owned(),
+                    documentation: Some("List of entity data to instantiate".to_owned()),
+                    r#type: "Array".to_owned(),
+                    optional: false,
+                },
+            ],
+            returns: MethodReturns {
+                documentation: Some("ID of created entities".to_owned()),
+                r#type: vec!["string".to_owned(), "string".to_owned()],
+            },
+        },
+    );
+
+    
+    definition.methods.insert(
+        "listEntities".to_owned(),
+        MethodDescription {
+            documentation: Some("List Entities in this World".to_owned()),
+            params: vec![],
+            returns: MethodReturns {
+                documentation: Some("IDs of Entities in World".to_owned()),
+                r#type: vec!["string".to_owned(), "string".to_owned()],
+            },
+        },
+    );
+
+    
+
+    definition.methods.insert(
         "removeEntity".to_owned(),
         MethodDescription {
-            documentation: Some("Show a text message on the client displays".to_owned()),
+            documentation: Some("Remove an entity from the world".to_owned()),
             params: vec![
                 MethodParam {
                     name: "entity".to_owned(),
@@ -152,6 +236,17 @@ pub fn create_world_service(id: &str) -> Service {
         },
     );
 
+    definition.methods.insert(
+        "removeAllEntities".to_owned(),
+        MethodDescription {
+            documentation: Some("Remove all entities from the world".to_owned()),
+            params: vec![],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec![],
+            },
+        },
+    );
 
     definition.methods.insert(
         "reset".to_owned(),
@@ -262,8 +357,40 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                 room.remove(&id);
             }
         },
+        "removeAllEntities" => {
+            room.remove_all();
+        },
         "clearText" => {
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
+        },
+        "addEntity" => {
+            let entity_type = str_val(&msg.params[0]).to_lowercase();
+            let x = num_val(&msg.params[1]);
+            let y = num_val(&msg.params[2]);
+            let z = num_val(&msg.params[3]);
+            let rotation = &msg.params[4];
+            let options = &msg.params[5];
+            
+            match entity_type.as_str() {
+                "robot" => {
+
+                },
+                "box" | "block" | "cube" | "cuboid" => {
+
+                },
+                "ball" | "sphere" | "orb" | "spheroid" => {
+
+                },
+                _ => {
+                    info!("Unknown entity type requested: {entity_type}");
+                }
+            }
+        },
+        "instantiateEntities" => {
+
+        },
+        "listEntities" => {
+
         },
         "addBlock" => {
             let x = num_val(&msg.params[0]);
@@ -277,44 +404,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let kinematic = bool_val(&msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
             let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let mut parsed_visualinfo = VisualInfo::default();
-
-            if !visualinfo.is_null() {
-                match visualinfo {
-                    serde_json::Value::String(s) => { 
-                        if s.len() > 0 {
-                            if s.starts_with('#') || s.starts_with("rgb") {
-                                // attempt to parse as hex/CSS color
-                                let r: Result<colorsys::Rgb, _> = s.parse();
-
-                                if let Ok(color) = r {
-                                    parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
-                                } else if let Err(_) = r {
-                                    let r = colorsys::Rgb::from_hex_str(s);
-                                    if let Ok(color) = r {
-                                        parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
-                                    } else if let Err(_) = r {
-                                        info!("Failed to parse {s} as color");
-                                    }
-                                }
-                            } else {
-                                // attempt to parse as color name
-                                let color = color_name::Color::val().by_string(s.to_owned());
-
-                                if let Ok(color) = color {
-                                    parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
-                                }
-                            }
-                        }
-                    },
-                    serde_json::Value::Array(a) =>  { 
-                        // Complex visual info, allows setting texture, shape, etc
-                    },
-                    _ => {
-                        info!("Received invalid visualinfo");
-                    }
-                }
-            }
+            let parsed_visualinfo = parse_visual_info(visualinfo);
             info!("{:?}", visualinfo);
 
             let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
@@ -342,4 +432,47 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+}
+
+fn parse_visual_info(visualinfo: &serde_json::Value) -> VisualInfo {
+    let mut parsed_visualinfo = VisualInfo::default();
+
+    if !visualinfo.is_null() {
+        match visualinfo {
+            serde_json::Value::String(s) => { 
+                if s.len() > 0 {
+                    if s.starts_with('#') || s.starts_with("rgb") {
+                        // attempt to parse as hex/CSS color
+                        let r: Result<colorsys::Rgb, _> = s.parse();
+
+                        if let Ok(color) = r {
+                            parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                        } else if let Err(_) = r {
+                            let r = colorsys::Rgb::from_hex_str(s);
+                            if let Ok(color) = r {
+                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                            } else if let Err(_) = r {
+                                info!("Failed to parse {s} as color");
+                            }
+                        }
+                    } else {
+                        // attempt to parse as color name
+                        let color = color_name::Color::val().by_string(s.to_owned());
+
+                        if let Ok(color) = color {
+                            parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
+                        }
+                    }
+                }
+            },
+            serde_json::Value::Array(a) =>  { 
+                // Complex visual info, allows setting texture, shape, etc
+            },
+            _ => {
+                info!("Received invalid visualinfo");
+            }
+        }
+    }
+    
+    parsed_visualinfo
 }
