@@ -96,7 +96,7 @@ pub enum Shape {
 pub enum VisualInfo {
     None,
     Color(f32, f32, f32, Shape),
-    Texture(String, Shape),
+    Texture(String, f32, f32, Shape),
     Mesh(String),
 }
 

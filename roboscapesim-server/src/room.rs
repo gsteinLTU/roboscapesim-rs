@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
@@ -10,9 +10,9 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::project::{ProjectStep, IdleAction, Input};
+use netsblox_vm::project::{ProjectStep, IdleAction};
 use netsblox_vm::real_time::UtcOffset;
-use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, Command, System};
+use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, System};
 use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
@@ -607,7 +607,7 @@ impl RoomData {
             Some(VisualInfo::Color(_, _, _, s)) => {
                 s
             },
-            Some(VisualInfo::Texture(_, s)) => {
+            Some(VisualInfo::Texture(_, _, _, s)) => {
                 s
             },
             _ => Shape::Box

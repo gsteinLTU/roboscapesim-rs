@@ -370,20 +370,102 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let z = num_val(&msg.params[3]);
             let rotation = &msg.params[4];
             let options = &msg.params[5];
-            
-            match entity_type.as_str() {
-                "robot" => {
 
+            // Parse rotation
+            let rotation = match rotation {
+                serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32, 0.0),
+                serde_json::Value::String(s) => AngVector::new(0.0, s.parse().unwrap_or_default(), 0.0),
+                serde_json::Value::Array(a) => {
+                    if a.len() >= 3 {
+                        AngVector::new(num_val(&a[0]), num_val(&a[1]), num_val(&a[2]))
+                    } else if a.len() > 0 {
+                        AngVector::new(0.0, num_val(&a[0]), 0.0)
+                    } else {
+                        AngVector::new(0.0, 0.0, 0.0)
+                    }
                 },
-                "box" | "block" | "cube" | "cuboid" => {
+                _ => AngVector::new(0.0, 0.0, 0.0)
+            };
 
-                },
-                "ball" | "sphere" | "orb" | "spheroid" => {
+            if options.is_array() {
+                // Parse options
+                let options = options.as_array().unwrap();
+                let mut kinematic = false;
+                let mut parsed_visualinfo: Option<VisualInfo> = None;
+                let mut size = vec![];
 
-                },
-                _ => {
-                    info!("Unknown entity type requested: {entity_type}");
+                for option in options {
+                    if option.is_array() {
+                        let option = option.as_array().unwrap();
+
+                        if option.len() == 2 {
+                            let key = option[0].clone();
+                            let value = option[1].clone();
+
+                            if key.is_string() {
+                                let key = key.as_str().unwrap().to_lowercase();
+                                
+                                match key.as_str() {
+                                    "kinematic" | "iskinematic" => {
+                                        kinematic = bool_val(&value);
+                                    },
+                                    "size" => {
+                                        match &value {
+                                            serde_json::Value::Number(n) => {
+                                                size = vec![n.as_f64().unwrap() as f32];
+                                            },
+                                            serde_json::Value::Array(a) =>  {
+                                                size = a.iter().map(|n| num_val(&n)).collect();
+                                            },
+                                            _ => {}
+                                        }
+                                    },
+                                    _ => {
+                                        info!("Unknown option {key}");
+                                    }
+                                }
+                                info!("Option {key} set to {value:?}");
+                            }
+                        }
+                    }
                 }
+
+                let parsed_visualinfo = parsed_visualinfo.unwrap_or_default();
+
+                let id = match entity_type.as_str() {
+                    "robot" => {
+                        Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
+                    },
+                    "box" | "block" | "cube" | "cuboid" => {
+                        let name = "block".to_string() + &room.objects.len().to_string();
+                        
+                        if size.len() == 1 {
+                            size = vec![size[0], size[0], size[0]];
+                        } else if size.len() == 0 {
+                            size = vec![1.0, 1.0, 1.0];
+                        }
+
+                        Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
+                    },
+                    "ball" | "sphere" | "orb" | "spheroid" => {
+                        let name = "ball".to_string() + &room.objects.len().to_string();
+
+                        if size.len() == 0 {
+                            size = vec![1.0];
+                        }
+
+                        Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+                    },
+                    _ => {
+                        info!("Unknown entity type requested: {entity_type}");
+                        None
+                    }
+                };
+                if let Some(id) = id {
+                    response = vec![id];
+                }
+            } else {
+                // TODO: IoTScape error
             }
         },
         "instantiateEntities" => {
