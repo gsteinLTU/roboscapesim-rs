@@ -6,7 +6,7 @@ use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
-use serde_json::Number;
+use serde_json::{Number, Value};
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
 
@@ -337,7 +337,7 @@ pub fn create_world_service(id: &str) -> Service {
 }
 
 pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
-    let mut response = vec![];
+    let mut response: Vec<Value> = vec![];
 
     info!("{:?}", msg);
 
@@ -480,7 +480,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                     }
                 };
                 if let Some(id) = id {
-                    response = vec![id];
+                    response = vec![id.into()];
                 }
             } else {
                 // TODO: IoTScape error
@@ -490,7 +490,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
 
         },
         "listEntities" => {
-
+            //response = room.objects.iter().map(|e| { }).collect();
         },
         "addBlock" => {
             let x = num_val(&msg.params[0]);
@@ -508,7 +508,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             info!("{:?}", visualinfo);
 
             let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
-            response = vec![id];            
+            response = vec![id.into()];            
         },
         "addRobot" => {
             let x = num_val(&msg.params[0]);
@@ -517,7 +517,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let heading = num_val(&msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0))));
             
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
-            response = vec![id];
+            response = vec![id.into()];
         },
         f => {
             info!("Unrecognized function {}", f);

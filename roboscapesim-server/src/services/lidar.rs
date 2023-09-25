@@ -133,7 +133,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
                     distances.push(distance);
                 }
 
-                response = distances.iter().map(|f| f.to_string() ).collect();     
+                response = distances.iter().map(|f| f.clone().into() ).collect();     
             }
         }
     }

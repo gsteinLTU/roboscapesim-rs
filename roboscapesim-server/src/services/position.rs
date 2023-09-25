@@ -124,19 +124,19 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
             if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
                 match msg.function.as_str() {
                     "getX" => {
-                            response = vec![o.translation().x.to_string()];
+                            response = vec![o.translation().x.into()];
                     },
                     "getY" => {
-                            response = vec![o.translation().y.to_string()];
+                            response = vec![o.translation().y.into()];
                     },
                     "getZ" => {
-                            response = vec![o.translation().z.to_string()];
+                            response = vec![o.translation().z.into()];
                     },
                     "getPosition" => {
-                            response = vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()];
+                            response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];
                     },
                     "getHeading" => {
-                            response = vec![o.rotation().euler_angles().1.to_string()];
+                            response = vec![o.rotation().euler_angles().1.into()];
                     },
                     f => {
                         info!("Unrecognized function {}", f);

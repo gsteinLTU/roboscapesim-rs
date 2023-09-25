@@ -89,7 +89,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
                             "getIntensity" => {
                                 // TODO: apply some function
                                 let dist = (t.translation() - o.translation()).norm();
-                                response = vec![dist.to_string()];
+                                response = vec![dist.into()];
                             },
                             "dig" => {
                                 // TODO:

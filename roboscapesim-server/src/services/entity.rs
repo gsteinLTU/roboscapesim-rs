@@ -179,11 +179,11 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                     },
                     "getPosition" => {
-                        response = vec![o.translation().x.to_string(), o.translation().y.to_string(), o.translation().z.to_string()];              
+                        response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
                     },
                     "getRotation" => {
                         let r = o.rotation().euler_angles();
-                        response = vec![r.2.to_string(), r.0.to_string(), r.1.to_string()];              
+                        response = vec![r.2.into(), r.0.into(), r.1.into()];              
                     },
                     f => {
                         info!("Unrecognized function {}", f);
