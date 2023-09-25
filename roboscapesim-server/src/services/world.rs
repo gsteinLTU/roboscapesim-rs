@@ -5,7 +5,7 @@ use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription,
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use rapier3d::prelude::AngVector;
-use roboscapesim_common::{UpdateMessage, VisualInfo};
+use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::Number;
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
@@ -141,7 +141,7 @@ pub fn create_world_service(id: &str) -> Service {
                 MethodParam {
                     name: "type".to_owned(),
                     documentation: Some("Type of entity (block, ball, trigger, robot)".to_owned()),
-                    r#type: "number".to_owned(),
+                    r#type: "string".to_owned(),
                     optional: false,
                 },
                 MethodParam {
@@ -390,44 +390,61 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             if options.is_array() {
                 // Parse options
                 let options = options.as_array().unwrap();
-                let mut kinematic = false;
-                let mut parsed_visualinfo: Option<VisualInfo> = None;
-                let mut size = vec![];
 
-                for option in options {
+                let shape = match entity_type.as_str() {
+                    "box" | "block" | "cube" | "cuboid" => Shape::Box,
+                    "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
+                    _ => Shape::Box
+                };
+
+                // Transform into dict
+                let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
                     if option.is_array() {
                         let option = option.as_array().unwrap();
 
-                        if option.len() == 2 {
-                            let key = option[0].clone();
-                            let value = option[1].clone();
-
-                            if key.is_string() {
-                                let key = key.as_str().unwrap().to_lowercase();
-                                
-                                match key.as_str() {
-                                    "kinematic" | "iskinematic" => {
-                                        kinematic = bool_val(&value);
-                                    },
-                                    "size" => {
-                                        match &value {
-                                            serde_json::Value::Number(n) => {
-                                                size = vec![n.as_f64().unwrap() as f32];
-                                            },
-                                            serde_json::Value::Array(a) =>  {
-                                                size = a.iter().map(|n| num_val(&n)).collect();
-                                            },
-                                            _ => {}
-                                        }
-                                    },
-                                    _ => {
-                                        info!("Unknown option {key}");
-                                    }
-                                }
-                                info!("Option {key} set to {value:?}");
+                        if option.len() >= 2 {
+                            if option[0].is_string() {
+                                return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
                             }
                         }
                     }
+
+                    None
+                }));
+
+                // Check for each option
+                let kinematic = options.get("kinematic").and_then(|v| Some(bool_val(v))).unwrap_or(false);
+                let mut size = vec![];
+                
+                if options.contains_key("size") {
+                    match &options.get("size").unwrap() {
+                        serde_json::Value::Number(n) => {
+                            size = vec![n.as_f64().unwrap() as f32];
+                        },
+                        serde_json::Value::Array(a) =>  {
+                            size = a.iter().map(|n| num_val(&n)).collect();
+                        },
+                        _ => {}
+                    }
+                }
+                
+                let mut parsed_visualinfo: Option<VisualInfo> = None;
+                
+                if options.contains_key("texture") {
+                    let mut uscale = 1.0;
+                    let mut vscale = 1.0;
+
+                    if options.contains_key("uscale") {
+                        uscale = num_val(options.get("uscale").unwrap());
+                    }
+
+                    if options.contains_key("vscale") {
+                        vscale = num_val(options.get("vscale").unwrap());
+                    }
+
+                    parsed_visualinfo = Some(VisualInfo::Texture(str_val(&options.get("texture").unwrap()), uscale, vscale, shape));
+                } else if options.contains_key("color") {
+                    parsed_visualinfo = Some(VisualInfo::Color(1.0, 1.0, 1.0, shape))
                 }
 
                 let parsed_visualinfo = parsed_visualinfo.unwrap_or_default();
