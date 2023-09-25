@@ -490,7 +490,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
 
         },
         "listEntities" => {
-            //response = room.objects.iter().map(|e| { }).collect();
+            response = room.objects.iter().map(|e| { 
+                vec![Value::from(e.key().clone())].into()
+            }).collect::<Vec<Value>>();
         },
         "addBlock" => {
             let x = num_val(&msg.params[0]);
