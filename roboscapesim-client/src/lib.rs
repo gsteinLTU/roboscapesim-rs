@@ -226,7 +226,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             game.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
             console_log!("Created box");
         },
-        roboscapesim_common::VisualInfo::Texture(tex, uScale, vScale, shape) => {
+        roboscapesim_common::VisualInfo::Texture(tex, uscale, vscale, shape) => {
             // TODO: create material and apply
         },
         roboscapesim_common::VisualInfo::Mesh(mesh) => {

@@ -444,11 +444,12 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
 
                     parsed_visualinfo = Some(VisualInfo::Texture(str_val(&options.get("texture").unwrap()), uscale, vscale, shape));
                 } else if options.contains_key("color") {
-                    parsed_visualinfo = Some(VisualInfo::Color(1.0, 1.0, 1.0, shape))
+                    // Parse color data
+                    parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
                 }
 
-                let parsed_visualinfo = parsed_visualinfo.unwrap_or_default();
-
+                let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+                
                 let id = match entity_type.as_str() {
                     "robot" => {
                         Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
@@ -503,7 +504,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let kinematic = bool_val(&msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
             let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let parsed_visualinfo = parse_visual_info(visualinfo);
+            let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
             info!("{:?}", visualinfo);
 
             let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
@@ -533,7 +534,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }
 
-fn parse_visual_info(visualinfo: &serde_json::Value) -> VisualInfo {
+fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
     let mut parsed_visualinfo = VisualInfo::default();
 
     if !visualinfo.is_null() {
@@ -545,11 +546,11 @@ fn parse_visual_info(visualinfo: &serde_json::Value) -> VisualInfo {
                         let r: Result<colorsys::Rgb, _> = s.parse();
 
                         if let Ok(color) = r {
-                            parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                            parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
                         } else if let Err(_) = r {
                             let r = colorsys::Rgb::from_hex_str(s);
                             if let Ok(color) = r {
-                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, roboscapesim_common::Shape::Box);
+                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
                             } else if let Err(_) = r {
                                 info!("Failed to parse {s} as color");
                             }
@@ -559,13 +560,18 @@ fn parse_visual_info(visualinfo: &serde_json::Value) -> VisualInfo {
                         let color = color_name::Color::val().by_string(s.to_owned());
 
                         if let Ok(color) = color {
-                            parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0 , color[1] as f32 / 255.0 , color[2] as f32 / 255.0 , roboscapesim_common::Shape::Box);
+                            parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0, shape);
                         }
                     }
                 }
             },
             serde_json::Value::Array(a) =>  { 
-                // Complex visual info, allows setting texture, shape, etc
+                // Color as array
+                if a.len() == 3 {
+                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) as f32 / 255.0, num_val(&a[1]) as f32 / 255.0, num_val(&a[2]) as f32 / 255.0, shape);
+                } else {
+                    // Complex visual info, allows setting texture, shape, etc?
+                }
             },
             _ => {
                 info!("Received invalid visualinfo");
