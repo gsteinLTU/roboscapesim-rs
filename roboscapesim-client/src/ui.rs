@@ -2,9 +2,10 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_common::ClientMessage;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{window, HtmlElement, Event, HtmlDialogElement};
 
-use crate::{util::*, console_log, GAME};
+use crate::{util::*, console_log, GAME, new_room};
 
 use super::send_message;
 
@@ -118,11 +119,23 @@ pub(crate) fn init_ui() {
         observer.observe(window.externalVariables.roboscapedialog);
         ").unwrap();
 
-    let new_confirm_button = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector("button").unwrap().unwrap();
+        let new_buttons = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector_all("button").unwrap();
 
-    new_confirm_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
-        get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
-    }).into_js_value().unchecked_ref()).unwrap();
+        let new_confirm_button = new_buttons.get(0).unwrap();
+        new_confirm_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
+            spawn_local(async {
+                new_room(false).await;
+            });
+            get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
+        }).into_js_value().unchecked_ref()).unwrap();
+
+        let new_edit_button = new_buttons.get(1).unwrap();
+        new_edit_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
+            spawn_local(async {
+                new_room(true).await;
+            });
+            get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
+        }).into_js_value().unchecked_ref()).unwrap();
 }
 
 /// Add a button to the 3D view button bar

@@ -22,7 +22,7 @@
 
         getMenu() {
             return {
-				'New simulation...': window.RoboScapeOnline_fns.new_room,
+				'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
 				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
@@ -39,16 +39,16 @@
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('robotsInRoom'),
 						new Extension.Palette.Block('roomID'),
+						new Extension.Palette.Block('robotsInRoom'),
 					],
 					SpriteMorph
 				),
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('robotsInRoom'),
 						new Extension.Palette.Block('roomID'),
+						new Extension.Palette.Block('robotsInRoom'),
 					],
 					StageMorph
 				),
@@ -59,20 +59,20 @@
         getBlocks() {
             return [
 				new Extension.Block(
-					'robotsInRoom',
-					'reporter',
-					'network',
-					'robots in room',
-					[],
-					function () { return RoboScapeOnline_fns.robots_in_room(); }
-				).for(SpriteMorph, StageMorph),
-				new Extension.Block(
 					'roomID',
 					'reporter',
 					'network',
 					'RoboScape room id',
 					[],
 					function () { return RoboScapeOnline_fns.room_id(); }
+				).for(SpriteMorph, StageMorph),
+				new Extension.Block(
+					'robotsInRoom',
+					'reporter',
+					'network',
+					'robots in room',
+					[],
+					function () { return RoboScapeOnline_fns.robots_in_room(); }
 				).for(SpriteMorph, StageMorph),
 
             ];
@@ -152,7 +152,7 @@
             setupDialog(element, false);
             window.externalVariables['roboscapedialog-join'] = element;
 
-            element = createDialog('Create a Session', false, ['Create', 'Close']);
+            element = createDialog('Create a Session', false, ['Create', 'Edit Mode', 'Close']);
             element.querySelector('content').innerHTML += `
             <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
             <div><label>Environment:&nbsp;</label><input id="roboscapedialog-new-environment" class="inset"/></div>
@@ -175,16 +175,16 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {room_id, new_room, show_3d_view, robots_in_room} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {robots_in_room, show_3d_view, room_id, new_sim_menu} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.room_id = room_id;
-				window.RoboScapeOnline_fns.new_room = new_room;
-				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.room_id = room_id;
+				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
 		        `;
 		    document.body.appendChild(s);
 		};

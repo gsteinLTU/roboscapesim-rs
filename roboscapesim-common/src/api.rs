@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct CreateRoomRequestData {
     pub username: String,
     pub password: Option<String>,
+    pub edit_mode: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

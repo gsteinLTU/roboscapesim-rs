@@ -60,7 +60,7 @@
             setupDialog(element, false);
             window.externalVariables['roboscapedialog-join'] = element;
 
-            element = createDialog('Create a Session', false, ['Create', 'Close']);
+            element = createDialog('Create a Session', false, ['Create', 'Edit Mode', 'Close']);
             element.querySelector('content').innerHTML += `
             <div style="margin-bottom: 12px;"><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
             <div><label>Environment:&nbsp;</label><input id="roboscapedialog-new-environment" class="inset"/></div>

@@ -11,7 +11,7 @@ use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{window, WebSocket, Node};
+use web_sys::{window, WebSocket, Node, HtmlDialogElement};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
@@ -315,7 +315,11 @@ const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting {
 
 #[netsblox_extension_menu_item("New simulation...")]
 #[wasm_bindgen]
-pub async fn new_room() {
+pub async fn new_sim_menu() {
+    get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().show();
+}
+
+pub async fn new_room(edit_mode: bool) {
     let in_room = GAME.with(|game| {
         game.borrow().in_room.get()
     });
@@ -325,7 +329,7 @@ pub async fn new_room() {
     }
 
     if !in_room {
-        let response = request_room(get_username(), None).await;
+        let response = request_room(get_username(), None, edit_mode).await;
 
         if let Ok(response) = response {
             connect(&response).await;
@@ -338,7 +342,7 @@ pub async fn new_room() {
     }
 }
 
-async fn request_room(username: String, password: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
+async fn request_room(username: String, password: Option<String>, edit_mode: bool) -> Result<CreateRoomResponseData, reqwest::Error> {
     set_title("Connecting...");
 
     let mut client_clone = Default::default();
@@ -349,7 +353,8 @@ async fn request_room(username: String, password: Option<String>) -> Result<Crea
     // TODO: get API URL through env var for deployed version
     let response = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
         username,
-        password
+        password,
+        edit_mode
     }).send().await.unwrap();
 
     response.json().await
