@@ -341,6 +341,8 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
 
     info!("{:?}", msg);
 
+    const max_coord: f32 = 10000.0;
+
     match msg.function.as_str() {
         "reset" => {
             room.reset();
@@ -365,9 +367,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         },
         "addEntity" => {
             let entity_type = str_val(&msg.params[0]).to_lowercase();
-            let x = num_val(&msg.params[1]);
-            let y = num_val(&msg.params[2]);
-            let z = num_val(&msg.params[3]);
+            let x = num_val(&msg.params[1]).clamp(-max_coord, max_coord);;
+            let y = num_val(&msg.params[2]).clamp(-max_coord, max_coord);;
+            let z = num_val(&msg.params[3]).clamp(-max_coord, max_coord);;
             let rotation = &msg.params[4];
             let options = &msg.params[5];
 
@@ -419,10 +421,10 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                 if options.contains_key("size") {
                     match &options.get("size").unwrap() {
                         serde_json::Value::Number(n) => {
-                            size = vec![n.as_f64().unwrap() as f32];
+                            size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32];
                         },
                         serde_json::Value::Array(a) =>  {
-                            size = a.iter().map(|n| num_val(&n)).collect();
+                            size = a.iter().map(|n| num_val(&n).clamp(0.05, 100000.0)).collect();
                         },
                         _ => {}
                     }
@@ -495,9 +497,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             }).collect::<Vec<Value>>();
         },
         "addBlock" => {
-            let x = num_val(&msg.params[0]);
-            let y = num_val(&msg.params[1]);
-            let z = num_val(&msg.params[2]);
+            let x = num_val(&msg.params[0]).clamp(-max_coord, max_coord);
+            let y = num_val(&msg.params[1]).clamp(-max_coord, max_coord);
+            let z = num_val(&msg.params[2]).clamp(-max_coord, max_coord);
             let heading = num_val(&msg.params[3]);
             let name = "block".to_string() + &room.objects.len().to_string();
             let width = num_val(&msg.params[4]);
