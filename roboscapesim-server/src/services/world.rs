@@ -336,12 +336,12 @@ pub fn create_world_service(id: &str) -> Service {
     }
 }
 
+const MAX_COORD: f32 = 10000.0;
+
 pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
     let mut response: Vec<Value> = vec![];
 
     info!("{:?}", msg);
-
-    const max_coord: f32 = 10000.0;
 
     match msg.function.as_str() {
         "reset" => {
@@ -366,130 +366,13 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
         },
         "addEntity" => {
-            let entity_type = str_val(&msg.params[0]).to_lowercase();
-            let x = num_val(&msg.params[1]).clamp(-max_coord, max_coord);;
-            let y = num_val(&msg.params[2]).clamp(-max_coord, max_coord);;
-            let z = num_val(&msg.params[3]).clamp(-max_coord, max_coord);;
-            let rotation = &msg.params[4];
-            let options = &msg.params[5];
-
-            // Parse rotation
-            let rotation = match rotation {
-                serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32, 0.0),
-                serde_json::Value::String(s) => AngVector::new(0.0, s.parse().unwrap_or_default(), 0.0),
-                serde_json::Value::Array(a) => {
-                    if a.len() >= 3 {
-                        AngVector::new(num_val(&a[0]), num_val(&a[1]), num_val(&a[2]))
-                    } else if a.len() > 0 {
-                        AngVector::new(0.0, num_val(&a[0]), 0.0)
-                    } else {
-                        AngVector::new(0.0, 0.0, 0.0)
-                    }
-                },
-                _ => AngVector::new(0.0, 0.0, 0.0)
-            };
-
-            if options.is_array() {
-                // Parse options
-                let options = options.as_array().unwrap();
-
-                let shape = match entity_type.as_str() {
-                    "box" | "block" | "cube" | "cuboid" => Shape::Box,
-                    "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
-                    _ => Shape::Box
-                };
-
-                // Transform into dict
-                let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
-                    if option.is_array() {
-                        let option = option.as_array().unwrap();
-
-                        if option.len() >= 2 {
-                            if option[0].is_string() {
-                                return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
-                            }
-                        }
-                    }
-
-                    None
-                }));
-
-                // Check for each option
-                let kinematic = options.get("kinematic").and_then(|v| Some(bool_val(v))).unwrap_or(false);
-                let mut size = vec![];
-                
-                if options.contains_key("size") {
-                    match &options.get("size").unwrap() {
-                        serde_json::Value::Number(n) => {
-                            size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32];
-                        },
-                        serde_json::Value::Array(a) =>  {
-                            size = a.iter().map(|n| num_val(&n).clamp(0.05, 100000.0)).collect();
-                        },
-                        _ => {}
-                    }
-                }
-                
-                let mut parsed_visualinfo: Option<VisualInfo> = None;
-                
-                if options.contains_key("texture") {
-                    let mut uscale = 1.0;
-                    let mut vscale = 1.0;
-
-                    if options.contains_key("uscale") {
-                        uscale = num_val(options.get("uscale").unwrap());
-                    }
-
-                    if options.contains_key("vscale") {
-                        vscale = num_val(options.get("vscale").unwrap());
-                    }
-
-                    parsed_visualinfo = Some(VisualInfo::Texture(str_val(&options.get("texture").unwrap()), uscale, vscale, shape));
-                } else if options.contains_key("color") {
-                    // Parse color data
-                    parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
-                }
-
-                let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
-                
-                let id = match entity_type.as_str() {
-                    "robot" => {
-                        Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
-                    },
-                    "box" | "block" | "cube" | "cuboid" => {
-                        let name = "block".to_string() + &room.objects.len().to_string();
-                        
-                        if size.len() == 1 {
-                            size = vec![size[0], size[0], size[0]];
-                        } else if size.len() == 0 {
-                            size = vec![1.0, 1.0, 1.0];
-                        }
-
-                        Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
-                    },
-                    "ball" | "sphere" | "orb" | "spheroid" => {
-                        let name = "ball".to_string() + &room.objects.len().to_string();
-
-                        if size.len() == 0 {
-                            size = vec![1.0];
-                        }
-
-                        Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
-                    },
-                    _ => {
-                        info!("Unknown entity type requested: {entity_type}");
-                        None
-                    }
-                };
-                if let Some(id) = id {
-                    response = vec![id.into()];
-                }
-            } else {
-                // TODO: IoTScape error
-            }
+            add_entity(None, &msg.params, room);
         },
         "instantiateEntities" => {
-
+            if msg.params[0].is_array() {
+                let objs = msg.params[0].as_array().unwrap();
+                response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().and_then(|s| Some(s.to_owned())), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
+            }
         },
         "listEntities" => {
             response = room.objects.iter().map(|e| { 
@@ -508,7 +391,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                 match &e.value().visual_info {
                     Some(VisualInfo::Color(r, g, b, shape)) => {
                         kind = shape.to_string();
-                        options.push(vec!["color".into(), vec![Value::from(r.clone()), Value::from(g.clone()), Value::from(b.clone())].into()]);
+                        options.push(vec!["color".into(), vec![Value::from(r * 255.0), Value::from(g * 255.0), Value::from(b * 255.0)].into()]);
                     },
                     Some(VisualInfo::Texture(t, u, v, shape)) => {
                         kind = shape.to_string();
@@ -534,9 +417,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             }).collect::<Vec<Value>>();
         },
         "addBlock" => {
-            let x = num_val(&msg.params[0]).clamp(-max_coord, max_coord);
-            let y = num_val(&msg.params[1]).clamp(-max_coord, max_coord);
-            let z = num_val(&msg.params[2]).clamp(-max_coord, max_coord);
+            let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
+            let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
+            let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
             let heading = num_val(&msg.params[3]);
             let name = "block".to_string() + &room.objects.len().to_string();
             let width = num_val(&msg.params[4]);
@@ -573,6 +456,137 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+}
+
+fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
+
+    if params.len() < 6 {
+        return None;
+    }
+    // TODO use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
+
+    let entity_type = str_val(&params[0]).to_lowercase();
+    let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
+    let y = num_val(&params[2]).clamp(-MAX_COORD, MAX_COORD);
+    let z = num_val(&params[3]).clamp(-MAX_COORD, MAX_COORD);
+    let rotation = &params[4];
+    let options = &params[5];
+
+    // Parse rotation
+    let rotation = match rotation {
+        serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32, 0.0),
+        serde_json::Value::String(s) => AngVector::new(0.0, s.parse().unwrap_or_default(), 0.0),
+        serde_json::Value::Array(a) => {
+            if a.len() >= 3 {
+                AngVector::new(num_val(&a[0]), num_val(&a[1]), num_val(&a[2]))
+            } else if a.len() > 0 {
+                AngVector::new(0.0, num_val(&a[0]), 0.0)
+            } else {
+                AngVector::new(0.0, 0.0, 0.0)
+            }
+        },
+        _ => AngVector::new(0.0, 0.0, 0.0)
+    };
+
+    if options.is_array() {
+        // Parse options
+        let options = options.as_array().unwrap();
+
+        let shape = match entity_type.as_str() {
+            "box" | "block" | "cube" | "cuboid" => Shape::Box,
+            "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
+            _ => Shape::Box
+        };
+
+        // Transform into dict
+        let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
+            if option.is_array() {
+                let option = option.as_array().unwrap();
+
+                if option.len() >= 2 {
+                    if option[0].is_string() {
+                        return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+                    }
+                }
+            }
+
+            None
+        }));
+
+        // Check for each option
+        let kinematic = options.get("kinematic").and_then(|v| Some(bool_val(v))).unwrap_or(false);
+        let mut size = vec![];
+    
+        if options.contains_key("size") {
+            match &options.get("size").unwrap() {
+                serde_json::Value::Number(n) => {
+                    size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32];
+                },
+                serde_json::Value::Array(a) =>  {
+                    size = a.iter().map(|n| num_val(&n).clamp(0.05, 100000.0)).collect();
+                },
+                _ => {}
+            }
+        }
+    
+        let mut parsed_visualinfo: Option<VisualInfo> = None;
+    
+        if options.contains_key("texture") {
+            let mut uscale = 1.0;
+            let mut vscale = 1.0;
+
+            if options.contains_key("uscale") {
+                uscale = num_val(options.get("uscale").unwrap());
+            }
+
+            if options.contains_key("vscale") {
+                vscale = num_val(options.get("vscale").unwrap());
+            }
+
+            parsed_visualinfo = Some(VisualInfo::Texture(str_val(&options.get("texture").unwrap()), uscale, vscale, shape));
+        } else if options.contains_key("color") {
+            // Parse color data
+            parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
+        }
+
+        let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+    
+        let id = match entity_type.as_str() {
+            "robot" => {
+                Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
+            },
+            "box" | "block" | "cube" | "cuboid" => {
+                let name = "block".to_string() + &room.objects.len().to_string();
+            
+                if size.len() == 1 {
+                    size = vec![size[0], size[0], size[0]];
+                } else if size.len() == 0 {
+                    size = vec![1.0, 1.0, 1.0];
+                }
+
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
+            },
+            "ball" | "sphere" | "orb" | "spheroid" => {
+                let name = "ball".to_string() + &room.objects.len().to_string();
+
+                if size.len() == 0 {
+                    size = vec![1.0];
+                }
+
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+            },
+            _ => {
+                info!("Unknown entity type requested: {entity_type}");
+                None
+            }
+        };
+        if let Some(id) = id {
+            return Some(id.into());
+        }
+    } else {
+        // TODO: IoTScape error
+    }
+    None
 }
 
 fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
