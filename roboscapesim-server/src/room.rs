@@ -594,7 +594,7 @@ impl RoomData {
             .build();
         
         if size.is_none() {
-            size = Some(vector![0.5, 0.5, 0.5]);
+            size = Some(vector![1.0, 1.0, 1.0]);
         }
 
         let mut size = size.unwrap();
@@ -614,19 +614,19 @@ impl RoomData {
         };
 
         let collider = match shape {
-            Shape::Box => ColliderBuilder::cuboid(size.x, size.y, size.z),
+            Shape::Box => ColliderBuilder::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
             Shape::Sphere => {
                 size.y = size.x;
                 size.z = size.x;
-                ColliderBuilder::ball(size.x)
+                ColliderBuilder::ball(size.x / 2.0)
             },
             Shape::Cylinder => {
                 size.z = size.x;
-                ColliderBuilder::cylinder(size.y, size.x)
+                ColliderBuilder::cylinder(size.y / 2.0, size.x / 2.0)
             },
             Shape::Capsule => {
                 size.z = size.x;
-                ColliderBuilder::capsule_y(size.y, size.x)
+                ColliderBuilder::capsule_y(size.y / 2.0, size.x / 2.0)
             },
         };
 
@@ -637,7 +637,7 @@ impl RoomData {
 
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
-            transform: Transform { position: position.into(), scaling: size * 2.0, rotation: Orientation::Euler(rotation), ..Default::default() },
+            transform: Transform { position: position.into(), scaling: size, rotation: Orientation::Euler(rotation), ..Default::default() },
             visual_info,
             is_kinematic,
             updated: true,
