@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
-use rapier3d::prelude::AngVector;
+use rapier3d::prelude::{AngVector, Real};
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
@@ -493,7 +493,44 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         },
         "listEntities" => {
             response = room.objects.iter().map(|e| { 
-                vec![Value::from(e.key().clone())].into()
+                let mut kind = "box".to_owned();
+                let pos = e.value().transform.position;
+                let rot: (f32, f32, f32) = e.value().transform.rotation.into();
+                let rot = vec![rot.0, rot.1, rot.2];
+                let scale = e.value().transform.scaling;
+                let scale = vec![scale.x, scale.y, scale.z];
+
+                let mut options: Vec<Vec<Value>> = vec![
+                    vec!["kinematic".into(), e.is_kinematic.to_string().into()],
+                    vec!["size".into(), scale.into()],
+                ];
+
+                match &e.value().visual_info {
+                    Some(VisualInfo::Color(r, g, b, shape)) => {
+                        kind = shape.to_string();
+                        options.push(vec!["color".into(), vec![Value::from(r.clone()), Value::from(g.clone()), Value::from(b.clone())].into()]);
+                    },
+                    Some(VisualInfo::Texture(t, u, v, shape)) => {
+                        kind = shape.to_string();
+                        options.push(vec!["texture".into(), t.clone().into()]);
+                        options.push(vec!["uscale".into(), u.clone().into()]);
+                        options.push(vec!["vscale".into(), v.clone().into()]);
+                    },
+                    Some(VisualInfo::Mesh(m)) => {
+                        // TODO: Implement mesh vis info
+                    },
+                    Some(VisualInfo::None) => {},
+                    None => {},
+                }
+                vec![
+                    Value::from(e.key().clone()),
+                    kind.into(),
+                    pos.x.into(),
+                    pos.y.into(),
+                    pos.z.into(),
+                    rot.into(),
+                    options.into(),
+                ].into()
             }).collect::<Vec<Value>>();
         },
         "addBlock" => {

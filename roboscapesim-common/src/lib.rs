@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use nalgebra::{Quaternion, Vector3, vector, Point3};
+use std::{collections::HashMap, fmt::Display};
+use nalgebra::{Quaternion, Vector3, vector, Point3, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 
 pub mod api;
@@ -87,9 +87,49 @@ impl From<(f32, f32, f32)> for Orientation {
     }
 }
 
+impl Into<(f32, f32, f32)> for Orientation {
+    fn into(self) -> (f32, f32, f32) {
+        match self {
+            Orientation::Euler(e) => (e.x, e.y, e.z),
+            Orientation::Quaternion(q) =>  {
+                UnitQuaternion::from_quaternion(q).euler_angles()
+            },
+        }
+    }
+}
+
+impl From<Vector3<f32>> for Orientation {
+    fn from(value: Vector3<f32>) -> Self {
+        Self::Euler(value)
+    }
+}
+
+impl Into<Vector3<f32>> for Orientation {
+    fn into(self) -> Vector3<f32> {
+        match self {
+            Orientation::Euler(e) => e,
+            Orientation::Quaternion(q) =>  {
+                let e = UnitQuaternion::from_quaternion(q).euler_angles();
+                vector![e.0, e.1, e.2]
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Shape {
     Box, Sphere, Cylinder, Capsule
+}
+
+impl Display for Shape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Shape::Box => "box",
+            Shape::Sphere => "sphere",
+            Shape::Cylinder => "cylinder",
+            Shape::Capsule => "capsule",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
