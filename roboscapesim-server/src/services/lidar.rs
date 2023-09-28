@@ -105,7 +105,9 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
-            if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
+            let simulation = room.sim.lock().unwrap();
+
+            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body.clone()) {
                 if !room.lidar_configs.contains_key(&s.id) {
                     room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
                 }
@@ -121,8 +123,8 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
                 let mut distances = vec![];
                 for ray in rays {
                     let mut distance = config.max_distance * 100.0;
-                    if let Some((handle, toi)) = room.sim.query_pipeline.cast_ray(&room.sim.rigid_body_set,
-                        &room.sim.collider_set, &ray, config.max_distance * SCALE, solid, filter
+                    if let Some((handle, toi)) = simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),
+                        &simulation.collider_set, &ray, config.max_distance * SCALE, solid, filter
                     ) {
                         // The first collider hit has the handle `handle` and it hit after
                         // the ray travelled a distance equal to `ray.dir * toi`.
@@ -134,7 +136,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
                 }
 
                 response = distances.iter().map(|f| f.clone().into() ).collect();     
-            }
+            };
         }
     }
 

@@ -15,7 +15,7 @@ use netsblox_vm::real_time::UtcOffset;
 use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, System};
 use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
-use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
 use roboscapesim_common::*;
 use serde_json::{json, Value};
 use tokio::spawn;
@@ -54,7 +54,7 @@ pub struct RoomData {
     pub roomtime: f64,
     pub robots: HashMap<String, RobotData>,
     #[derivative(Debug = "ignore")]
-    pub sim: Simulation,
+    pub sim: Arc<Mutex<Simulation>>,
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
@@ -89,7 +89,7 @@ impl RoomData {
             visitors: DashSet::new(),
             last_full_update: 0,
             roomtime: 0.0,
-            sim: Simulation::new(),
+            sim: Arc::new(Mutex::new(Simulation::new())),
             last_update: Instant::now(),
             robots: HashMap::new(),
             reseters: HashMap::new(),
@@ -440,7 +440,7 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for robot in self.robots.iter_mut() {
-            if RobotData::robot_update(robot.1, &mut self.sim, &self.sockets, delta_time) {
+            if RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time) {
                 self.last_interaction_time = Utc::now().timestamp();
             }
         }
@@ -474,14 +474,16 @@ impl RoomData {
             }
         }
         
-        self.sim.update(delta_time);
+        let simulation = &mut self.sim.lock().unwrap();
+        simulation.update(delta_time);
 
         // Update data before send
         for mut o in self.objects.iter_mut()  {
-            if self.sim.rigid_body_labels.contains_key(o.key()) {
-                let get = &self.sim.rigid_body_labels.get(o.key()).unwrap();
+            if simulation.rigid_body_labels.contains_key(o.key()) {
+                let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
                 let handle = get.value();
-                let body = self.sim.rigid_body_set.get(*handle).unwrap();
+                let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
+                let body = rigid_body_set.get(*handle).unwrap();
                 let old_transform = o.value().transform;
                 o.value_mut().transform = Transform { position: body.translation().clone().into(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
 
@@ -507,13 +509,15 @@ impl RoomData {
 
     /// Reset entire room
     pub(crate) fn reset(&mut self){
+        let simulation = &mut self.sim.lock().unwrap();
+
         // Reset robots
         for r in self.robots.iter_mut() {
-            r.1.reset(&mut self.sim);
+            r.1.reset(simulation);
         }
 
         for resetter in self.reseters.iter_mut() {
-            resetter.1.reset(&mut self.sim);
+            resetter.1.reset(simulation);
         }
 
         // Send
@@ -525,7 +529,7 @@ impl RoomData {
     /// Reset single robot
     pub(crate) fn reset_robot(&mut self, id: &str){
         if self.robots.contains_key(&id.to_string()) {
-            self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim);
+            self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim.lock().unwrap());
         } else {
             info!("Request to reset non-existing robot {}", id);
         }
@@ -542,9 +546,10 @@ impl RoomData {
 
     /// Add a robot to a room
     pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) -> String {
-        let mut robot = RobotData::create_robot_body(&mut room.sim, None, Some(position), Some(orientation));
+        let simulation = &mut room.sim.lock().unwrap();
+        let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation));
         let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
-        room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
+        simulation.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {
             name: robot_id.clone(),
             transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
@@ -566,7 +571,7 @@ impl RoomData {
         if wheel_debug {
             let mut i = 0;
             for wheel in &robot.wheel_bodies {
-                room.sim.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
+                simulation.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
                 room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
                     name: format!("wheel_{}", i).into(),
                     transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
@@ -630,10 +635,12 @@ impl RoomData {
             },
         };
 
+        let simulation = &mut room.sim.lock().unwrap();
         let collider = collider.restitution(0.3).density(0.1).build();
-        let cube_body_handle = room.sim.rigid_body_set.insert(rigid_body);
-        room.sim.collider_set.insert_with_parent(collider, cube_body_handle, &mut room.sim.rigid_body_set);
-        room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+        let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
+        let rigid_body_set = simulation.rigid_body_set.clone();
+        simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());
+        simulation.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
 
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
@@ -643,7 +650,7 @@ impl RoomData {
             updated: true,
         });
 
-        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &room.sim)));
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &simulation)));
 
         let service = create_entity_service(&body_name, &cube_body_handle);
         room.services.lock().unwrap().push(service);
@@ -652,16 +659,17 @@ impl RoomData {
     }
 
     pub(crate) fn remove(&mut self, id: &String) {
+        let simulation = &mut self.sim.lock().unwrap();
         self.objects.remove(id);
 
-        if self.sim.rigid_body_labels.contains_key(id) {
-            let handle = self.sim.rigid_body_labels.get(id).unwrap().clone();
-            self.sim.rigid_body_labels.remove(id);
-            self.sim.rigid_body_set.remove(handle, &mut self.sim.island_manager, &mut self.sim.collider_set, &mut self.sim.impulse_joint_set, &mut self.sim.multibody_joint_set, true);
+        if simulation.rigid_body_labels.contains_key(id) {
+            let handle = simulation.rigid_body_labels.get(id).unwrap().clone();
+            simulation.rigid_body_labels.remove(id);
+            simulation.remove_body(handle);
         }
 
         if self.robots.contains_key(id) {
-            // TODO: Test remove robot
+            simulation.cleanup_robot(self.robots.get(id).unwrap());
             self.robots.remove(id);
         }
 
@@ -674,15 +682,22 @@ impl RoomData {
         }
         self.objects.clear();
 
-        for l in self.sim.rigid_body_labels.iter() {
-            let handle = l.value().clone();
-            self.sim.rigid_body_set.remove(handle, &mut self.sim.island_manager, &mut self.sim.collider_set, &mut self.sim.impulse_joint_set, &mut self.sim.multibody_joint_set, true);
+        let simulation = &mut self.sim.lock().unwrap();
+        let labels = simulation.rigid_body_labels.clone();
+        for l in labels.iter() {
+            if !l.key().starts_with("robot_") {
+                let handle = l.value().clone();
+                simulation.remove_body(handle);
+            }
         }
-        self.sim.rigid_body_labels.clear();
+        simulation.rigid_body_labels.clear();
 
         for r in self.robots.iter() {
+            simulation.cleanup_robot(r.1);
+
             self.send_to_all_clients(&UpdateMessage::RemoveObject(r.0.to_string()));
         }
         self.robots.clear();
+        info!("All entities removed from {}", self.name);
     }
 }

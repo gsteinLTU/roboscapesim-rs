@@ -1,10 +1,14 @@
+use std::sync::{Arc, Mutex};
+
 use dashmap::DashMap;
 use nalgebra::Vector3;
 use rapier3d::prelude::*;
 
+use crate::robot::RobotData;
+
 /// Holds rapier-related structs together
 pub struct Simulation {
-    pub rigid_body_set: RigidBodySet,
+    pub rigid_body_set: Arc<Mutex<RigidBodySet>>,
     pub collider_set: ColliderSet,
     pub gravity: Vector3<f32>,
     pub integration_parameters: IntegrationParameters,
@@ -28,7 +32,7 @@ impl Simulation {
     /// Instantiate the simulation objects with default settings
     pub fn new() -> Simulation {
         Simulation {
-            rigid_body_set: RigidBodySet::new(),
+            rigid_body_set: Arc::new(Mutex::new(RigidBodySet::new())),
             collider_set: ColliderSet::new(),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
             integration_parameters: IntegrationParameters { max_ccd_substeps: 8, max_stabilization_iterations: 2, ..Default::default() },
@@ -58,7 +62,7 @@ impl Simulation {
             &mut self.island_manager,
             &mut self.broad_phase,
             &mut self.narrow_phase,
-            &mut self.rigid_body_set,
+            &mut self.rigid_body_set.lock().unwrap(),
             &mut self.collider_set,
             &mut self.impulse_joint_set,
             &mut self.multibody_joint_set,
@@ -67,6 +71,22 @@ impl Simulation {
             &self.physics_hooks,
             &self.event_handler,
           );    
-          self.query_pipeline.update(&self.rigid_body_set, &self.collider_set);
+          self.query_pipeline.update(&self.rigid_body_set.lock().unwrap(), &self.collider_set);
+    }
+
+    pub fn cleanup_robot(&mut self, r: &RobotData) {
+        // Clean up robot parts
+        self.multibody_joint_set.remove_multibody_articulations(r.body_handle.clone(), false);
+
+        for handle in &r.wheel_bodies {
+            self.multibody_joint_set.remove_multibody_articulations(handle.clone(), false);
+            self.rigid_body_set.lock().unwrap().remove(handle.clone(), &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
+        }
+    
+        self.rigid_body_set.lock().unwrap().remove(r.body_handle.clone(), &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
+    }
+
+    pub fn remove_body(&mut self, handle: RigidBodyHandle) {
+       self.rigid_body_set.lock().unwrap().remove(handle, &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
     }
 }

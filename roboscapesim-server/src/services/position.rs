@@ -121,7 +121,9 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
-            if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
+            let simulation = &mut room.sim.lock().unwrap();
+
+            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body.clone()) {
                 match msg.function.as_str() {
                     "getX" => {
                             response = vec![o.translation().x.into()];
@@ -144,7 +146,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
                 };
             } else {
                 info!("Unrecognized object {}", msg.device);
-            }
+            };
         }
     } else {
         info!("No service found for {}", msg.device);

@@ -92,10 +92,10 @@ impl RobotData {
             .ccd_enabled(true)
             .can_sleep(false);
         
-        let vehicle_handle = sim.rigid_body_set.insert(rigid_body);
+        let vehicle_handle = sim.rigid_body_set.lock().unwrap().insert(rigid_body);
         
         let collider = ColliderBuilder::cuboid(hw, hh, hd).density(25.0);
-        sim.collider_set.insert_with_parent(collider, vehicle_handle, &mut sim.rigid_body_set);
+        sim.collider_set.insert_with_parent(collider, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
         let wheel_positions = [
@@ -117,7 +117,7 @@ impl RobotData {
             
             let wheel_pos_in_world = Point3::new(box_center.x + pos.x, box_center.y + pos.y, box_center.z + pos.z);
 
-            let wheel_rb = sim.rigid_body_set.insert(
+            let wheel_rb = sim.rigid_body_set.lock().unwrap().insert(
                 RigidBodyBuilder::dynamic()
                     .translation(vector![
                         wheel_pos_in_world.x,
@@ -128,7 +128,7 @@ impl RobotData {
 
             let collider = ColliderBuilder::cylinder(0.01  * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
             //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
-            sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set);
+            sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
                 .local_anchor1(pos)
@@ -147,7 +147,7 @@ impl RobotData {
         for pos in ball_wheel_positions {        
             let wheel_pos_in_world = Point3::new(box_center.x + pos.x, box_center.y + pos.y, box_center.z + pos.z);
 
-            let wheel_rb = sim.rigid_body_set.insert(
+            let wheel_rb = sim.rigid_body_set.lock().unwrap().insert(
                 RigidBodyBuilder::dynamic()
                     .translation(vector![
                         wheel_pos_in_world.x,
@@ -158,7 +158,7 @@ impl RobotData {
             );
 
             let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.2);
-            sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set);
+            sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
                 .local_anchor1(pos)
@@ -170,17 +170,17 @@ impl RobotData {
 
         // Create whiskers
         let whisker_l = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * -0.4]);
-        let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set);
+        let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
         let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
-        let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set);
+        let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         if let Some(p) = position {
-            sim.rigid_body_set.get_mut(vehicle_handle).unwrap().set_translation(p, true);
+            sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_translation(p, true);
             box_center = p.into();
         }
 
         if let Some(o) = orientation {
-            sim.rigid_body_set.get_mut(vehicle_handle).unwrap().set_rotation(o, true);
+            sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_rotation(o, true);
             box_rotation = o;
         }
 
@@ -328,7 +328,8 @@ impl RobotData {
                     trace!("OnGetRange");
 
                     // Setup raycast
-                    let body = sim.rigid_body_set.get(robot.body_handle).unwrap();
+                    let rigid_body_set = &sim.rigid_body_set.lock().unwrap();
+                    let body = rigid_body_set.get(robot.body_handle).unwrap();
                     let body_pos = body.translation();
                     let offset = body.rotation() * vector![0.17, 0.05, 0.0];
                     let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
@@ -338,7 +339,7 @@ impl RobotData {
                     let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
 
                     let mut distance = (max_toi * 100.0) as u16;
-                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set,
+                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set.lock().unwrap(),
                         &sim.collider_set, &ray, max_toi, solid, filter
                     ) {
                         // The first collider hit has the handle `handle` and it hit after
@@ -434,13 +435,14 @@ impl RobotData {
 impl Resettable for RobotData {
     fn reset(&mut self, sim: &mut Simulation) {
         // Reset position
+        let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
         for wheel in &self.wheel_bodies {
-            let body = sim.rigid_body_set.get_mut(wheel.clone()).unwrap();
+            let body = rigid_body_set.get_mut(wheel.clone()).unwrap();
             body.set_linvel(vector![0.0, 0.0, 0.0], false);
             body.set_angvel(vector![0.0, 0.0, 0.0], false);
         }
 
-        let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
+        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
         body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
         body.set_linvel(vector![0.0, 0.0, 0.0], false);
         body.set_angvel(vector![0.0, 0.0, 0.0], false);

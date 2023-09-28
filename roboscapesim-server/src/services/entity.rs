@@ -157,11 +157,11 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
     let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::Entity);
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
-            if let Some(o) = room.sim.rigid_body_set.get_mut(body.clone()) {
+            if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(body.clone()) {
                 match msg.function.as_str() {
                     "reset" => {
                         if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
-                            r.reset(&mut room.sim);
+                            r.reset(&mut room.sim.lock().unwrap());
                         } else {
                             info!("Unrecognized device {}", msg.device);
                         }

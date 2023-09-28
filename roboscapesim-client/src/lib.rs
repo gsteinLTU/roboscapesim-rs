@@ -227,7 +227,28 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             console_log!("Created box");
         },
         roboscapesim_common::VisualInfo::Texture(tex, uscale, vscale, shape) => {
-            // TODO: create material and apply
+            let m = match shape {
+                roboscapesim_common::Shape::Box => Rc::new(BabylonMesh::create_box(&game.borrow().scene.borrow(), &obj.name, BoxOptions {
+                    ..Default::default()
+                })),
+                roboscapesim_common::Shape::Sphere => Rc::new(BabylonMesh::create_sphere(&game.borrow().scene.borrow(), &obj.name, SphereOptions { 
+                    ..Default::default() 
+                })),
+                _ => { todo!() }
+            };
+            let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
+
+            let tex = Texture::new(get_asset_path(&("textures/".to_owned() + tex + ".png")).as_str());
+            tex.set_u_scale(uscale.to_owned().into());
+            tex.set_v_scale(vscale.to_owned().into());
+            material.set_diffuse_texture(tex);
+
+            material.set_diffuse_color((0.5, 0.5, 0.5).into());
+            m.set_material(&material);
+            m.set_receive_shadows(true);
+            game.borrow().shadow_generator.add_shadow_caster(&m, true);
+            apply_transform(m.clone(), obj.transform);
+            game.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
         },
         roboscapesim_common::VisualInfo::Mesh(mesh) => {
             let game_rc = game.clone();
@@ -235,7 +256,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             let obj = Arc::new(obj.clone());
             spawn_local(async move {
                 // TODO: detect assets dir
-                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, ("http://localhost:4000/assets/".to_owned() + &mesh).as_str()).await);
+                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, get_asset_path(&mesh).as_str()).await);
                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                 apply_transform(m.clone(), obj.transform);
                 game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());

@@ -83,8 +83,10 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
     if let Some(s) = s {
         if let Some(body) = s.attached_rigid_bodies.get("main") {
             if let Some(target_body) = s.attached_rigid_bodies.get("target") {
-                if let Some(o) = room.sim.rigid_body_set.get(body.clone()) {
-                    if let Some(t) = room.sim.rigid_body_set.get(target_body.clone()) {
+                let simulation = &mut room.sim.lock().unwrap();
+                
+                if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body.clone()) {
+                    if let Some(t) = simulation.rigid_body_set.lock().unwrap().get(target_body.clone()) {
                         match msg.function.as_str() {
                             "getIntensity" => {
                                 // TODO: apply some function
@@ -101,7 +103,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
                     }
                 } else {
                     info!("Unrecognized object {}", msg.device);
-                }
+                };
             }
         }
     } else {

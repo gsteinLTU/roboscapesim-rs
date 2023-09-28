@@ -16,15 +16,17 @@ pub mod resettable {
 
     impl RigidBodyResetter {
         pub fn new(body_handle: RigidBodyHandle, sim: &Simulation) -> RigidBodyResetter {
-            let body = sim.rigid_body_set.get(body_handle).unwrap();
+            let binding = sim.rigid_body_set.lock().unwrap();
+            let body = binding.get(body_handle).unwrap();
             RigidBodyResetter { body_handle, initial_position: body.position().to_owned(), initial_angvel: body.angvel().to_owned(), initial_linvel: body.linvel().to_owned()}
         }
     }
 
     impl Resettable for RigidBodyResetter {
         fn reset(&mut self, sim: &mut Simulation) {
-            if sim.rigid_body_set.contains(self.body_handle){
-                let body = sim.rigid_body_set.get_mut(self.body_handle).unwrap();
+            if sim.rigid_body_set.lock().unwrap().contains(self.body_handle){
+                let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+                let body = rigid_body_set.get_mut(self.body_handle).unwrap();
                 body.set_position(self.initial_position, true);
                 body.set_angvel(self.initial_angvel, true);
                 body.set_linvel(self.initial_linvel, true);

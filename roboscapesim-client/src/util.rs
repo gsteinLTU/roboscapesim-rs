@@ -86,6 +86,11 @@ pub(crate) fn get_selected_robot() -> Option<String> {
     }
 }
 
+pub(crate) fn get_asset_path(asset: &str) -> String {
+    // TODO: Determine correct path
+    "http://localhost:4000/assets/".to_owned() + asset
+}
+
 #[macro_export]
 macro_rules! console_log {
     ($($tokens: tt)*) => {
