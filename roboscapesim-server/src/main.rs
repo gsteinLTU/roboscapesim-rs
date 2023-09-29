@@ -1,5 +1,4 @@
 use anyhow::Result;
-use axum::{routing::{post, get}, Router, http::{Method, header}};
 use chrono::Utc;
 use roboscapesim_common::ClientMessage;
 use room::RoomData;
@@ -9,13 +8,12 @@ use tokio_tungstenite::tungstenite::Message;
 use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
 use tokio::{time::{Duration, self, sleep}, task, net::TcpListener};
-use tower_http::cors::{Any, CorsLayer};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use log::{info, trace, error};
 use futures::{SinkExt, StreamExt, FutureExt};
 
-use crate::{api::{server_status, rooms_list, get_external_ip, EXTERNAL_IP, post_create}, socket::accept_connection};
+use crate::{api::{get_external_ip, EXTERNAL_IP, create_api}, socket::accept_connection};
 
 mod room;
 mod robot;
@@ -52,23 +50,9 @@ async fn main() {
         let _ = EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
     }
 
-    // build our application with a route
-    let app = Router::new()
-    .route("/server/status", get(server_status))
-    .route("/rooms/list", get(rooms_list))
-    .route("/rooms/create", post(post_create))
-	.layer(CorsLayer::new()
-        // allow `GET` and `POST` when accessing the resource
-        .allow_methods([Method::GET, Method::POST])
-        // allow requests from any origin
-        .allow_origin(Any)
-	    .allow_headers([header::CONTENT_TYPE]));
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    info!("Running server on port 3000 ...");
-
-    let server = axum::Server::bind(&addr)
-        .serve(app.into_make_service());
+    // Start API server
+    create_api(SocketAddr::from(([0, 0, 0, 0], 3000))).await;
+    info!("Running API server on port 3000 ...");
 
     // Loop listening for new WS connections
     let _ws_loop = task::spawn(ws_accept());
@@ -79,10 +63,6 @@ async fn main() {
 
     // Update simulations
     let _update_loop = task::spawn(update_fn());
-
-    if let Err(err) = server.await {
-        error!("server error: {}", err);
-    }
 }
 
 async fn update_fn() {

@@ -1,13 +1,35 @@
 use axum::{Json, response::IntoResponse};
-use log::info;
+use log::{info, error};
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData};
 use serde::Serialize;
-use std::sync::Mutex;
+use std::{sync::Mutex, net::SocketAddr};
 use axum_macros::debug_handler;
+use axum::{routing::{post, get}, Router, http::{Method, header}};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{ROOMS, MAX_ROOMS, create_room};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
+
+pub async fn create_api(addr: SocketAddr) {
+    let app = Router::new()
+    .route("/server/status", get(server_status))
+    .route("/rooms/list", get(rooms_list))
+    .route("/rooms/create", post(post_create))
+	.layer(CorsLayer::new()
+        // allow `GET` and `POST` when accessing the resource
+        .allow_methods([Method::GET, Method::POST])
+        // allow requests from any origin
+        .allow_origin(Any)
+	    .allow_headers([header::CONTENT_TYPE]));
+    
+    let server = axum::Server::bind(&addr)
+        .serve(app.into_make_service());
+
+    if let Err(err) = server.await {
+        error!("server error: {}", err);
+    }
+}
 
 #[derive(Debug, Serialize)]
 struct ServerStatus {
