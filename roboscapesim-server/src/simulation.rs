@@ -76,14 +76,14 @@ impl Simulation {
 
     pub fn cleanup_robot(&mut self, r: &RobotData) {
         // Clean up robot parts
-        self.multibody_joint_set.remove_multibody_articulations(r.body_handle.clone(), false);
+        self.multibody_joint_set.remove_multibody_articulations(r.body_handle, false);
 
         for handle in &r.wheel_bodies {
-            self.multibody_joint_set.remove_multibody_articulations(handle.clone(), false);
-            self.rigid_body_set.lock().unwrap().remove(handle.clone(), &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
+            self.multibody_joint_set.remove_multibody_articulations(*handle, false);
+            self.rigid_body_set.lock().unwrap().remove(*handle, &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
         }
     
-        self.rigid_body_set.lock().unwrap().remove(r.body_handle.clone(), &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
+        self.rigid_body_set.lock().unwrap().remove(r.body_handle, &mut self.island_manager, &mut self.collider_set, &mut self.impulse_joint_set, &mut self.multibody_joint_set, true);
     }
 
     pub fn remove_body(&mut self, handle: RigidBodyHandle) {

@@ -1,5 +1,6 @@
 use std::net::UdpSocket;
 use std::time::{SystemTime, Duration};
+use std::f32::consts::FRAC_PI_2;
 
 use chrono::Utc;
 use dashmap::DashMap;
@@ -56,7 +57,7 @@ impl RobotData {
         let mut buf = Vec::<u8>::new();
 
         // MAC address
-        let mut mac = Vec::from(self.mac.clone());
+        let mut mac = Vec::from(self.mac);
         buf.append(&mut mac);
 
         // Timestamp
@@ -66,11 +67,11 @@ impl RobotData {
         // Message
         buf.append(&mut Vec::from(message));
 
-        self.socket.as_mut().unwrap().send(&buf.as_slice())
+        self.socket.as_mut().unwrap().send(buf.as_slice())
     }
 
     pub fn create_robot_body(sim: &mut Simulation, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
-        let mac = mac.unwrap_or_else(|| generate_random_mac_address());
+        let mac = mac.unwrap_or_else(generate_random_mac_address);
         let id = bytes_to_hex_string(&mac).to_owned();
         info!("Creating robot {}", id);
 
@@ -123,7 +124,7 @@ impl RobotData {
                         wheel_pos_in_world.x,
                         wheel_pos_in_world.y,
                         wheel_pos_in_world.z
-                    ]).rotation(vector![3.14159 / 2.0, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
+                    ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
             );
 
             let collider = ColliderBuilder::cylinder(0.01  * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
@@ -133,7 +134,7 @@ impl RobotData {
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
                 .local_anchor1(pos)
                 .local_anchor2(point![0.0, 0.01 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
-                .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![3.14159 / 2.0, 0.0, 0.0]))
+                .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
                 .motor_max_force(JointAxis::AngZ, 1000.0)
                 .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
                 .motor_velocity(JointAxis::AngZ, 0.0, 4.0)
@@ -318,7 +319,7 @@ impl RobotData {
                         let duration = u16::from_le_bytes([buf[3], buf[4]]);
 
                         // Beep is only on client-side
-                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| kvp.value().clone()));
+                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| *kvp.value()));
                     }
                 },
                 b'L' => { 

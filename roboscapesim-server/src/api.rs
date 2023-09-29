@@ -59,7 +59,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
     for r in ROOMS.iter() {
         let room_data = r.lock().unwrap();
         // Skip if user not in visitors
-        if user_filter.len() > 0 && room_data.visitors.contains(&user_filter) {
+        if !user_filter.is_empty() && room_data.visitors.contains(&user_filter) {
             continue;
         }
 

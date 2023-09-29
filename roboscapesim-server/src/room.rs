@@ -582,7 +582,7 @@ impl RoomData {
             for wheel in &robot.wheel_bodies {
                 simulation.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
                 room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
-                    name: format!("wheel_{}", i).into(),
+                    name: format!("wheel_{}", i),
                     transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
                     visual_info: Some(VisualInfo::default()),
                     is_kinematic: false,
@@ -695,8 +695,7 @@ impl RoomData {
         let labels = simulation.rigid_body_labels.clone();
         for l in labels.iter() {
             if !l.key().starts_with("robot_") {
-                let handle = l.value().clone();
-                simulation.remove_body(handle);
+                simulation.remove_body(*l.value());
             }
         }
         simulation.rigid_body_labels.clear();

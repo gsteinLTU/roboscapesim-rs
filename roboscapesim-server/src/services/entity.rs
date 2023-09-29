@@ -167,15 +167,15 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
                         }
                     },
                     "setPosition" => {
-                        let x = num_val(&msg.params[0]) as f32;
-                        let y = num_val(&msg.params[1]) as f32;
-                        let z = num_val(&msg.params[2]) as f32;
+                        let x = num_val(&msg.params[0]);
+                        let y = num_val(&msg.params[1]);
+                        let z = num_val(&msg.params[2]);
                         o.set_translation(vector![x, y, z], true)
                     },
                     "setRotation" => {
-                        let pitch = num_val(&msg.params[1]) as f32;
-                        let yaw = num_val(&msg.params[2]) as f32;
-                        let roll = num_val(&msg.params[0]) as f32;
+                        let pitch = num_val(&msg.params[1]);
+                        let yaw = num_val(&msg.params[2]);
+                        let roll = num_val(&msg.params[0]);
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                     },
                     "getPosition" => {

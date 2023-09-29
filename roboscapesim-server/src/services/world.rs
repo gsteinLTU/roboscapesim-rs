@@ -399,8 +399,8 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                     Some(VisualInfo::Texture(t, u, v, shape)) => {
                         kind = shape.to_string();
                         options.push(vec!["texture".into(), t.clone().into()]);
-                        options.push(vec!["uscale".into(), u.clone().into()]);
-                        options.push(vec!["vscale".into(), v.clone().into()]);
+                        options.push(vec!["uscale".into(), (*u).into()]);
+                        options.push(vec!["vscale".into(), (*v).into()]);
                     },
                     Some(VisualInfo::Mesh(m)) => {
                         // TODO: Implement mesh vis info
@@ -428,7 +428,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let width = num_val(&msg.params[4]);
             let height = num_val(&msg.params[5]);
             let depth = num_val(&msg.params[6]);
-            let kinematic = bool_val(&msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
+            let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
             let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
             let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
@@ -441,7 +441,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let x = num_val(&msg.params[0]);
             let y = num_val(&msg.params[1]);
             let z = num_val(&msg.params[2]);
-            let heading = num_val(&msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0))));
+            let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0))));
             
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
             response = vec![id.into()];
@@ -526,7 +526,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
                     size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32];
                 },
                 serde_json::Value::Array(a) =>  {
-                    size = a.iter().map(|n| num_val(&n).clamp(0.05, 100000.0)).collect();
+                    size = a.iter().map(|n| num_val(n).clamp(0.05, 100000.0)).collect();
                 },
                 _ => {}
             }
@@ -598,7 +598,7 @@ fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common:
     if !visualinfo.is_null() {
         match visualinfo {
             serde_json::Value::String(s) => { 
-                if s.len() > 0 {
+                if !s.is_empty() {
                     if s.starts_with('#') || s.starts_with("rgb") {
                         // attempt to parse as hex/CSS color
                         let r: Result<colorsys::Rgb, _> = s.parse();
@@ -626,7 +626,7 @@ fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common:
             serde_json::Value::Array(a) =>  { 
                 // Color as array
                 if a.len() == 3 {
-                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) as f32 / 255.0, num_val(&a[1]) as f32 / 255.0, num_val(&a[2]) as f32 / 255.0, shape);
+                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
                 } else {
                     // Complex visual info, allows setting texture, shape, etc?
                 }

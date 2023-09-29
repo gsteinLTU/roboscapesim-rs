@@ -102,7 +102,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
     let announce_period = Duration::from_secs(30);
 
     let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), rigid_body.clone());
+    attached_rigid_bodies.insert("main".into(), *rigid_body);
 
     Service {
         id: id.to_string(),
@@ -123,7 +123,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
         if let Some(body) = s.attached_rigid_bodies.get("main") {
             let simulation = &mut room.sim.lock().unwrap();
 
-            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body.clone()) {
+            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
                 match msg.function.as_str() {
                     "getX" => {
                             response = vec![o.translation().x.into()];
