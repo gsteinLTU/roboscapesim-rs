@@ -438,7 +438,7 @@ impl Resettable for RobotData {
         // Reset position
         let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
         for wheel in &self.wheel_bodies {
-            let body = rigid_body_set.get_mut(wheel.clone()).unwrap();
+            let body = rigid_body_set.get_mut(*wheel).unwrap();
             body.set_linvel(vector![0.0, 0.0, 0.0], false);
             body.set_angvel(vector![0.0, 0.0, 0.0], false);
         }

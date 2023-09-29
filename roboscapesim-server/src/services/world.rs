@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
-use rapier3d::prelude::{AngVector, Real};
+use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
@@ -354,7 +354,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let id = msg.params[0].as_str().unwrap().to_owned();
             let text = msg.params[1].as_str().unwrap().to_owned();
             let timeout = msg.params[2].as_f64();
-            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.value().clone()));
+            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| *p.value()));
         },
         "removeEntity" => {
             let id = str_val(&msg.params[0]).to_owned();
@@ -366,7 +366,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             room.remove_all();
         },
         "clearText" => {
-            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.value().clone()));
+            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| *p.value()));
         },
         "addEntity" => {
             add_entity(None, &msg.params, room);
@@ -374,7 +374,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         "instantiateEntities" => {
             if msg.params[0].is_array() {
                 let objs = msg.params[0].as_array().unwrap();
-                response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().and_then(|s| Some(s.to_owned())), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
+                response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().map(|s| s.to_owned()), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
             }
         },
         "listEntities" => {
@@ -402,7 +402,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                         options.push(vec!["uscale".into(), (*u).into()]);
                         options.push(vec!["vscale".into(), (*v).into()]);
                     },
-                    Some(VisualInfo::Mesh(m)) => {
+                    Some(VisualInfo::Mesh(_m)) => {
                         // TODO: Implement mesh vis info
                     },
                     Some(VisualInfo::None) => {},
@@ -461,7 +461,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }
 
-fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
+fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
 
     if params.len() < 6 {
         return None;
@@ -482,7 +482,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
         serde_json::Value::Array(a) => {
             if a.len() >= 3 {
                 AngVector::new(num_val(&a[0]), num_val(&a[1]), num_val(&a[2]))
-            } else if a.len() > 0 {
+            } else if !a.is_empty() {
                 AngVector::new(0.0, num_val(&a[0]), 0.0)
             } else {
                 AngVector::new(0.0, 0.0, 0.0)
@@ -506,10 +506,8 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
             if option.is_array() {
                 let option = option.as_array().unwrap();
 
-                if option.len() >= 2 {
-                    if option[0].is_string() {
-                        return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
-                    }
+                if option.len() >= 2 && option[0].is_string() {
+                    return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
                 }
             }
 
@@ -517,7 +515,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
         }));
 
         // Check for each option
-        let kinematic = options.get("kinematic").and_then(|v| Some(bool_val(v))).unwrap_or(false);
+        let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
         let mut size = vec![];
     
         if options.contains_key("size") {
@@ -546,7 +544,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
                 vscale = num_val(options.get("vscale").unwrap());
             }
 
-            parsed_visualinfo = Some(VisualInfo::Texture(str_val(&options.get("texture").unwrap()), uscale, vscale, shape));
+            parsed_visualinfo = Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
         } else if options.contains_key("color") {
             // Parse color data
             parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
@@ -563,7 +561,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
             
                 if size.len() == 1 {
                     size = vec![size[0], size[0], size[0]];
-                } else if size.len() == 0 {
+                } else if size.is_empty() {
                     size = vec![1.0, 1.0, 1.0];
                 }
 
@@ -572,7 +570,7 @@ fn add_entity(desired_name: Option<String>, params: &Vec<Value>, room: &mut Room
             "ball" | "sphere" | "orb" | "spheroid" => {
                 let name = "ball".to_string() + &room.objects.len().to_string();
 
-                if size.len() == 0 {
+                if size.is_empty() {
                     size = vec![1.0];
                 }
 
@@ -605,11 +603,11 @@ fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common:
 
                         if let Ok(color) = r {
                             parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
-                        } else if let Err(_) = r {
+                        } else if r.is_err() {
                             let r = colorsys::Rgb::from_hex_str(s);
                             if let Ok(color) = r {
                                 parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
-                            } else if let Err(_) = r {
+                            } else if r.is_err() {
                                 info!("Failed to parse {s} as color");
                             }
                         }

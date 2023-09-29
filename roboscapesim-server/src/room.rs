@@ -15,7 +15,7 @@ use netsblox_vm::real_time::UtcOffset;
 use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, System};
 use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
-use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
 use serde_json::{json, Value};
 use tokio::spawn;
@@ -130,7 +130,7 @@ impl RoomData {
                     for service in services.lock().unwrap().iter_mut() {
                         // Handle messages
                         if service.update() > 0 {
-                            while service.service.lock().unwrap().rx_queue.len() > 0 {
+                            while !service.service.lock().unwrap().rx_queue.is_empty() {
                                 let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
                                 net_iotscape_tx.send((msg, None)).unwrap();
                             }
@@ -158,10 +158,10 @@ impl RoomData {
                     let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
                     info!("Loading project {}", project_name);
                     let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
-                        request: Some(Rc::new(move |system: &StdSystem<C>, _, key, request, _| {
+                        request: Some(Rc::new(move |_system: &StdSystem<C>, _, key, request, _| {
                             match &request {
                                 netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
-                                    match args.into_iter().map(|(k, v)| Ok(v.to_json()?)).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
+                                    match args.iter().map(|(_k, v)| v.to_json()).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
                                                 "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDAR" => {
@@ -180,7 +180,7 @@ impl RoomData {
                                     }
                                     RequestStatus::Handled
                                 },
-                                netsblox_vm::runtime::Request::UnknownBlock { name, args } => {
+                                netsblox_vm::runtime::Request::UnknownBlock { name, args: _ } => {
                                     match name.as_str() {
                                         "roomID" => {
                                             key.complete(Ok(Intermediate::Json(json!(format!("\"{id_clone}\"")))));
@@ -225,7 +225,7 @@ impl RoomData {
                             sleep(Duration::from_millis(50)).await;
                         } else {
 
-                            if let Ok((service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                            if let Ok((_service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
                                 // TODO: check for listen
                                 system.inject_message(msg_type, values.iter().map(|(k, v)| (k.clone(), Value::from(v.clone()))).collect());
                             }
@@ -382,10 +382,10 @@ impl RoomData {
 
     pub fn update(&mut self) {
         // Check if room empty/not empty
-        if !self.hibernating.load(Ordering::Relaxed) && self.sockets.len() == 0 {
+        if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
             return;
-        } else if self.hibernating.load(Ordering::Relaxed) && self.sockets.len() > 0 {
+        } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
             self.hibernating.store(false, Ordering::Relaxed);
         }
 
@@ -414,11 +414,11 @@ impl RoomData {
                     match msg {
                         ClientMessage::ResetAll => { needs_reset = true; },
                         ClientMessage::ResetRobot(robot_id) => {
-                            if self.is_authorized(client.key().clone(), &robot_id) {
+                            if self.is_authorized(*client.key(), &robot_id) {
                                 robot_resets.push(robot_id);
                             }
                         },
-                        ClientMessage::ClaimRobot(robot_id) => {
+                        ClientMessage::ClaimRobot(_robot_id) => {
                             // TODO: Claim robot
                         },
                         ClientMessage::EncryptRobot(robot_id) => {
@@ -489,7 +489,7 @@ impl RoomData {
                 let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
                 let body = rigid_body_set.get(*handle).unwrap();
                 let old_transform = o.value().transform;
-                o.value_mut().transform = Transform { position: body.translation().clone().into(), rotation: Orientation::Quaternion(body.rotation().quaternion().clone()), scaling: old_transform.scaling };
+                o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
 
                 if old_transform != o.value().transform {
                     o.value_mut().updated = true;
@@ -547,7 +547,7 @@ impl RoomData {
     }
 
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
-    pub(crate) fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
+    pub(crate) fn is_authorized(&self, _client: u128, _robot_id: &str) -> bool {
         // TODO: check robot claim
         // Make sure not only claim matches but also that claimant is still in-room
         true
@@ -557,7 +557,7 @@ impl RoomData {
     pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) -> String {
         let simulation = &mut room.sim.lock().unwrap();
         let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation));
-        let robot_id: String = ("robot_".to_string() + robot.id.as_str()).into();
+        let robot_id: String = "robot_".to_string() + robot.id.as_str();
         simulation.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {
             name: robot_id.clone(),
@@ -580,8 +580,8 @@ impl RoomData {
         if wheel_debug {
             let mut i = 0;
             for wheel in &robot.wheel_bodies {
-                simulation.rigid_body_labels.insert(format!("wheel_{}", i).into(), wheel.clone());
-                room.objects.insert(format!("wheel_{}", i).into(), ObjectData {
+                simulation.rigid_body_labels.insert(format!("wheel_{}", i), *wheel);
+                room.objects.insert(format!("wheel_{}", i), ObjectData {
                     name: format!("wheel_{}", i),
                     transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
                     visual_info: Some(VisualInfo::default()),
@@ -600,7 +600,7 @@ impl RoomData {
 
     /// Add a cuboid object to the room
     pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
-        let body_name = room.name.to_owned() + &"_" + name;
+        let body_name = room.name.to_owned() + "_" + name;
         let rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
             .ccd_enabled(true)
             .translation(position)
@@ -659,7 +659,7 @@ impl RoomData {
             updated: true,
         });
 
-        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, &simulation)));
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
 
         let service = create_entity_service(&body_name, &cube_body_handle);
         room.services.lock().unwrap().push(service);
@@ -672,7 +672,7 @@ impl RoomData {
         self.objects.remove(id);
 
         if simulation.rigid_body_labels.contains_key(id) {
-            let handle = simulation.rigid_body_labels.get(id).unwrap().clone();
+            let handle = *simulation.rigid_body_labels.get(id).unwrap();
             simulation.rigid_body_labels.remove(id);
             simulation.remove_body(handle);
         }

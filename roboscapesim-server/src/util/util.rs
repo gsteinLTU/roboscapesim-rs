@@ -10,7 +10,7 @@ pub(crate) fn bool_val(val: &Value) -> bool {
         Value::Bool(b) => *b,
         Value::Number(n) => n.as_f64().unwrap_or_default() != 0.0,
         Value::String(s) => s == "true",
-        Value::Array(a) => a.len() > 0,
+        Value::Array(a) => !a.is_empty(),
         Value::Object(_) => true, 
     }
 }
@@ -20,7 +20,7 @@ pub(crate) fn str_val(val: &Value) -> String {
         Value::Bool(b) => if *b { "true".to_string() } else  { false.to_string() },
         Value::Number(n) => n.as_f64().unwrap_or_default().to_string(),
         Value::String(s) => s.clone(),
-        Value::Array(a) => if a.len() > 0 { str_val( &a[0]) } else { String::new() },
+        Value::Array(a) => if !a.is_empty() { str_val( &a[0]) } else { String::new() },
         _ => String::new(),
     }
 }
