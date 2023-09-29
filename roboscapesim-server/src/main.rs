@@ -1,19 +1,16 @@
-use anyhow::Result;
 use chrono::Utc;
-use roboscapesim_common::ClientMessage;
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
-use tokio_tungstenite::tungstenite::Message;
 use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
-use tokio::{time::{Duration, self, sleep}, task, net::TcpListener};
+use tokio::{time::{Duration, self}, task};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
-use log::{info, trace, error};
-use futures::{SinkExt, StreamExt, FutureExt};
+use log::info;
 
-use crate::{api::{get_external_ip, EXTERNAL_IP, create_api}, socket::accept_connection};
+use crate::socket::{ws_accept, ws_rx, ws_tx};
+use crate::api::{get_external_ip, EXTERNAL_IP, create_api};
 
 mod room;
 mod robot;
@@ -96,90 +93,4 @@ async fn update_fn() {
             );
         }
     }
-}
-
-async fn ws_rx() {
-    loop {
-        // Get client updates
-        for client in CLIENTS.iter() {
-            // RX
-            while let Some(Some(Ok(msg))) = client.value().stream.lock().unwrap().next().now_or_never() {
-                trace!("Websocket message from {}: {:?}", client.key(), msg);
-                if let Ok(msg) = msg.to_text() {
-
-                    if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
-                        match msg {
-                            ClientMessage::JoinRoom(id, username, password) => {
-                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
-                            },
-                            _ => {
-                                client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
-                            }
-                        }
-                    }                    
-                }
-            }
-        }
-
-        sleep(Duration::from_nanos(50)).await;
-    }
-}
-
-async fn ws_tx() {
-    loop {
-        // Get client updates
-        for client in CLIENTS.iter() {                
-            // TX
-            let receiver = client.rx1.lock().unwrap();
-            while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
-                let msg = serde_json::to_string(&msg).unwrap();
-                client.sink.lock().unwrap().send(Message::Text(msg)).now_or_never();
-            }
-        }
-        
-        sleep(Duration::from_nanos(25)).await;
-    }
-}
-
-async fn ws_accept() {
-    let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
-
-    loop {
-        let (conn, _) = listener.accept().await.unwrap();
-        accept_connection(conn).await;
-    }
-}
-
-fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
-    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, room_id);
-
-    if !ROOMS.contains_key(room_id) {
-        return Err(format!("Room {} does not exist!", room_id));
-    }
-
-    let room = ROOMS.get(room_id).unwrap();
-    let room = room.lock().unwrap();
-    
-    // Check password
-    if room.password.clone().is_some_and(|pass| pass != password) {
-        return Err("Wrong password!".to_owned());
-    }
-    
-    // Setup connection to room
-    room.visitors.insert(username.to_owned());
-    room.sockets.insert(peer_id.to_string(), peer_id);
-    room.send_info_to_client(peer_id);
-    room.send_state_to_client(true, peer_id);
-    Ok(())
-}
-
-async fn create_room(password: Option<String>, edit_mode: bool) -> String {
-    let room = Arc::new(Mutex::new(RoomData::new(None, password, edit_mode)));
-    
-    // Set last interaction to creation time
-    room.lock().unwrap().last_interaction_time = Utc::now().timestamp();
-
-    let room_id = room.lock().unwrap().name.clone();
-    ROOMS.insert(room_id.to_string(), room.clone());
-    room_id
 }

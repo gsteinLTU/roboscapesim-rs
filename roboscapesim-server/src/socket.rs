@@ -1,12 +1,15 @@
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
-use log::info;
-use tokio::net::TcpStream;
+use log::{info, trace};
+use tokio::net::{TcpStream, TcpListener};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
 
-use crate::CLIENTS;
+use tokio::time::{Duration, sleep};
+use futures::{SinkExt, FutureExt};
+
+use crate::{CLIENTS, room::join_room};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -49,3 +52,56 @@ pub async fn accept_connection(stream: TcpStream) -> u128 {
     });
     id
 }
+
+pub async fn ws_rx() {
+    loop {
+        // Get client updates
+        for client in CLIENTS.iter() {
+            // RX
+            while let Some(Some(Ok(msg))) = client.value().stream.lock().unwrap().next().now_or_never() {
+                trace!("Websocket message from {}: {:?}", client.key(), msg);
+                if let Ok(msg) = msg.to_text() {
+
+                    if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
+                        match msg {
+                            ClientMessage::JoinRoom(id, username, password) => {
+                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
+                            },
+                            _ => {
+                                client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
+                            }
+                        }
+                    }                    
+                }
+            }
+        }
+
+        sleep(Duration::from_nanos(50)).await;
+    }
+}
+
+pub async fn ws_tx() {
+    loop {
+        // Get client updates
+        for client in CLIENTS.iter() {                
+            // TX
+            let receiver = client.rx1.lock().unwrap();
+            while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
+                let msg = serde_json::to_string(&msg).unwrap();
+                client.sink.lock().unwrap().send(Message::Text(msg)).now_or_never();
+            }
+        }
+        
+        sleep(Duration::from_nanos(25)).await;
+    }
+}
+
+pub async fn ws_accept() {
+    let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
+
+    loop {
+        let (conn, _) = listener.accept().await.unwrap();
+        accept_connection(conn).await;
+    }
+}
+

@@ -7,7 +7,7 @@ use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{ROOMS, MAX_ROOMS, create_room};
+use crate::{ROOMS, MAX_ROOMS, room::create_room};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 

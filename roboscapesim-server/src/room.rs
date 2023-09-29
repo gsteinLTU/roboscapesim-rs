@@ -31,7 +31,7 @@ use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 
-use crate::CLIENTS;
+use crate::{CLIENTS, ROOMS};
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
@@ -708,4 +708,38 @@ impl RoomData {
         self.robots.clear();
         info!("All entities removed from {}", self.name);
     }
+}
+
+pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
+    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, room_id);
+
+    if !ROOMS.contains_key(room_id) {
+        return Err(format!("Room {} does not exist!", room_id));
+    }
+
+    let room = ROOMS.get(room_id).unwrap();
+    let room = room.lock().unwrap();
+    
+    // Check password
+    if room.password.clone().is_some_and(|pass| pass != password) {
+        return Err("Wrong password!".to_owned());
+    }
+    
+    // Setup connection to room
+    room.visitors.insert(username.to_owned());
+    room.sockets.insert(peer_id.to_string(), peer_id);
+    room.send_info_to_client(peer_id);
+    room.send_state_to_client(true, peer_id);
+    Ok(())
+}
+
+pub async fn create_room(password: Option<String>, edit_mode: bool) -> String {
+    let room = Arc::new(Mutex::new(RoomData::new(None, password, edit_mode)));
+    
+    // Set last interaction to creation time
+    room.lock().unwrap().last_interaction_time = Utc::now().timestamp();
+
+    let room_id = room.lock().unwrap().name.clone();
+    ROOMS.insert(room_id.to_string(), room.clone());
+    room_id
 }
