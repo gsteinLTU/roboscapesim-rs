@@ -16,6 +16,7 @@ pub async fn create_api(addr: SocketAddr) {
     .route("/server/status", get(server_status))
     .route("/rooms/list", get(rooms_list))
     .route("/rooms/create", post(post_create))
+    .route("/rooms/info", get(room_info))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -46,6 +47,12 @@ struct RoomInfo {
     id: String,
     environment: String,
     server: String,  
+    #[serde(rename = "hasPassword")]
+    has_password: bool,
+    #[serde(rename = "isHibernating")]
+    is_hibernating: bool,
+    creator: String,  
+    visitors: Vec<String>,
 }
 
 pub(crate) async fn server_status() -> impl IntoResponse {
@@ -66,8 +73,14 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 
 #[debug_handler]
 pub(crate) async fn rooms_list() -> impl IntoResponse {
+    // TODO: User filter
     let rooms = get_rooms(None, true);
     Json(rooms)
+}
+
+#[debug_handler]
+pub(crate) async fn room_info() -> impl IntoResponse {
+    // TODO
 }
 
 /// Get list of rooms, optionally filtering to a specific user
@@ -95,6 +108,10 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
             id,
             environment: "rust".to_string(),
             server: server.clone(),
+            creator: "TODO".to_owned(),
+            has_password: room_data.password.is_some(),
+            is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
+            visitors: room_data.visitors.clone().into_iter().collect(),
         });
     }
     rooms

@@ -47,10 +47,6 @@ async fn main() {
         let _ = EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
     }
 
-    // Start API server
-    create_api(SocketAddr::from(([0, 0, 0, 0], 3000))).await;
-    info!("Running API server on port 3000 ...");
-
     // Loop listening for new WS connections
     let _ws_loop = task::spawn(ws_accept());
 
@@ -60,6 +56,10 @@ async fn main() {
 
     // Update simulations
     let _update_loop = task::spawn(update_fn());
+
+    // Start API server
+    create_api(SocketAddr::from(([0, 0, 0, 0], 3000))).await;
+    info!("Running API server on port 3000 ...");
 }
 
 async fn update_fn() {
