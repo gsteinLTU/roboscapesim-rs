@@ -59,7 +59,9 @@ impl Game {
         // For the current version, lights are added here, later they will be requested as part of scenario to allow for other lighting conditions
         // Add lights to the scene
         let sun = DirectionalLight::new("light", Vector3::new(0.25, -1.0, 0.1), &scene.borrow());
-        PointLight::new("light2", Vector3::new(0.0, 1.0, -1.0), &scene.borrow());
+        let ambient_light =  HemisphericLight::new("ambient", Vector3::new(0.0, 1.0, 0.0), &scene.borrow());
+        ambient_light.set_intensity(0.5);
+        // PointLight::new("light2", Vector3::new(0.0, 3.0, 0.0), &scene.borrow());
 
         let shadow_generator = Rc::new(CascadedShadowGenerator::new(1024.0, &sun));
         shadow_generator.set_bias(0.007);

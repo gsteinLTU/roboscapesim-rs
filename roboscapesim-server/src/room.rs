@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
@@ -26,7 +26,7 @@ use crate::services::entity::{create_entity_service, handle_entity_message};
 use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
 use crate::services::position::{handle_position_sensor_message, create_position_service};
 use crate::services::proximity::handle_proximity_sensor_message;
-use crate::services::service_struct::Service;
+use crate::services::service_struct::{Service, ServiceType};
 use crate::services::world::{self, handle_world_msg};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
@@ -64,19 +64,20 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
-    pub netsblox_msg_tx: mpsc::Sender<(String, Vec<(String, Value)>)>,
+    pub netsblox_msg_tx: mpsc::Sender<(String, String, BTreeMap<String, String>)>,
     #[derivative(Debug = "ignore")]
-    pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<(String, Vec<(String, Value)>)>>>,
+    pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<(String, String, BTreeMap<String, String>)>>>,
     pub edit_mode: bool,
     pub vm_thread: Option<JoinHandle<()>>,
 }
 
 impl RoomData {
     pub fn new(name: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
-        let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel::<(String, Vec<(String, Value)>)>();
-        let (iotscape_tx, iotscape_rx) = mpsc::channel::<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>();
+        let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel();
+        let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
         let vm_netsblox_msg_rx = netsblox_msg_rx.clone();
+        let iotscape_netsblox_msg_rx = netsblox_msg_rx.clone();
 
         let mut obj = RoomData {
             objects: DashMap::new(),
@@ -224,8 +225,9 @@ impl RoomData {
                             sleep(Duration::from_millis(50)).await;
                         } else {
 
-                            if let Ok((msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                                system.inject_message(msg_type, values);
+                            if let Ok((service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                                // TODO: check for listen
+                                system.inject_message(msg_type, values.iter().map(|(k, v)| (k.clone(), Value::from(v.clone()))).collect());
                             }
 
                             env.mutate(|mc, env| {
@@ -243,21 +245,23 @@ impl RoomData {
                     }
                 });
             })); 
+        } else {
+            // In edit mode, send IoTScape messages to NetsBlox server
+            let services = obj.services.clone();
+            let mut event_id: usize = rand::random();
+            spawn(async move {
+                loop {
+                    if let Ok((service_id, msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                        let s = services.lock().unwrap();
+                        let service = s.iter().find(|s| s.id == service_id);
+                        if let Some(service) = service {
+                            service.service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
+                            event_id += 1;
+                        }
+                    }
+                }
+            });
         }
-
-        /*
-        // Old default setup
-        // Ground
-        RoomData::add_shape(&mut obj, "ground", vector![0.0, -0.1, 0.0], AngVector::zeros(), Some(VisualInfo::Color(0.8, 0.6, 0.45, Shape::Box)), Some(vector![10.0, 0.1, 10.0]), true);
-
-        // Test cube
-        RoomData::add_shape(&mut obj, "cube", vector![1.2, 2.5, 0.0], vector![3.14159 / 3.0, 3.14159 / 3.0, 3.14159 / 3.0], None, None, false);
-
-        // Create robot 1
-        RoomData::add_robot(&mut obj, vector![0.0, 1.0, 0.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);
-
-        // Create robot 2
-        RoomData::add_robot(&mut obj, vector![1.0, 1.0, 1.0], UnitQuaternion::from_euler_angles(0.0, 3.14159 / 3.0, 0.0), false);*/
 
         obj
     }
@@ -521,8 +525,13 @@ impl RoomData {
         }
 
         // Send
-        self.netsblox_msg_tx.send(("reset".to_string(), vec![])).unwrap();
+        let binding = self.services.lock().unwrap();
+        let world_service = binding.iter().find(|s| s.service_type == ServiceType::World);
 
+        if let Some(world_service) = world_service {
+            self.netsblox_msg_tx.send((world_service.id.clone(), "reset".to_string(), BTreeMap::new())).unwrap();
+        }
+        
         self.last_interaction_time = Utc::now().timestamp();
     }
     

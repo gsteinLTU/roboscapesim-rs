@@ -303,16 +303,19 @@ pub fn create_world_service(id: &str) -> Service {
         },
     );
 
-
-
     definition.events.insert(
-        "userJoined".to_owned(),
+        "reset".to_owned(),
         EventDescription { params: vec![] },
     );
 
     definition.events.insert(
+        "userJoined".to_owned(),
+        EventDescription { params: vec!["string".into()] },
+    );
+
+    definition.events.insert(
         "userLeft".to_owned(),
-        EventDescription { params: vec![] },
+        EventDescription { params: vec!["string".into()] },
     );
 
     let service = setup_service(definition, ServiceType::World, None);
