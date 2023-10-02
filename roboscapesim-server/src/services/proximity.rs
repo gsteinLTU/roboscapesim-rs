@@ -78,11 +78,11 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
 pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
     let mut response = vec![];
 
-    let binding = room.services.lock().unwrap();
-    let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
+    let s = room.services.get(&(msg.device.clone(), ServiceType::ProximitySensor));
     if let Some(s) = s {
-        if let Some(body) = s.attached_rigid_bodies.get("main") {
-            if let Some(target_body) = s.attached_rigid_bodies.get("target") {
+        let service = s.value().lock().unwrap();
+        if let Some(body) = service.attached_rigid_bodies.get("main") {
+            if let Some(target_body) = service.attached_rigid_bodies.get("target") {
                 let simulation = &mut room.sim.lock().unwrap();
                 
                 if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
@@ -106,14 +106,11 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
                 };
             }
         }
+
+        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+
     } else {
         info!("No service found for {}", msg.device);
-    }
-
-    let lock = &room.services.lock().unwrap();
-    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::ProximitySensor);
-    if let Some(s) = s {
-        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))

@@ -58,7 +58,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Arc<Mutex<Vec<Service>>>,
+    pub services: Arc<DashMap<(String, ServiceType), Arc<Mutex<Service>>>>,
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
@@ -94,7 +94,7 @@ impl RoomData {
             last_update: Instant::now(),
             robots: HashMap::new(),
             reseters: HashMap::new(),
-            services: Arc::new(Mutex::new(vec![])),
+            services: Arc::new(DashMap::new()),
             lidar_configs: HashMap::new(),
             last_sim_update: Instant::now(),
             iotscape_rx,
@@ -108,15 +108,9 @@ impl RoomData {
 
         // Setup test room
         // Create IoTScape service
-        let service = world::create_world_service(obj.name.as_str());
-        obj.services.lock().unwrap().push(service);
-
-
-        // IoTScape and VM in tasks created in new
-        // MPSC channels to send IoTScape messages to be received in update
-        // Also channels to get responses to be sent either way
-        // key in VM Config is Arc<Mutex<AsyncResult>>, can hold on to them to complete later
-
+        let service = Arc::new(Mutex::new(world::create_world_service(obj.name.as_str())));
+        let service_id = service.lock().unwrap().id.clone();
+        obj.services.insert((service_id, ServiceType::World), service);
         
         // Create IoTScape network I/O Task
         let net_iotscape_tx = iotscape_tx.clone();
@@ -127,11 +121,13 @@ impl RoomData {
                 if hibernating.load(Ordering::Relaxed) {
                     sleep(Duration::from_millis(50)).await;
                 } else {
-                    for service in services.lock().unwrap().iter_mut() {
+                    for service in services.iter() {
                         // Handle messages
+                        let service = &mut service.value().lock().unwrap();
                         if service.update() > 0 {
-                            while !service.service.lock().unwrap().rx_queue.is_empty() {
-                                let msg = service.service.lock().unwrap().rx_queue.pop_front().unwrap();
+                            let rx = &mut service.service.lock().unwrap().rx_queue;
+                            while !rx.is_empty() {
+                                let msg = rx.pop_front().unwrap();
                                 net_iotscape_tx.send((msg, None)).unwrap();
                             }
                         }
@@ -251,14 +247,14 @@ impl RoomData {
             let mut event_id: usize = rand::random();
             spawn(async move {
                 loop {
-                    if let Ok((service_id, msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        let s = services.lock().unwrap();
-                        let service = s.iter().find(|s| s.id == service_id);
+                    while let Ok((service_id, msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                        let service = services.iter().find(|s| s.key().0 == service_id);
                         if let Some(service) = service {
-                            service.service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
+                            service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
                             event_id += 1;
                         }
                     }
+                    sleep(Duration::from_millis(2)).await;
                 }
             });
         }
@@ -525,11 +521,9 @@ impl RoomData {
         }
 
         // Send
-        let binding = self.services.lock().unwrap();
-        let world_service = binding.iter().find(|s| s.service_type == ServiceType::World);
-
+        let world_service = self.services.iter().find(|s| s.key().1 == ServiceType::World);
         if let Some(world_service) = world_service {
-            self.netsblox_msg_tx.send((world_service.id.clone(), "reset".to_string(), BTreeMap::new())).unwrap();
+            self.netsblox_msg_tx.send((world_service.lock().unwrap().id.clone(), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
         self.last_interaction_time = Utc::now().timestamp();
@@ -568,12 +562,13 @@ impl RoomData {
         });
         RobotData::setup_robot_socket(&mut robot);
             
-        let services = &mut room.services.lock().unwrap();
-        let service = create_position_service(&robot.id, &robot.body_handle);
-        services.push(service);
+        let service = Arc::new(Mutex::new(create_position_service(&robot.id, &robot.body_handle)));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::PositionSensor), service);
             
-        let service = create_lidar_service(&robot.id, &robot.body_handle);
-        services.push(service);
+        let service = Arc::new(Mutex::new(create_lidar_service(&robot.id, &robot.body_handle)));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::LIDAR), service);
         room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
             
         // Wheel debug
@@ -661,8 +656,9 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
 
-        let service = create_entity_service(&body_name, &cube_body_handle);
-        room.services.lock().unwrap().push(service);
+        let service = Arc::new(Mutex::new(create_entity_service(&body_name, &cube_body_handle)));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::Entity), service);
         room.last_full_update = 0;
         body_name
     }

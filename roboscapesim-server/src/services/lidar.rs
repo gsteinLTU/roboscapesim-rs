@@ -101,18 +101,18 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
     let mut response = vec![];
 
-    let binding = room.services.lock().unwrap();
-    let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::PositionSensor);
+    let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
     if let Some(s) = s {
-        if let Some(body) = s.attached_rigid_bodies.get("main") {
+        let service = s.value().lock().unwrap();
+        if let Some(body) = service.attached_rigid_bodies.get("main") {
             let simulation = room.sim.lock().unwrap();
 
             if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                if !room.lidar_configs.contains_key(&s.id) {
-                    room.lidar_configs.insert(s.id.clone(), LIDARConfig::default());
+                if !room.lidar_configs.contains_key(&service.id) {
+                    room.lidar_configs.insert(service.id.clone(), LIDARConfig::default());
                 }
 
-                let get = room.lidar_configs.get(&s.id).unwrap();
+                let get = room.lidar_configs.get(&service.id).unwrap();
                 let config = get;
                 let rays = calculate_rays(config, o.rotation(), o.translation());
                 
@@ -138,12 +138,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
                 response = distances.iter().map(|f| (*f).into() ).collect();     
             };
         }
-    }
-
-    let lock = &room.services.lock().unwrap();
-    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::LIDAR);
-    if let Some(s) = s {
-        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))

@@ -452,10 +452,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         }
     };
     
-    let lock = &room.services.lock().unwrap();
-    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::World);
+    let s = room.services.get(&(msg.device.clone(), ServiceType::World));
     if let Some(s) = s {
-        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))

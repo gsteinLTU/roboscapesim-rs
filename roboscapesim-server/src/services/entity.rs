@@ -153,10 +153,11 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
 pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
     let mut response = vec![];
 
-    let binding = room.services.lock().unwrap();
-    let s = binding.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::Entity);
+    info!("{:?}", msg);
+    
+    let s = room.services.get(&(msg.device.clone(), ServiceType::Entity));
     if let Some(s) = s {
-        if let Some(body) = s.attached_rigid_bodies.get("main") {
+        if let Some(body) = s.value().lock().unwrap().attached_rigid_bodies.get("main") {
             if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(*body) {
                 match msg.function.as_str() {
                     "reset" => {
@@ -170,7 +171,7 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
                         let x = num_val(&msg.params[0]);
                         let y = num_val(&msg.params[1]);
                         let z = num_val(&msg.params[2]);
-                        o.set_translation(vector![x, y, z], true)
+                        o.set_translation(vector![x, y, z], true);
                     },
                     "setRotation" => {
                         let pitch = num_val(&msg.params[1]);
@@ -191,12 +192,8 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
                 };
             }
         }
-    }
 
-    let lock = &room.services.lock().unwrap();
-    let s = lock.iter().find(|serv| serv.id == msg.device && serv.service_type == ServiceType::Entity);
-    if let Some(s) = s {
-        s.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
