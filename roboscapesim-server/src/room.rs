@@ -1,13 +1,12 @@
 use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
-use std::fmt::Display;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
@@ -50,7 +49,7 @@ pub struct RoomData {
     pub last_interaction_time: i64,
     pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, u128>,
-    pub visitors: DashSet<String>,
+    pub visitors: Arc<Mutex<Vec<String>>>,
     pub last_update: Instant,
     pub last_full_update: i64,
     pub last_sim_update: Instant,
@@ -90,7 +89,7 @@ impl RoomData {
             last_interaction_time: Utc::now().timestamp(),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
-            visitors: DashSet::new(),
+            visitors: Arc::new(Mutex::new(Vec::new())),
             last_full_update: 0,
             roomtime: 0.0,
             sim: Arc::new(Mutex::new(Simulation::new())),
@@ -305,15 +304,9 @@ impl RoomData {
 
     /// Send the room's current state data to a specific client
     pub fn send_info_to_client(&self, client: u128) {
-        let mut users = vec![];
-
-        for user in self.visitors.iter() {
-            users.push(user.clone());
-        }
-
         Self::send_to_client(
             &UpdateMessage::RoomInfo(
-                RoomState { name: self.name.clone(), roomtime: self.roomtime, users }
+                RoomState { name: self.name.clone(), roomtime: self.roomtime, users: self.visitors.lock().unwrap().clone() }
             ),
             client,
         );
@@ -739,7 +732,12 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
     
     // Setup connection to room
-    room.visitors.insert(username.to_owned());
+    {
+        let visitors = &mut room.visitors.lock().unwrap();
+        if !visitors.contains(&username.to_owned()) {
+            visitors.push(username.to_owned());
+        }
+    }    
     room.sockets.insert(peer_id.to_string(), peer_id);
     room.send_info_to_client(peer_id);
     room.send_state_to_client(true, peer_id);

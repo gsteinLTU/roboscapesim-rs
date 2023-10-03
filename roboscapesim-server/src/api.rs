@@ -1,8 +1,8 @@
-use axum::{Json, response::IntoResponse};
+use axum::{Json, response::IntoResponse, extract::Query};
 use log::{info, error};
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData};
 use serde::Serialize;
-use std::{sync::Mutex, net::SocketAddr};
+use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
@@ -14,7 +14,7 @@ pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 pub async fn create_api(addr: SocketAddr) {
     let app = Router::new()
     .route("/server/status", get(server_status))
-    .route("/rooms/list", get(rooms_list))
+    .route("/rooms/list", get(get_rooms_list))
     .route("/rooms/create", post(post_create))
     .route("/rooms/info", get(room_info))
 	.layer(CorsLayer::new()
@@ -72,9 +72,8 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 }
 
 #[debug_handler]
-pub(crate) async fn rooms_list() -> impl IntoResponse {
-    // TODO: User filter
-    let rooms = get_rooms(None, true);
+pub(crate) async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+    let rooms = get_rooms(params.get("user").cloned().or(Some("INVALID".to_owned())), true);
     Json(rooms)
 }
 
@@ -94,7 +93,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
     for r in ROOMS.iter() {
         let room_data = r.lock().unwrap();
         // Skip if user not in visitors
-        if !user_filter.is_empty() && room_data.visitors.contains(&user_filter) {
+        if !user_filter.is_empty() && !room_data.visitors.lock().unwrap().contains(&user_filter) {
             continue;
         }
 
@@ -111,7 +110,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
             creator: "TODO".to_owned(),
             has_password: room_data.password.is_some(),
             is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
-            visitors: room_data.visitors.clone().into_iter().collect(),
+            visitors: room_data.visitors.lock().unwrap().clone(),
         });
     }
     rooms

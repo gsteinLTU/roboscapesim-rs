@@ -7,8 +7,8 @@ pub const SAMPLE_PROJECT: &str = include_str!("Default Scenario.xml");
 
 pub const DEFAULT_BASE_URL: &str = "https://editor.netsblox.org";
 pub const STEPS_PER_IO_ITER: usize = 64;
-pub const YIELDS_BEFORE_IDLE_SLEEP: usize = 256;
-pub const IDLE_SLEEP_TIME: Duration = Duration::from_micros(500);
+pub const YIELDS_BEFORE_IDLE_SLEEP: usize = 128;
+pub const IDLE_SLEEP_TIME: Duration = Duration::from_millis(2);
 
 #[derive(Collect)]
 #[collect(no_drop, bound = "")]

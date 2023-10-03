@@ -9,7 +9,7 @@ use js_sys::{Reflect, Array, eval};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}, RoomState};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDialogElement};
 use neo_babylon::prelude::*;
@@ -338,6 +338,23 @@ const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting {
 #[wasm_bindgen]
 pub async fn new_sim_menu() {
     get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().show();
+}
+
+#[netsblox_extension_menu_item("Join room...")]
+#[wasm_bindgen]
+pub async fn join_sim_menu() {
+    REQWEST_CLIENT.with(|r| {
+        let get = r.get(format!("http://localhost:3000/rooms/list?user={}", get_username()));
+        spawn_local(async move {
+            let results = get.send().await;
+
+            if let Ok(results) = results {
+                console_log!("{:?}", results.json::<Vec<RoomState>>().await);
+            }
+            
+            get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlDialogElement>().show();
+        });
+    });
 }
 
 pub async fn new_room(environment: Option<String>, password: Option<String>, edit_mode: bool) {

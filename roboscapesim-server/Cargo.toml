@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+codegen-units = 1
+lto = "fat"
 
 [dependencies]
 roboscapesim-common = { path = "../roboscapesim-common" }
@@ -34,6 +37,7 @@ tokio-tungstenite = { version = "0.20", features = ["native-tls", "tokio-native-
 rayon = "1.7.0"
 color-name = "1.1.0"
 colorsys = "0.6.7"
+gc-arena = "0.3"
 
 [dev-dependencies]
 float-cmp = "0.9"
