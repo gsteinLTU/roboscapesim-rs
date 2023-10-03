@@ -1,8 +1,9 @@
 use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
+use std::fmt::Display;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
@@ -17,6 +18,7 @@ use netsblox_vm::std_system::StdSystem;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::spawn;
 use tokio::time::sleep;
@@ -35,6 +37,7 @@ use crate::{CLIENTS, ROOMS};
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
+
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -72,7 +75,7 @@ pub struct RoomData {
 }
 
 impl RoomData {
-    pub fn new(name: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
+    pub fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
         let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel();
         let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
@@ -149,8 +152,22 @@ impl RoomData {
                 .build()
                 .unwrap()
                 .block_on(async {
+                    let environment = environment.and_then(|env| if env.trim().is_empty() { None } else { Some(env) });
+
+                    let mut project = match &environment {
+                        Some(environment) => reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", environment)).await.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())),
+                        None => Ok(SAMPLE_PROJECT.to_owned())
+                    };
+
+                    if project.is_err() {
+                        error!("Failed to load project: {:?}", &environment);
+                        project = Ok(SAMPLE_PROJECT.to_owned());
+                    }
+
+                    let project = project.unwrap();
+
                     // Setup VM
-                    let (project_name, role) = open_project(SAMPLE_PROJECT).unwrap_or_else(|_| panic!("failed to read file"));
+                    let (project_name, role) = open_project(&project).unwrap_or_else(|_| panic!("failed to read file"));
                     let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
                     info!("Loading project {}", project_name);
                     let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
@@ -729,8 +746,8 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     Ok(())
 }
 
-pub async fn create_room(password: Option<String>, edit_mode: bool) -> String {
-    let room = Arc::new(Mutex::new(RoomData::new(None, password, edit_mode)));
+pub async fn create_room(environment: Option<String>, password: Option<String>, edit_mode: bool) -> String {
+    let room = Arc::new(Mutex::new(RoomData::new(None, environment, password, edit_mode)));
     
     // Set last interaction to creation time
     room.lock().unwrap().last_interaction_time = Utc::now().timestamp();
@@ -738,4 +755,96 @@ pub async fn create_room(password: Option<String>, edit_mode: bool) -> String {
     let room_id = room.lock().unwrap().name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     room_id
+}
+
+
+/// NetsBlox API
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ProjectId(String);
+
+impl ProjectId {
+    pub fn new(id: String) -> Self {
+        ProjectId(id)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
+struct RoleId(String);
+
+impl RoleId {
+    fn new(id: String) -> Self {
+        RoleId(id)
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+enum SaveState {
+    Created,
+    Transient,
+    Broken,
+    Saved,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct RoleMetadata {
+    pub name: String,
+    pub code: String,
+    pub media: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+enum PublishState {
+    Private,
+    ApprovalDenied,
+    PendingApproval,
+    Public,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct RoleData {
+    pub name: String,
+    pub code: String,
+    pub media: String,
+}
+
+impl RoleData {
+    pub fn to_xml(self) -> String {
+        let name = self.name.replace('\"', "\\\"");
+        format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Project {
+    pub id: ProjectId,
+    pub owner: String,
+    pub name: String,
+    pub updated: SystemTime,
+    pub state: PublishState,
+    pub collaborators: std::vec::Vec<String>,
+    pub origin_time: SystemTime,
+    pub save_state: SaveState,
+    pub roles: HashMap<RoleId, RoleData>,
+}
+
+
+impl Project {
+    pub fn to_xml(&self) -> String {
+        let role_str: String = self
+            .roles
+            .clone()
+            .into_values()
+            .map(|role| role.to_xml())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "<room name=\"{}\" app=\"{}\">{}</room>",
+            self.name, "NetsBlox", role_str
+        )
+    }
 }

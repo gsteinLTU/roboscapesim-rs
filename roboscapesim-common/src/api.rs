@@ -5,6 +5,7 @@ pub struct CreateRoomRequestData {
     pub username: String,
     pub password: Option<String>,
     pub edit_mode: bool,
+    pub environment: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

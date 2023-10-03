@@ -121,7 +121,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
     info!("{:?}", request);
 
-    let room_id = create_room(request.password, request.edit_mode).await;
+    let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
     let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
     //let server = "http".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":3000";

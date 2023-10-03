@@ -340,7 +340,7 @@ pub async fn new_sim_menu() {
     get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().show();
 }
 
-pub async fn new_room(edit_mode: bool) {
+pub async fn new_room(environment: Option<String>, password: Option<String>, edit_mode: bool) {
     let in_room = GAME.with(|game| {
         game.borrow().in_room.get()
     });
@@ -350,7 +350,7 @@ pub async fn new_room(edit_mode: bool) {
     }
 
     if !in_room {
-        let response = request_room(get_username(), None, edit_mode).await;
+        let response = request_room(get_username(), password, edit_mode, environment).await;
 
         if let Ok(response) = response {
             connect(&response).await;
@@ -363,7 +363,7 @@ pub async fn new_room(edit_mode: bool) {
     }
 }
 
-async fn request_room(username: String, password: Option<String>, edit_mode: bool) -> Result<CreateRoomResponseData, reqwest::Error> {
+async fn request_room(username: String, password: Option<String>, edit_mode: bool, environment: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
     set_title("Connecting...");
 
     let mut client_clone = Default::default();
@@ -375,7 +375,8 @@ async fn request_room(username: String, password: Option<String>, edit_mode: boo
     let response = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
         username,
         password,
-        edit_mode
+        edit_mode,
+        environment
     }).send().await.unwrap();
 
     response.json().await

@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, HtmlElement, Event, HtmlDialogElement};
+use web_sys::{window, HtmlElement, HtmlInputElement, Event, HtmlDialogElement};
 
 use crate::{util::*, console_log, GAME, new_room};
 
@@ -121,19 +121,40 @@ pub(crate) fn init_ui() {
 
         let new_buttons = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector_all("button").unwrap();
 
+
         let new_confirm_button = new_buttons.get(0).unwrap();
         new_confirm_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
-            spawn_local(async {
-                new_room(false).await;
+            let new_inputs = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector_all("input").unwrap();
+            let new_env = new_inputs.get(0).unwrap();
+            let new_password = new_inputs.get(1).unwrap();
+
+            spawn_local(async move {
+                let mut env = new_env.unchecked_ref::<HtmlInputElement>().value();
+                let password = new_password.unchecked_ref::<HtmlInputElement>().value();
+                let password = if password.trim().is_empty() { None } else { Some(password) };
+
+                if env.trim().is_empty() {
+                    env = "Default".to_owned();
+                }
+
+                new_room(Some(env), password, false).await;
             });
+
             get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
         }).into_js_value().unchecked_ref()).unwrap();
 
         let new_edit_button = new_buttons.get(1).unwrap();
         new_edit_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
-            spawn_local(async {
-                new_room(true).await;
+            let new_inputs = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector_all("input").unwrap();
+            let new_password = new_inputs.get(1).unwrap();
+
+            let password = new_password.unchecked_ref::<HtmlInputElement>().value();
+            let password = if password.trim().is_empty() { None } else { Some(password) };
+            
+            spawn_local(async move {
+                new_room(None, password, true).await;
             });
+
             get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
         }).into_js_value().unchecked_ref()).unwrap();
 }

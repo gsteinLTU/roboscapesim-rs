@@ -369,7 +369,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| *p.value()));
         },
         "addEntity" => {
-            add_entity(None, &msg.params, room);
+            response = vec![add_entity(None, &msg.params, room).into()];
         },
         "instantiateEntities" => {
             if msg.params[0].is_array() {
