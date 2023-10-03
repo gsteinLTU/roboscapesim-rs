@@ -9,7 +9,6 @@ edition = "2021"
 roboscapesim-common = { path = "../roboscapesim-common" }
 rapier3d = { version = "0.17", features = ["serde-serialize", "simd-stable"] }
 tokio = { version = "1", features = ["full"] }
-anyhow = "1.0"
 base64 = "0.21"
 serde = { version = "1.0" }
 serde_json = "1.0"
@@ -33,7 +32,6 @@ reqwest = "0.11"
 futures = "0.3.28"
 tokio-tungstenite = { version = "0.20", features = ["native-tls", "tokio-native-tls"] }
 rayon = "1.7.0"
-gc-arena = "0.3.0"
 color-name = "1.1.0"
 colorsys = "0.6.7"
 
