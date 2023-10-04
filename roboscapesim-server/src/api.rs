@@ -1,6 +1,6 @@
-use axum::{Json, response::IntoResponse, extract::Query};
+use axum::{Json, response::IntoResponse, extract::Query, http::Response, body::{HttpBody, Body}};
 use log::{info, error};
-use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData};
+use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
 use serde::Serialize;
 use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
@@ -11,6 +11,7 @@ use crate::{ROOMS, MAX_ROOMS, room::create_room};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
+/// Create API server with routes
 pub async fn create_api(addr: SocketAddr) {
     let app = Router::new()
     .route("/server/status", get(server_status))
@@ -32,29 +33,7 @@ pub async fn create_api(addr: SocketAddr) {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct ServerStatus {
-    #[serde(rename = "activeRooms")]
-    active_rooms: usize,
-    #[serde(rename = "hibernatingRooms")]
-    hibernating_rooms: usize,
-    #[serde(rename = "maxRooms")]
-    max_rooms: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct RoomInfo {
-    id: String,
-    environment: String,
-    server: String,  
-    #[serde(rename = "hasPassword")]
-    has_password: bool,
-    #[serde(rename = "isHibernating")]
-    is_hibernating: bool,
-    creator: String,  
-    visitors: Vec<String>,
-}
-
+/// Get status of rooms on server
 pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
@@ -72,14 +51,39 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 }
 
 #[debug_handler]
+/// Get list of rooms, optionally filtering to a specific user
 pub(crate) async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
     let rooms = get_rooms(params.get("user").cloned().or(Some("INVALID".to_owned())), true);
     Json(rooms)
 }
 
 #[debug_handler]
-pub(crate) async fn room_info() -> impl IntoResponse {
-    // TODO
+/// Get info about a specific room
+pub(crate) async fn room_info(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+    let room_id = params.get("id").unwrap_or(&"INVALID".to_owned()).clone();
+    let room = ROOMS.get(&room_id);
+    
+    if room.is_none() {
+        return (axum::http::StatusCode::NOT_FOUND,Json(None));    
+    }
+
+    let room = room.unwrap().clone();
+    let room_data = room.lock().unwrap();
+
+    let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
+    let server = "ws".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":5000";
+
+    let visitors = room_data.visitors.lock().unwrap().clone();
+
+    (axum::http::StatusCode::OK, Json(Some(RoomInfo{
+        id: room_data.name.clone(),
+        environment: "rust".to_string(),
+        server: server.clone(),
+        creator: "TODO".to_owned(),
+        has_password: room_data.password.is_some(),
+        is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
+        visitors,
+    })))
 }
 
 /// Get list of rooms, optionally filtering to a specific user
@@ -123,7 +127,6 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
     let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
-    //let server = "http".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":3000";
     let server = "ws".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":5000";
 
     Json(CreateRoomResponseData {

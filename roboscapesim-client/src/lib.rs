@@ -9,9 +9,9 @@ use js_sys::{Reflect, Array, eval};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData}, RoomState};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}, RoomState};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{window, WebSocket, Node, HtmlDialogElement};
+use web_sys::{window, WebSocket, Node, HtmlDialogElement, HtmlDataListElement};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
@@ -349,7 +349,19 @@ pub async fn join_sim_menu() {
             let results = get.send().await;
 
             if let Ok(results) = results {
-                console_log!("{:?}", results.json::<Vec<RoomState>>().await);
+                let results = results.json::<Vec<RoomInfo>>().await;
+
+                if let Ok(results) = &results {
+                    let list = get_nb_externalvar("roboscapedialog-join-rooms-list").unwrap().unchecked_into::<HtmlDataListElement>();
+                    list.set_inner_html("");
+                    for result in results {
+                        let option = document().create_element("option").unwrap();
+                        option.set_attribute("value", &format!("{} ({})", result.id, result.environment)).unwrap();
+                        list.append_child(&option).unwrap();
+                    }
+                }
+
+                console_log!("{:?}", &results);
             }
             
             get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlDialogElement>().show();
@@ -370,13 +382,26 @@ pub async fn new_room(environment: Option<String>, password: Option<String>, edi
         let response = request_room(get_username(), password, edit_mode, environment).await;
 
         if let Ok(response) = response {
-            connect(&response).await;
+            connect(&response.server).await;
             send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), None));
             GAME.with(|game| {
                 game.borrow().in_room.replace(true);
             });
             show_3d_view();
         }
+    }
+}
+
+pub async fn join_room(id: String, password: Option<String>) {
+    let response = request_room_info(&id).await;
+
+    if let Ok(response) = response {
+        connect(&response.server).await;
+        send_message(&ClientMessage::JoinRoom(id, get_username(), password));
+        GAME.with(|game| {
+            game.borrow().in_room.replace(true);
+        });
+        show_3d_view();
     }
 }
 
@@ -399,9 +424,20 @@ async fn request_room(username: String, password: Option<String>, edit_mode: boo
     response.json().await
 }
 
-async fn connect(response: &CreateRoomResponseData) {
+async fn request_room_info(id: &String) -> Result<RoomInfo, reqwest::Error> {
+    let mut client_clone = Default::default();
+    REQWEST_CLIENT.with(|client| {
+        client_clone = client.clone();
+    });
+
+    let response = client_clone.get(format!("http://127.0.0.1:3000/rooms/info?id={}", id)).send().await.unwrap();
+
+    response.json().await
+}
+
+async fn connect(server: &String) {
     WEBSOCKET.with(|socket| {
-        let s = WebSocket::new(&response.server);
+        let s = WebSocket::new(server);
         let s = Rc::new(RefCell::new(s.unwrap()));
         GAME.with(|game| { 
             let gc = game.clone();

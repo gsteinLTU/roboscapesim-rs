@@ -5,7 +5,7 @@ use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{window, HtmlElement, HtmlInputElement, Event, HtmlDialogElement};
 
-use crate::{util::*, console_log, GAME, new_room};
+use crate::{util::*, console_log, GAME, new_room, join_room};
 
 use super::send_message;
 
@@ -150,13 +150,40 @@ pub(crate) fn init_ui() {
 
             let password = new_password.unchecked_ref::<HtmlInputElement>().value();
             let password = if password.trim().is_empty() { None } else { Some(password) };
-            
+
             spawn_local(async move {
                 new_room(None, password, true).await;
             });
 
             get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
         }).into_js_value().unchecked_ref()).unwrap();
+
+
+        let join_buttons = get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlElement>().query_selector_all("button").unwrap();
+        let join_button = join_buttons.get(0).unwrap();
+        join_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
+            let join_inputs = get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlElement>().query_selector_all("input").unwrap();
+            let join_id = join_inputs.get(0).unwrap();
+            let join_password = join_inputs.get(1).unwrap();
+
+            spawn_local(async move {
+                let id = join_id.unchecked_ref::<HtmlInputElement>().value();
+                let password = join_password.unchecked_ref::<HtmlInputElement>().value();
+                let password = if password.trim().is_empty() { None } else { Some(password) };
+
+                if id.trim().is_empty() {
+                    // TODO: Show error
+                    return;
+                }
+
+                let id = id.split(" ").collect::<Vec<&str>>()[0].to_owned();
+
+                join_room(id, password).await;
+            });
+
+            get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlDialogElement>().close();
+        }).into_js_value().unchecked_ref()).unwrap();
+
 }
 
 /// Add a button to the 3D view button bar

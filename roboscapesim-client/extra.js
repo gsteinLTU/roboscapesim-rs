@@ -51,23 +51,35 @@
 
         // Create join dialog for later use
         {
-            var element = createDialog('Join a Session', false, ['Join', 'Close']);
+            var element = document.createElement('datalist');
+            element.id = 'roboscapedialog-join-rooms-list';
+            document.body.appendChild(element);
+            window.externalVariables['roboscapedialog-join-rooms-list'] = element;
+
+            element = createDialog('Join a Session', false, ['Join', 'Close']);
             element.querySelector('content').innerHTML += `
-            <div style="margin-bottom: 12px;"><label>Room ID:&nbsp;</label><input class="inset"/></div>
+            <div style="margin-bottom: 12px;"><label>Room ID:&nbsp;</label><input list="roboscapedialog-join-rooms-list" class="inset"/></div>
             <div><label>Password:&nbsp;</label><input class="inset"/></div>
             `;
 
             setupDialog(element, false);
             window.externalVariables['roboscapedialog-join'] = element;
 
+
+            element = document.createElement('datalist');
+            element.id = 'roboscapedialog-new-environment-list';
+            document.body.appendChild(element);
+            window.externalVariables['roboscapedialog-new-environment-list'] = element;
+
             element = createDialog('Create a Session', false, ['Create', 'Edit Mode', 'Close']);
             element.querySelector('content').innerHTML += `
-            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input id="roboscapedialog-new-environment" class="inset"/></div>
+            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input list="roboscapedialog-new-environment-list" id="roboscapedialog-new-environment" class="inset"/></div>
             <div><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
             `;
 
             setupDialog(element, false);
             window.externalVariables['roboscapedialog-new'] = element;
+
         }
     };
 
