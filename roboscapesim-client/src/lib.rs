@@ -35,6 +35,16 @@ thread_local! {
     static REQWEST_CLIENT: Rc<Client> = Rc::new(Client::new());
 }
 
+#[cfg(debug_assertions)]
+const ASSETS_DIR: &str = "http://localhost:4000/assets/";
+#[cfg(not(debug_assertions))]
+const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOnline/assets/";
+
+#[cfg(debug_assertions)]
+const API_SERVER: &str = "http://localhost:3000/";
+#[cfg(not(debug_assertions))]
+const API_SERVER: &str = "https://roboscapeonlineapi.netsblox.org/";
+
 #[netsblox_extension_info]
 const INFO: ExtensionInfo = ExtensionInfo { 
     name: "RoboScape Online" 
@@ -43,7 +53,8 @@ const INFO: ExtensionInfo = ExtensionInfo {
 #[wasm_bindgen(start)]
 async fn main() {
     console_error_panic_hook::set_once();
-    
+    console_log!("Assets dir: {}", ASSETS_DIR);
+    console_log!("API server: {}", API_SERVER);
     GAME.with(|game| {
         // Init game
         let game_clone = game.clone();
@@ -238,7 +249,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             };
             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
 
-            let tex = Texture::new(get_asset_path(&("textures/".to_owned() + tex + ".png")).as_str());
+            let tex = Texture::new(&(ASSETS_DIR.to_owned() + (&("textures/".to_owned() + tex + ".png")).as_str()));
             tex.set_u_scale(uscale.to_owned().into());
             tex.set_v_scale(vscale.to_owned().into());
             material.set_diffuse_texture(tex);
@@ -256,7 +267,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             let obj = Arc::new(obj.clone());
             spawn_local(async move {
                 // TODO: detect assets dir
-                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, get_asset_path(&mesh).as_str()).await);
+                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, (ASSETS_DIR.to_owned() + (&mesh).as_str()).as_str()).await);
                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                 apply_transform(m.clone(), obj.transform);
                 game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
@@ -344,7 +355,7 @@ pub async fn new_sim_menu() {
 #[wasm_bindgen]
 pub async fn join_sim_menu() {
     REQWEST_CLIENT.with(|r| {
-        let get = r.get(format!("http://localhost:3000/rooms/list?user={}", get_username()));
+        let get = r.get(format!("{}rooms/list?user={}", API_SERVER, get_username()));
         spawn_local(async move {
             let results = get.send().await;
 
