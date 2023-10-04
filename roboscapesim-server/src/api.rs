@@ -1,7 +1,6 @@
-use axum::{Json, response::IntoResponse, extract::Query, http::Response, body::{HttpBody, Body}};
+use axum::{Json, response::IntoResponse, extract::Query};
 use log::{info, error};
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
-use serde::Serialize;
 use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};

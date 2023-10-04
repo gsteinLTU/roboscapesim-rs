@@ -10,29 +10,19 @@ use dashmap::DashMap;
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::project::{ProjectStep, IdleAction};
-use netsblox_vm::real_time::UtcOffset;
-use netsblox_vm::runtime::{RequestStatus, Config, ToJsonError, Key, System};
-use netsblox_vm::std_system::StdSystem;
+use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, ToJsonError, Key, System}, std_system::StdSystem};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::spawn;
-use tokio::time::sleep;
+use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::services::entity::{create_entity_service, handle_entity_message};
-use crate::services::lidar::{handle_lidar_message, LIDARConfig, create_lidar_service};
-use crate::services::position::{handle_position_sensor_message, create_position_service};
-use crate::services::proximity::handle_proximity_sensor_message;
-use crate::services::service_struct::{Service, ServiceType};
-use crate::services::world::{self, handle_world_msg};
+use crate::{CLIENTS, ROOMS};
+use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
-
-use crate::{CLIENTS, ROOMS};
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
@@ -760,24 +750,8 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProjectId(String);
 
-impl ProjectId {
-    pub fn new(id: String) -> Self {
-        ProjectId(id)
-    }
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 struct RoleId(String);
-
-impl RoleId {
-    fn new(id: String) -> Self {
-        RoleId(id)
-    }
-
-    fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 enum SaveState {

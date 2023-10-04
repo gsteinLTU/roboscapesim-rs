@@ -9,7 +9,7 @@ use js_sys::{Reflect, Array, eval};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}, RoomState};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDialogElement, HtmlDataListElement};
 use neo_babylon::prelude::*;
