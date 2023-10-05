@@ -377,12 +377,25 @@ impl RoomData {
     }
 
     pub fn update(&mut self) {
+        // Check for disconnected clients
+        let mut disconnected = vec![];
+        for client_id in &self.sockets {
+            if !CLIENTS.contains_key(client_id.value()) {
+                disconnected.push(client_id.key().to_owned());
+            }
+        }
+        for client_id in disconnected {
+            self.sockets.remove(&client_id);
+        }
+
         // Check if room empty/not empty
         if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
+            info!("{} is now hibernating", self.name);
             return;
         } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
             self.hibernating.store(false, Ordering::Relaxed);
+            info!("{} is no longer hibernating", self.name);
         }
 
         if self.hibernating.load(Ordering::Relaxed) {

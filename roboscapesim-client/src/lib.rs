@@ -266,7 +266,6 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             let mesh = Arc::new(mesh.clone());
             let obj = Arc::new(obj.clone());
             spawn_local(async move {
-                // TODO: detect assets dir
                 let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, (ASSETS_DIR.to_owned() + (&mesh).as_str()).as_str()).await);
                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                 apply_transform(m.clone(), obj.transform);

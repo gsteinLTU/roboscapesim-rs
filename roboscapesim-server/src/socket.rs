@@ -5,6 +5,7 @@ use tokio::net::{TcpStream, TcpListener};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
+use futures::future::poll_fn;
 
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
@@ -28,13 +29,14 @@ pub struct SocketInfo {
     pub stream: Arc<Mutex<SplitStream<WebSocketStream<TcpStream>>>>,
 }
 
-pub async fn accept_connection(stream: TcpStream) -> u128 {
-    let addr = stream.peer_addr().expect("connected streams should have a peer address");
+pub async fn accept_connection(tcp_stream: TcpStream) -> u128 {
+    let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
     info!("Peer address: {}", addr);
 
-    let ws_stream = tokio_tungstenite::accept_async(stream)
+    let ws_stream = tokio_tungstenite::accept_async(tcp_stream)
         .await
         .expect("Error during the websocket handshake occurred");
+    
     let (sink, stream) = ws_stream.split();
 
     let id = rand::random();
@@ -55,25 +57,43 @@ pub async fn accept_connection(stream: TcpStream) -> u128 {
 
 pub async fn ws_rx() {
     loop {
+        let mut disconnected = vec![];
         // Get client updates
         for client in CLIENTS.iter() {
             // RX
-            while let Some(Some(Ok(msg))) = client.value().stream.lock().unwrap().next().now_or_never() {
-                trace!("Websocket message from {}: {:?}", client.key(), msg);
-                if let Ok(msg) = msg.to_text() {
-
-                    if let Ok(msg) = serde_json::from_str::<ClientMessage>(msg) {
-                        match msg {
-                            ClientMessage::JoinRoom(id, username, password) => {
-                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
-                            },
-                            _ => {
-                                client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
-                            }
+            while let Some(Some(msg)) = client.value().stream.lock().unwrap().next().now_or_never() {
+                if let Ok(msg) = msg {
+                    trace!("Websocket message from {}: {:?}", client.key(), msg);
+                    match msg {
+                        Message::Close(_) => {
+                            info!("Client {} disconnected", client.key());
+                            disconnected.push(client.key().to_owned());
+                            break;
+                        },
+                        Message::Text(msg) => {
+                            if let Ok(msg) = serde_json::from_str::<ClientMessage>(&msg) {
+                                match msg {
+                                    ClientMessage::JoinRoom(id, username, password) => {
+                                        join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
+                                    },
+                                    _ => {
+                                        client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
+                                    }
+                                }
+                            } 
                         }
-                    }                    
+                        _ => {}
+                    }
+                       
+                } else if let Err(e) = msg {
+                    info!("Error receiving websocket message from {}: {:?}", client.key(), e);       
                 }
             }
+        }
+
+        // Remove disconnected clients
+        for disconnect in disconnected {
+            CLIENTS.remove(&disconnect);
         }
 
         sleep(Duration::from_nanos(50)).await;
