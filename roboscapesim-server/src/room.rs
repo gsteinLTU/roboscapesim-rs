@@ -329,6 +329,7 @@ impl RoomData {
         }
     }
 
+    /// Send an UpdateMessage to all clients in the room
     pub fn send_to_all_clients(&self, msg: &UpdateMessage) {
         for client in &self.sockets {
             Self::send_to_client(
@@ -338,6 +339,7 @@ impl RoomData {
         }
     }
 
+    /// Send the room's current state data to all clients
     pub fn send_state_to_all_clients(&self, full_update: bool) {
         let update_msg: UpdateMessage;
         if full_update {
@@ -367,6 +369,7 @@ impl RoomData {
         }
     }
 
+    /// Generate a random hexstring room ID of the given length (default 5)
     fn generate_room_id(length: Option<usize>) -> String {
         let s: String = rand::thread_rng()
             .sample_iter(&UpperHexadecimal)
@@ -554,9 +557,33 @@ impl RoomData {
     }
 
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
-    pub(crate) fn is_authorized(&self, _client: u128, _robot_id: &str) -> bool {
-        // TODO: check robot claim
-        // Make sure not only claim matches but also that claimant is still in-room
+    pub(crate) fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
+        let robot = self.robots.get(robot_id);
+        if let Some(robot) = robot {
+            // Robot is not claimable
+            if !robot.claimable {
+                return false;
+            }
+
+            // If no claim, approve
+            if let Some(claimant) = &robot.claimed_by {
+                // Make sure not only claim matches but also that claimant is still in-room
+                // Get client username
+                let client = self.sockets.iter().find(|c| c.value() == &client);
+
+                // Only test if client is still in room
+                if let Some(client) = client {
+                    let client_username = client.key().to_owned();
+                    // If claimant is client
+                    if claimant == &client_username {
+                        return true;
+                    }
+                }
+            }
+
+        }
+        
+        // If no robot, approve
         true
     }
 
