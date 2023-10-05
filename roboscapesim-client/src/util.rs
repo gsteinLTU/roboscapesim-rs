@@ -86,6 +86,11 @@ pub(crate) fn get_selected_robot() -> Option<String> {
     }
 }
 
+/// Show a message box
+pub(crate) fn show_message(title: &str, body: &str) {
+    get_window_fn("pmAlert").unwrap().call2(&JsValue::NULL, &title.into(), &format!("<strong>{}</strong>", body).into()).unwrap();
+}
+
 #[macro_export]
 macro_rules! console_log {
     ($($tokens: tt)*) => {
