@@ -15,40 +15,61 @@ use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
 use crate::util::traits::resettable::Resettable;
 use crate::util::util::bytes_to_hex_string;
+
+/// Represents a robot in the simulation
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct RobotData {
+    /// Main body of robot
     pub body_handle: RigidBodyHandle,
+    /// Joints connecting wheels to body
     pub wheel_joints: Vec<MultibodyJointHandle>,
+    /// Physics bodies for wheels
     pub wheel_bodies: Vec<RigidBodyHandle>,
+    /// Socket to NetsBlox server, or None if not connected
     pub socket: Option<UdpSocket>,
+    /// Desired speed of left wheel
     pub speed_l: f32,
+    /// Desired speed of right wheel
     pub speed_r: f32,
+    /// Last time a heartbeat was sent
     pub last_heartbeat: i64,
+    /// String representation of MAC address
     pub id: String,
+    /// MAC address as bytes
     pub mac: [u8; 6],
     pub whisker_l: ColliderHandle,
     pub whisker_r: ColliderHandle,
     pub whisker_states: [bool; 2],
+    /// Distance traveled by each wheel
     pub ticks: [f64; 2],
     pub drive_state: DriveState,
+    /// Distance to travel for SetDistance
     pub distance_l: f64,
+    /// Distance to travel for SetDistance
     pub distance_r: f64,
     pub initial_transform: Transform,
+    /// Username of user who claimed this robot, or None if unclaimed
     pub claimed_by: Option<String>,
+    /// Whether this robot can be claimed, non-claimable robots are intended for scenario controlled robots
     pub claimable: bool,
     pub start_time: SystemTime,
 }
 
+/// Possible drive modes
 #[derive(Debug, PartialEq, Eq)]
 pub enum DriveState {
+    /// Run wheels at requested speed
     SetSpeed,
+    /// Drive until distance reached
     SetDistance
 }
 
+/// Speed used when using SetDistance
 const SET_DISTANCE_DRIVE_SPEED: f32 = 75.0 / -32.0;
 
 impl RobotData {
+    /// Send a RoboScape message to NetsBlox server
     pub fn send_roboscape_message(&mut self, message: &[u8]) -> Result<usize, std::io::Error> {
         if self.socket.is_none() {
             return Err(std::io::Error::new(std::io::ErrorKind::NotConnected, "Socket not connected"));
@@ -70,21 +91,19 @@ impl RobotData {
         self.socket.as_mut().unwrap().send(buf.as_slice())
     }
 
+    /// Create physics body for robot, returns RobotData for the robot
     pub fn create_robot_body(sim: &mut Simulation, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
         let mac = mac.unwrap_or_else(generate_random_mac_address);
         let id = bytes_to_hex_string(&mac).to_owned();
         info!("Creating robot {}", id);
 
-        /*
-        * Vehicle we will control manually.
-        */
+        // Size of robot
         const HW: f32 = 0.07 * SCALE;
         const HH: f32 = 0.027 * SCALE;
         const HD: f32 = 0.03 * SCALE;
 
         let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + HH * 2.0, 0.0);
         let mut box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
-        // TODO: use rotation
 
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(vector![box_center.x * SCALE, box_center.y * SCALE, box_center.z * SCALE])
@@ -175,6 +194,7 @@ impl RobotData {
         let whisker_r = ColliderBuilder::cuboid(HW * 0.4, 0.025, HD * 0.8).sensor(true).translation(vector![HW * 1.25, 0.05, HD * 0.4]);
         let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
+        // Apply position and orientation
         if let Some(p) = position {
             sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_translation(p, true);
             box_center = p.into();
@@ -443,11 +463,15 @@ impl Resettable for RobotData {
             body.set_angvel(vector![0.0, 0.0, 0.0], false);
         }
 
+        // Reset position
         let body = rigid_body_set.get_mut(self.body_handle).unwrap();
         body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
+
+        // Reset velocity
         body.set_linvel(vector![0.0, 0.0, 0.0], false);
         body.set_angvel(vector![0.0, 0.0, 0.0], false);
 
+        // Reset rotation
         match self.initial_transform.rotation {
             Orientation::Quaternion(q) => {
                 body.set_rotation(UnitQuaternion::new_unchecked(q), true);
@@ -471,5 +495,11 @@ impl Resettable for RobotData {
         if let Err(e) = self.send_roboscape_message(b"I") {
             error!("{}", e);
         }
+    }
+}
+
+impl PartialEq for RobotData {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
