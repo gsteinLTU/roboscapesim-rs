@@ -176,17 +176,19 @@ impl RoomData {
 
                     // First, check if environment is a project ID
                     let environment: ProjectType = if let Some(env) = &environment {
+                        let env = env.to_owned();
                         if env.contains('/') {
                             // Assume it's a project ID
-                            ProjectType::RemoteProject(env.to_owned())
+                            ProjectType::RemoteProject(env)
                         } else {
                             // Check if it's a local scenario
-                            if LOCAL_SCENARIOS.contains_key(env) {
-                                if let Some(scenario) = LOCAL_SCENARIOS.get(env) {
+                            let env = env.to_lowercase();
+                            if LOCAL_SCENARIOS.contains_key(&env) {
+                                if let Some(scenario) = LOCAL_SCENARIOS.get(&env) {
                                     if scenario.host == "local" {
-                                        ProjectType::LocalProject(LOCAL_SCENARIOS.get(env).unwrap().path.to_owned())
+                                        ProjectType::LocalProject(LOCAL_SCENARIOS.get(&env).unwrap().path.to_owned())
                                     } else {
-                                        ProjectType::RemoteProject(LOCAL_SCENARIOS.get(env).unwrap().path.to_owned())
+                                        ProjectType::RemoteProject(LOCAL_SCENARIOS.get(&env).unwrap().path.to_owned())
                                     }
                                 } else {
                                     // Default to sample project
