@@ -1,0 +1,16 @@
+{
+    "default": {
+        "name": "Default",
+        "description": "Default scenario",
+        "host": "local",
+        "path": "assets/scenarios/Default.xml",
+        "creator": "Gordon Stein" 
+    },
+    "cubespawn": {
+        "name": "CubeSpawn",
+        "description": "Cube Spawning example scenario",
+        "host": "remote",
+        "path": "gstein/CubeSpawn",
+        "creator": "Gordon Stein"
+    }
+}

@@ -5,7 +5,6 @@ use tokio::net::{TcpStream, TcpListener};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
-use futures::future::poll_fn;
 
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};

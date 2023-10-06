@@ -73,7 +73,7 @@ pub(crate) async fn room_info(Query(params): Query<HashMap<String, String>>) -> 
     let server = "ws".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":5000";
 
     let visitors = room_data.visitors.lock().unwrap().clone();
-
+    
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
         id: room_data.name.clone(),
         environment: "rust".to_string(),

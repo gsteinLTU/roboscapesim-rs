@@ -412,7 +412,7 @@ pub async fn join_room(id: String, password: Option<String>) {
             game.borrow().in_room.replace(true);
         });
         show_3d_view();
-    } else if let Err(e) = response {
+    } else if let Err(_) = response {
         show_message("Error", "Error joining room");
         // Reopen join dialog
         join_sim_menu().await;

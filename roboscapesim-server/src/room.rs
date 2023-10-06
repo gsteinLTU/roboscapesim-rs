@@ -1,5 +1,6 @@
 use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
+use std::fs;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime};
@@ -18,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
+use once_cell::sync::Lazy;
 
 use crate::{CLIENTS, ROOMS};
 use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
@@ -25,8 +27,34 @@ use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
-use crate::vm::{STEPS_PER_IO_ITER, SAMPLE_PROJECT, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
+use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) enum ProjectType {
+    // Project on NetsBlox server
+    RemoteProject(String),
+    // Project in default_scenarios file
+    LocalProject(String),
+    // Project as XML string
+    ProjectXML(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct LocalScenarioDef {
+    pub name: String,
+    pub path: String,
+    pub creator: Option<String>,
+    pub description: Option<String>,
+    pub host: String,
+}
+
+pub const DEFAULT_SCENARIOS_FILE: &str = include_str!("../default_scenarios.json");
+
+static LOCAL_SCENARIOS: Lazy<BTreeMap<String, LocalScenarioDef>> = Lazy::new(|| {
+    serde_json::from_str(DEFAULT_SCENARIOS_FILE).unwrap()
+});
+
+pub const DEFAULT_PROJECT: &str = include_str!("../assets/scenarios/Default.xml");
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -39,6 +67,7 @@ pub struct RoomData {
     pub last_interaction_time: i64,
     pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, u128>,
+    /// List of usernames of users who have visited the room
     pub visitors: Arc<Mutex<Vec<String>>>,
     pub last_update: Instant,
     pub last_full_update: i64,
@@ -59,7 +88,9 @@ pub struct RoomData {
     pub netsblox_msg_tx: mpsc::Sender<(String, String, BTreeMap<String, String>)>,
     #[derivative(Debug = "ignore")]
     pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<(String, String, BTreeMap<String, String>)>>>,
+    /// Whether the room is in edit mode, if so, IoTScape messages are sent to NetsBlox server instead of being handled locally by VM
     pub edit_mode: bool,
+    /// Thread with VM if not in edit mode
     pub vm_thread: Option<JoinHandle<()>>,
 }
 
@@ -143,14 +174,52 @@ impl RoomData {
                 .block_on(async {
                     let environment = environment.and_then(|env| if env.trim().is_empty() { None } else { Some(env) });
 
-                    let mut project = match &environment {
-                        Some(environment) => reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", environment)).await.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())),
-                        None => Ok(SAMPLE_PROJECT.to_owned())
+                    // First, check if environment is a project ID
+                    let environment: ProjectType = if let Some(env) = &environment {
+                        if env.contains('/') {
+                            // Assume it's a project ID
+                            ProjectType::RemoteProject(env.to_owned())
+                        } else {
+                            // Check if it's a local scenario
+                            if LOCAL_SCENARIOS.contains_key(env) {
+                                if let Some(scenario) = LOCAL_SCENARIOS.get(env) {
+                                    if scenario.host == "local" {
+                                        ProjectType::LocalProject(LOCAL_SCENARIOS.get(env).unwrap().path.to_owned())
+                                    } else {
+                                        ProjectType::RemoteProject(LOCAL_SCENARIOS.get(env).unwrap().path.to_owned())
+                                    }
+                                } else {
+                                    // Default to sample project
+                                    ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
+                                }
+                            } else {
+                                // Default to sample project
+                                ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
+                            }
+                        }
+                    } else {
+                        // Default to sample project
+                        ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
                     };
 
-                    if project.is_err() {
-                        error!("Failed to load project: {:?}", &environment);
-                        project = Ok(SAMPLE_PROJECT.to_owned());
+                    let mut project = match environment {
+                        ProjectType::RemoteProject(project_name) => {
+                            info!("Loading remote project {}", project_name);
+                            reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).await.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
+                        },
+                        ProjectType::LocalProject(path) => {
+                            info!("Loading local project {}", path);
+                            fs::read_to_string(path).and_then(|proj| Ok(proj)).map_err(|e| format!("failed to read file: {:?}", e))
+                        },
+                        ProjectType::ProjectXML(xml) => {
+                            info!("Loading project from XML");
+                            Ok(xml.clone())
+                        },
+                    };
+
+                    if let Err(err) = project {
+                        error!("Failed to load project: {:?}", err);
+                        project = Ok(DEFAULT_PROJECT.to_owned());
                     }
 
                     let project = project.unwrap();
