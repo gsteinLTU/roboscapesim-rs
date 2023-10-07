@@ -40,7 +40,7 @@ pub(crate) enum ProjectType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct LocalScenarioDef {
+pub struct LocalScenarioDef {
     pub name: String,
     pub path: String,
     pub creator: Option<String>,
@@ -50,7 +50,7 @@ pub(crate) struct LocalScenarioDef {
 
 pub const DEFAULT_SCENARIOS_FILE: &str = include_str!("../default_scenarios.json");
 
-static LOCAL_SCENARIOS: Lazy<BTreeMap<String, LocalScenarioDef>> = Lazy::new(|| {
+pub static LOCAL_SCENARIOS: Lazy<BTreeMap<String, LocalScenarioDef>> = Lazy::new(|| {
     serde_json::from_str(DEFAULT_SCENARIOS_FILE).unwrap()
 });
 

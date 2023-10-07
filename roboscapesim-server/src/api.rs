@@ -6,7 +6,7 @@ use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{ROOMS, MAX_ROOMS, room::create_room};
+use crate::{ROOMS, MAX_ROOMS, room::{create_room, LOCAL_SCENARIOS, DEFAULT_SCENARIOS_FILE}};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
@@ -17,6 +17,7 @@ pub async fn create_api(addr: SocketAddr) {
     .route("/rooms/list", get(get_rooms_list))
     .route("/rooms/create", post(post_create))
     .route("/rooms/info", get(room_info))
+    .route("/environments/list", get(get_environments_list))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -132,6 +133,12 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
         server,
         room_id
     })
+}
+
+#[debug_handler]
+pub(crate) async fn get_environments_list() -> impl IntoResponse {
+    // Return DEFAULT_SCENARIOS_FILE string with JSON content type
+    ([(header::CONTENT_TYPE, "application/json"),], DEFAULT_SCENARIOS_FILE)
 }
 
 pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
