@@ -178,6 +178,31 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
         },
         Ok(UpdateMessage::RemoveObject(obj)) => {
             game.borrow().models.borrow_mut().remove(&obj);
+
+                // Robot-specific behavior
+                if obj.starts_with("robot_") {
+                    let robotmenu: Node = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
+                    
+                    // Don't create duplicates in the menu
+                    let mut search_node = robotmenu.first_child();
+
+                    while search_node.is_some() {
+                        let node = search_node.unwrap();
+
+                        if let Some(txt) = node.text_content() {
+                            if txt == &obj[6..]{
+                                search_node = Some(node);
+                                break;
+                            }
+                        }
+
+                        search_node = node.next_sibling();
+                    }
+                    
+                    if let Some(search_node) = search_node {
+                        robotmenu.remove_child(&search_node).unwrap();
+                    }
+                }
         },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
@@ -428,7 +453,7 @@ async fn request_room(username: String, password: Option<String>, edit_mode: boo
     });
 
     // TODO: get API URL through env var for deployed version
-    let response = client_clone.post("http://127.0.0.1:3000/rooms/create").json(&CreateRoomRequestData {
+    let response = client_clone.post(format!("{}rooms/create", API_SERVER)).json(&CreateRoomRequestData {
         username,
         password,
         edit_mode,
@@ -444,7 +469,7 @@ async fn request_room_info(id: &String) -> Result<RoomInfo, reqwest::Error> {
         client_clone = client.clone();
     });
 
-    let response = client_clone.get(format!("http://127.0.0.1:3000/rooms/info?id={}", id)).send().await.unwrap();
+    let response = client_clone.get(format!("{}rooms/info?id={}", API_SERVER, id)).send().await.unwrap();
 
     response.json().await
 }
