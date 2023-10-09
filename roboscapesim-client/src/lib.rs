@@ -173,7 +173,9 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
         },
         Ok(UpdateMessage::Hibernating) => {
             console_log!("Hibernating");
-            // TODO: Handle better, should it remove all objects?
+            
+            game.borrow().cleanup();
+
             set_title("Disconnected");
         },
         Ok(UpdateMessage::RemoveObject(obj)) => {
@@ -485,6 +487,11 @@ async fn connect(server: &String) {
                 handle_update_message(msg, &gc);
             });
             s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
+            let gc = game.clone();
+            s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
+                set_title("Disconnected");
+                gc.borrow().cleanup();
+            }).into_js_value().unchecked_ref()));
         });
 
         s.borrow().set_onopen(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{

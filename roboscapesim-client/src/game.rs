@@ -1,9 +1,11 @@
 use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
-use js_sys::Reflect;
+use js_sys::{Reflect, Function};
 use neo_babylon::prelude::*;
 use roboscapesim_common::{ObjectData, RoomState};
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window};
+
+use crate::ui::{clear_robots_menu, update_robot_buttons_visibility};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -103,5 +105,36 @@ impl Game {
         self.models.borrow_mut().insert(name.to_owned(), model.clone());
 
         Ok(model)
+    }
+
+    // After disconnect, cleanup will remove all models from the scene and perform other cleanup tasks
+    pub(crate) fn cleanup(&self) {
+        // Remove all models from the scene (BabylonMesh's drop will handle the rest)
+        self.models.borrow_mut().clear();
+
+        // Remove all beeps
+        for beep in self.beeps.borrow().values() {
+            Reflect::get(&beep, &"stop".into()).unwrap().unchecked_ref::<Function>().call0(&beep).unwrap_or_default();
+        }
+        self.beeps.borrow_mut().clear();
+
+        // Remove all name tags
+        for name_tag in self.name_tags.borrow().values() {
+            Reflect::get(&name_tag, &"dispose".into()).unwrap().unchecked_ref::<Function>().call0(&name_tag).unwrap_or_default();
+        }
+        self.name_tags.borrow_mut().clear();
+
+        // Cleanup state
+        self.state.borrow_mut().clear();
+        self.last_state.borrow_mut().clear();
+        self.state_time.set(0.0);
+        self.last_state_time.set(0.0);
+        self.state_server_time.set(0.0);
+        self.last_state_server_time.set(0.0);
+        self.room_state.borrow_mut().take();
+
+        // UI cleanup
+        clear_robots_menu();
+        update_robot_buttons_visibility();
     }
 }

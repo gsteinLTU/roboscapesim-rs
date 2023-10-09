@@ -299,6 +299,7 @@ pub(crate) fn clear_all_text_blocks() {
     });
 }
 
+/// Create a label in the 3D view
 pub(crate) fn create_label(text: &str, font: Option<&str>, color: Option<&str>, outline: Option<bool>) -> JsValue {
     // Defaults
     let font = font.unwrap_or("Arial");
@@ -359,6 +360,7 @@ pub(crate) fn create_label(text: &str, font: Option<&str>, color: Option<&str>, 
     plane
 }
 
+/// Update the visibility of the buttons in the 3D view button bar based on if there is a selected robot
 pub(crate) fn update_robot_buttons_visibility() {
     GAME.with(|game| {
         match get_selected_robot() {
@@ -380,4 +382,9 @@ pub(crate) fn update_robot_buttons_visibility() {
             }
         }
     });
+}
+
+pub(crate) fn clear_robots_menu() {
+    let robotmenu: HtmlElement = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
+    robotmenu.set_inner_html("");
 }
