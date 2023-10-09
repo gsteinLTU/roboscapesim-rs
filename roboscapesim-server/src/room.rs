@@ -825,7 +825,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     let room = ROOMS.get(room_id).unwrap();
-    let room = room.lock().unwrap();
+    let room = &mut room.lock().unwrap();
     
     // Check password
     if room.password.clone().is_some_and(|pass| pass != password) {
@@ -840,6 +840,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
         }
     }    
     room.sockets.insert(peer_id.to_string(), peer_id);
+    room.last_interaction_time = Utc::now().timestamp();
     room.send_info_to_client(peer_id);
     room.send_state_to_client(true, peer_id);
     Ok(())
