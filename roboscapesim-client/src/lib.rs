@@ -407,26 +407,17 @@ pub async fn join_sim_menu() {
 }
 
 pub async fn new_room(environment: Option<String>, password: Option<String>, edit_mode: bool) {
-    let in_room = GAME.with(|game| {
-        game.borrow().in_room.get()
-    });
+    let response = request_room(get_username(), password, edit_mode, environment).await;
+
+    if let Ok(response) = response {
+        connect(&response.server).await;
+        send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), None));
+        GAME.with(|game| {
+            game.borrow().in_room.replace(true);
+        });
+        show_3d_view();
+    }
     
-    if in_room {
-        // TODO: disconnect and clean up
-    }
-
-    if !in_room {
-        let response = request_room(get_username(), password, edit_mode, environment).await;
-
-        if let Ok(response) = response {
-            connect(&response.server).await;
-            send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), None));
-            GAME.with(|game| {
-                game.borrow().in_room.replace(true);
-            });
-            show_3d_view();
-        }
-    }
 }
 
 pub async fn join_room(id: String, password: Option<String>) {
@@ -477,6 +468,20 @@ async fn request_room_info(id: &String) -> Result<RoomInfo, reqwest::Error> {
 }
 
 async fn connect(server: &String) {
+    GAME.with(|game| {
+        let in_room = game.borrow().in_room.get();
+        if in_room {
+            // Disconnect and clean up
+            game.borrow().cleanup();
+            WEBSOCKET.with(|socket| {
+                socket.borrow().clone().and_then(|s| Some(s.borrow().close()));
+                socket.replace(None);
+            });
+        }
+    });
+    
+    set_title("Connecting...");
+
     WEBSOCKET.with(|socket| {
         let s = WebSocket::new(server);
         let s = Rc::new(RefCell::new(s.unwrap()));
@@ -491,6 +496,9 @@ async fn connect(server: &String) {
             s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
                 set_title("Disconnected");
                 gc.borrow().cleanup();
+            }).into_js_value().unchecked_ref()));
+            s.borrow().set_onerror(Some(&Closure::<(dyn Fn(JsValue) -> _ + 'static)>::new(|e: JsValue|{
+                console_log!("error {}", e.as_string().unwrap());
             }).into_js_value().unchecked_ref()));
         });
 
