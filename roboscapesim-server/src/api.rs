@@ -70,15 +70,12 @@ pub(crate) async fn room_info(Query(params): Query<HashMap<String, String>>) -> 
     let room = room.unwrap().clone();
     let room_data = room.lock().unwrap();
 
-    let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
-    let server = "ws".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":5000";
-
     let visitors = room_data.visitors.lock().unwrap().clone();
     
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
         id: room_data.name.clone(),
         environment: "rust".to_string(),
-        server: server.clone(),
+        server: get_server(),
         creator: "TODO".to_owned(),
         has_password: room_data.password.is_some(),
         is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
@@ -90,8 +87,6 @@ pub(crate) async fn room_info(Query(params): Query<HashMap<String, String>>) -> 
 fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<RoomInfo> {
     let mut rooms = vec![];
     
-    let server = EXTERNAL_IP.lock().unwrap().clone().unwrap_or_else(|| "127.0.0.1".into());
-
     let user_filter = user_filter.unwrap_or_default();
 
     for r in ROOMS.iter() {
@@ -110,7 +105,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
         rooms.push(RoomInfo{
             id,
             environment: "rust".to_string(),
-            server: server.clone(),
+            server: get_server(),
             creator: "TODO".to_owned(),
             has_password: room_data.password.is_some(),
             is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
@@ -126,11 +121,8 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
 
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
-    let ip = &EXTERNAL_IP.lock().unwrap().clone().unwrap();
-    let server = "ws".to_owned() + (if ip == "127.0.0.1" { "" } else { "s" }) + "://" + ip + ":5000";
-
     Json(CreateRoomResponseData {
-        server,
+        server: get_server(),
         room_id
     })
 }
@@ -146,4 +138,9 @@ pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     Ok("127.0.0.1".into())
     //let url = "http://checkip.amazonaws.com";
     //reqwest::get(url).await.unwrap().text().await
+}
+
+pub(crate) fn get_server() -> String {
+    let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
+    if ip == "127-0-0-1" {"ws"} else {"wss"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org:5000"
 }

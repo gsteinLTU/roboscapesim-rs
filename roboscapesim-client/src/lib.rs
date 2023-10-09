@@ -497,8 +497,9 @@ async fn connect(server: &String) {
                 set_title("Disconnected");
                 gc.borrow().cleanup();
             }).into_js_value().unchecked_ref()));
-            s.borrow().set_onerror(Some(&Closure::<(dyn Fn(JsValue) -> _ + 'static)>::new(|e: JsValue|{
-                console_log!("error {}", e.as_string().unwrap());
+            s.borrow().set_onerror(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+                console_log!("error");
+                show_message("Error", "Failed to connect to server");
             }).into_js_value().unchecked_ref()));
         });
 
