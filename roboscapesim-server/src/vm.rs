@@ -3,7 +3,7 @@ use std::time::Duration;
 use netsblox_vm::runtime::GetType;
 use netsblox_vm::{ast, runtime::{CustomTypes, Value, EntityKind, IntermediateType, ErrorCause, FromAstError, Settings}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::Json, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
 
-pub const DEFAULT_BASE_URL: &str = "https://editor.netsblox.org";
+pub const DEFAULT_BASE_URL: &str = "https://cloud.netsblox.org";
 pub const STEPS_PER_IO_ITER: usize = 64;
 pub const YIELDS_BEFORE_IDLE_SLEEP: usize = 128;
 pub const IDLE_SLEEP_TIME: Duration = Duration::from_millis(2);
