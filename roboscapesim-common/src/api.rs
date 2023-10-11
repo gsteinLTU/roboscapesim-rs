@@ -36,3 +36,10 @@ pub struct RoomInfo {
     pub creator: String,  
     pub visitors: Vec<String>,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EnvironmentInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}

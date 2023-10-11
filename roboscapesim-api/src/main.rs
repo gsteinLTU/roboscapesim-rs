@@ -1,9 +1,31 @@
 use axum::{Json, response::IntoResponse, extract::Query};
 use log::{info, error, debug};
-use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
-use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
+use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo, EnvironmentInfo};
+use std::{sync::Mutex, net::SocketAddr, collections::HashMap, time::SystemTime};
 use axum::{routing::{post, get, put}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
+use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
+use once_cell::sync::Lazy;
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ServerInfo {
+    pub address: String,
+    pub max_rooms: usize,
+    pub last_update: SystemTime,
+}
+
+static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| {
+    DashMap::new()
+});
+
+static ENVIRONMENTS: Lazy<DashMap<String, EnvironmentInfo>> = Lazy::new(|| {
+    DashMap::new()
+});
+
+static ROOMS: Lazy<DashMap<String, RoomInfo>> = Lazy::new(|| {
+    DashMap::new()
+});
 
 #[tokio::main]
 async fn main() {
