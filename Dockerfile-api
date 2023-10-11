@@ -5,7 +5,7 @@ RUN update-ca-certificates
 WORKDIR /roboscape_build
 
 COPY . .
-WORKDIR /roboscape_build/roboscapesim-server
+WORKDIR /roboscape_build/roboscapesim-api
 RUN cargo b -r
 
 FROM debian:bookworm-slim
@@ -15,5 +15,5 @@ RUN apt-get install -y libssl-dev
 
 WORKDIR /roboscape
 COPY --from=builder /roboscape_build/target/release/roboscape* .
-EXPOSE 3000 5000
-CMD [ "./roboscapesim-server" ]
+EXPOSE 5000
+CMD [ "./roboscapesim-api" ]

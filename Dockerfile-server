@@ -1,0 +1,19 @@
+FROM rust AS builder
+
+RUN update-ca-certificates
+
+WORKDIR /roboscape_build
+
+COPY . .
+WORKDIR /roboscape_build/roboscapesim-server
+RUN cargo b -r
+
+FROM debian:bookworm-slim
+
+RUN apt-get update
+RUN apt-get install -y libssl-dev
+
+WORKDIR /roboscape
+COPY --from=builder /roboscape_build/target/release/roboscape* .
+EXPOSE 3000
+CMD [ "./roboscapesim-server" ]
