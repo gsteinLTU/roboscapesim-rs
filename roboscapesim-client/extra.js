@@ -25,9 +25,12 @@
             element.style.height = '400px';
             const canvas = document.createElement('canvas');
             canvas.id = 'roboscape-canvas';
-            canvas.style.width = 'calc(100% - 32px)';
-            canvas.style.height = 'calc(100% - 48px)';
-            element.querySelector('content').appendChild(canvas);
+            canvas.style.flex = '1 1 auto';
+            const contentElement = element.querySelector('content');
+            contentElement.style.display = 'flex';
+            contentElement.style['flex-flow'] = 'column';
+            contentElement.style['justify-content'] = 'flex-end';
+            contentElement.appendChild(canvas);
             setupDialog(element);
             
             window.externalVariables['roboscapedialog'] = element;
@@ -35,6 +38,7 @@
             
             const buttonbar = document.createElement('div');
             buttonbar.id = 'roboscapebuttonbar';
+            buttonbar.style.flex = '0 1';
             element.querySelector('content').appendChild(buttonbar);
             
             const robotmenu_label = document.createElement('label');

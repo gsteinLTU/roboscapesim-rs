@@ -22,8 +22,8 @@
 
         getMenu() {
             return {
-				'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
 				'Join room...': window.RoboScapeOnline_fns.join_sim_menu,
+				'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
 				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
@@ -40,16 +40,16 @@
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('roomID'),
 						new Extension.Palette.Block('robotsInRoom'),
+						new Extension.Palette.Block('roomID'),
 					],
 					SpriteMorph
 				),
 				new Extension.PaletteCategory(
 					'network',
 					[
-						new Extension.Palette.Block('roomID'),
 						new Extension.Palette.Block('robotsInRoom'),
+						new Extension.Palette.Block('roomID'),
 					],
 					StageMorph
 				),
@@ -60,20 +60,20 @@
         getBlocks() {
             return [
 				new Extension.Block(
-					'roomID',
-					'reporter',
-					'network',
-					'RoboScape room id',
-					[],
-					function () { return RoboScapeOnline_fns.room_id(); }
-				).for(SpriteMorph, StageMorph),
-				new Extension.Block(
 					'robotsInRoom',
 					'reporter',
 					'network',
 					'robots in room',
 					[],
 					function () { return RoboScapeOnline_fns.robots_in_room(); }
+				).for(SpriteMorph, StageMorph),
+				new Extension.Block(
+					'roomID',
+					'reporter',
+					'network',
+					'RoboScape room id',
+					[],
+					function () { return RoboScapeOnline_fns.room_id(); }
 				).for(SpriteMorph, StageMorph),
 
             ];
@@ -118,9 +118,12 @@
             element.style.height = '400px';
             const canvas = document.createElement('canvas');
             canvas.id = 'roboscape-canvas';
-            canvas.style.width = 'calc(100% - 32px)';
-            canvas.style.height = 'calc(100% - 48px)';
-            element.querySelector('content').appendChild(canvas);
+            canvas.style.flex = '1 1 auto';
+            const contentElement = element.querySelector('content');
+            contentElement.style.display = 'flex';
+            contentElement.style['flex-flow'] = 'column';
+            contentElement.style['justify-content'] = 'flex-end';
+            contentElement.appendChild(canvas);
             setupDialog(element);
             
             window.externalVariables['roboscapedialog'] = element;
@@ -128,6 +131,7 @@
             
             const buttonbar = document.createElement('div');
             buttonbar.id = 'roboscapebuttonbar';
+            buttonbar.style.flex = '0 1';
             element.querySelector('content').appendChild(buttonbar);
             
             const robotmenu_label = document.createElement('label');
@@ -188,17 +192,17 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {join_sim_menu, room_id, new_sim_menu, robots_in_room, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {room_id, new_sim_menu, join_sim_menu, show_3d_view, robots_in_room} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.join_sim_menu = join_sim_menu;
 				window.RoboScapeOnline_fns.room_id = room_id;
 				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.join_sim_menu = join_sim_menu;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 		        `;
 		    document.body.appendChild(s);
 		};

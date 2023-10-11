@@ -378,7 +378,7 @@ pub(crate) fn update_robot_buttons_visibility() {
                 game.borrow().ui_elements.borrow().get("fps").unwrap().style().remove_property("display").unwrap();
                 game.borrow().ui_elements.borrow().get("encrypt").unwrap().style().remove_property("display").unwrap();
                 game.borrow().ui_elements.borrow().get("claim").unwrap().style().remove_property("display").unwrap();
-                game.borrow().ui_elements.borrow().get("claim_text").unwrap().style().remove_property("display").unwrap();
+                game.borrow().ui_elements.borrow().get("claim_text").unwrap().style().set_property("display", "inline-block").unwrap();
             }
         }
     });
