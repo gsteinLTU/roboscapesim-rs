@@ -12,6 +12,9 @@ use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, st
 
 use super::service_struct::{Service, ServiceType, setup_service};
 
+const ENTITY_LIMIT: usize = 50;
+const ROBOT_LIMIT: usize = 10;
+
 pub fn create_world_service(id: &str) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
@@ -465,9 +468,20 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     if params.len() < 6 {
         return None;
     }
-    // TODO use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
+
+
+
+    // TODO: use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
 
     let entity_type = str_val(&params[0]).to_lowercase();
+
+    // Check limits
+    if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
+        return Some(Value::Bool(false));
+    } else if entity_type != "robot" && room.count_non_robots() >= ENTITY_LIMIT {
+        return Some(Value::Bool(false));
+    }
+
     let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
     let y = num_val(&params[2]).clamp(-MAX_COORD, MAX_COORD);
     let z = num_val(&params[3]).clamp(-MAX_COORD, MAX_COORD);

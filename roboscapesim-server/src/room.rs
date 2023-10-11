@@ -815,6 +815,10 @@ impl RoomData {
         self.robots.clear();
         info!("All entities removed from {}", self.name);
     }
+
+    pub(crate) fn count_non_robots(&self) -> usize {
+        (self.objects.len() - self.robots.len()).clamp(0, self.objects.len())
+    }
 }
 
 pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
