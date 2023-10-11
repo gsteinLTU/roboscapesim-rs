@@ -1,0 +1,12 @@
+[package]
+name = "roboscapesim-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.6.20"
+axum-macros = "0.3.8"
+log = "0.4.20"
+roboscapesim-common = { path = "../roboscapesim-common" }
+tokio = "1.33.0"
+tower-http = "0.4.4"
