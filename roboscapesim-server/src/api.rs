@@ -16,7 +16,7 @@ pub async fn create_api(addr: SocketAddr) {
     .route("/server/status", get(server_status))
     .route("/rooms/list", get(get_rooms_list))
     .route("/rooms/create", post(post_create))
-    .route("/rooms/info", get(room_info))
+    .route("/rooms/info", get(get_room_info))
     .route("/environments/list", get(get_environments_list))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
@@ -59,7 +59,7 @@ pub(crate) async fn get_rooms_list(Query(params): Query<HashMap<String, String>>
 
 #[debug_handler]
 /// Get info about a specific room
-pub(crate) async fn room_info(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
     let room_id = params.get("id").unwrap_or(&"INVALID".to_owned()).clone();
     let room = ROOMS.get(&room_id);
     
@@ -117,8 +117,6 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 
 #[debug_handler]
 pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
-    info!("{:?}", request);
-
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
     Json(CreateRoomResponseData {

@@ -1,21 +1,24 @@
 use chrono::Utc;
+use dashmap::DashMap;
+use log::info;
+use once_cell::sync::Lazy;
 use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
-use std::{net::SocketAddr, sync::Mutex};
 use std::sync::Arc;
-use tokio::{time::{Duration, self}, task};
-use dashmap::DashMap;
-use once_cell::sync::Lazy;
-use log::info;
+use std::{net::SocketAddr, sync::Mutex};
+use tokio::{
+    task,
+    time::{self, Duration},
+};
 
+use crate::api::{create_api, get_external_ip, EXTERNAL_IP};
 use crate::socket::{ws_accept, ws_rx, ws_tx};
-use crate::api::{get_external_ip, EXTERNAL_IP, create_api};
 
-mod room;
-mod robot;
-mod simulation;
 mod api;
+mod robot;
+mod room;
+mod simulation;
 mod vm;
 
 #[path = "./util/mod.rs"]
@@ -27,20 +30,21 @@ mod socket;
 
 const MAX_ROOMS: usize = 64;
 
-static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| {
-    DashMap::new()
-});
+static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| DashMap::new());
 
-pub static CLIENTS: Lazy<DashMap<u128, SocketInfo>> = Lazy::new(|| {
-    DashMap::new()
-});
+pub static CLIENTS: Lazy<DashMap<u128, SocketInfo>> = Lazy::new(|| DashMap::new());
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
 
     // Setup logger
-    SimpleLogger::new().with_level(log::LevelFilter::Error).with_module_level("roboscapesim_server", log::LevelFilter::Info).env().init().unwrap();
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Error)
+        .with_module_level("roboscapesim_server", log::LevelFilter::Info)
+        .env()
+        .init()
+        .unwrap();
     info!("Starting RoboScape Online Server...");
 
     if let Ok(ip) = get_external_ip().await {
@@ -85,12 +89,10 @@ async fn update_fn() {
                 }
             }
 
-            task::spawn(
-                async move {
-                    let room_data = &mut m.lock().unwrap();
-                    room_data.update();
-                }
-            );
+            task::spawn(async move {
+                let room_data = &mut m.lock().unwrap();
+                room_data.update();
+            });
         }
     }
 }
