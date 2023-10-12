@@ -66,6 +66,33 @@ async fn main() {
     debug!("listening on {}", addr);
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
 
+    // Clean up servers not updated in 5 minutes
+    tokio::spawn(async move {
+        loop {
+            let mut servers_to_remove = Vec::new();
+            for server in SERVERS.iter() {
+                if server.value().last_update.elapsed().unwrap().as_secs() > 300 {
+                    servers_to_remove.push(server.key().clone());
+                }
+            }
+            for server in servers_to_remove {
+                SERVERS.remove(&server);
+
+                // Remove rooms on server
+                let mut rooms_to_remove = Vec::new();
+                for room in ROOMS.iter() {
+                    if room.value().server == server {
+                        rooms_to_remove.push(room.key().clone());
+                    }
+                }
+                for room in rooms_to_remove {
+                    ROOMS.remove(&room);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        }
+    });
+
     if let Err(err) = server.await {
         error!("server error: {}", err);
     }
