@@ -488,6 +488,15 @@ impl RoomData {
             if RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time) {
                 self.last_interaction_time = Utc::now().timestamp();
             }
+
+            // Check if claimed by user not in room
+            if let Some(claimant) = &robot.1.claimed_by {
+                if !self.sockets.contains_key(claimant) {
+                    info!("Robot {} claimed by {} but not in room, unclaiming", robot.0, claimant);
+                    robot.1.claimed_by = None;
+                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.0.clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().to_owned()));
+                }
+            }
         }
         
         let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
@@ -590,9 +599,11 @@ impl RoomData {
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
     pub(crate) fn is_authorized(&self, client: u128, robot_id: &str) -> bool {
         let robot = self.robots.get(robot_id);
+        // Require robot to exist first
         if let Some(robot) = robot {
-            // Robot is not claimable
+            // Test if robot is not claimable
             if !robot.claimable {
+                info!("Robot {} is not claimable, no client actions allowed", robot_id);
                 return false;
             }
 
@@ -605,15 +616,23 @@ impl RoomData {
                 // Only test if client is still in room
                 if let Some(client) = client {
                     let client_username = client.key().to_owned();
-                    // If claimant is client
+                    // If claimant is client, approve
                     if claimant == &client_username {
                         return true;
+                    } else {
+                        // Client not claimant, deny
+                        info!("Client {} attempting to use robot {} but {} already claimed it", client_username, robot_id, claimant);
+                        return false;
                     }
+                } else {
+                    // Client not in room, approve
+                    info!("Client {} claiming robot {} not in room, approving", claimant, robot_id);
+                    return true;
                 }
             }
         }
         
-        // If no robot, approve
+        // If no robot (or fell through), approve
         true
     }
 
