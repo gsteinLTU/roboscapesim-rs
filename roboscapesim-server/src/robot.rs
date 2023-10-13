@@ -488,6 +488,7 @@ impl Resettable for RobotData {
         self.whisker_states = [false, false];
         self.ticks = [0.0, 0.0];
         self.start_time = SystemTime::now();
+        self.claimed_by = None;
 
         self.last_heartbeat = Utc::now().timestamp();
         

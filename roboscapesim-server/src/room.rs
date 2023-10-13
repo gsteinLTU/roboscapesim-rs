@@ -491,6 +491,7 @@ impl RoomData {
         let mut needs_reset = false;
         let mut robot_resets = vec![];
         for client in self.sockets.iter() {
+            let client_username = client.key().to_owned();
             let client = CLIENTS.get(client.value());
 
             if let Some(client) = client {
@@ -503,8 +504,19 @@ impl RoomData {
                                 robot_resets.push(robot_id);
                             }
                         },
-                        ClientMessage::ClaimRobot(_robot_id) => {
-                            // TODO: Claim robot
+                        ClientMessage::ClaimRobot(robot_id) => {
+                            // Check if robot is free
+                            if self.is_authorized(*client.key(), &robot_id) {
+                                // Claim robot
+                                if let Some(robot) = self.robots.get_mut(&robot_id) {
+                                    if robot.claimed_by.is_none() {
+                                        robot.claimed_by = Some(client_username.clone());
+
+                                        // Send claim message to clients
+                                        self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
+                                    }
+                                }
+                            }
                         },
                         ClientMessage::EncryptRobot(robot_id) => {
                             if let Some(robot) = self.robots.get_mut(&robot_id) {

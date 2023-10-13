@@ -186,6 +186,8 @@ pub enum UpdateMessage {
     Hibernating,
     /// Client should remove an object with a given id
     RemoveObject(String),
+    /// Robot claimed and by whom
+    RobotClaimed(String, String),
 }
 
 /// Struct containing possible message types sent to the server

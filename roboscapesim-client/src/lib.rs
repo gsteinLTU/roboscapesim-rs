@@ -206,6 +206,9 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                     }
                 }
         },
+        Ok(UpdateMessage::RobotClaimed(robot, user)) => {
+            // TODO: Update claim message
+        },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
 }
