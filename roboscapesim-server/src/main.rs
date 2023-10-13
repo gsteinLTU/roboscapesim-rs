@@ -29,9 +29,9 @@ mod util;
 mod services;
 mod socket;
 
-const MAX_ROOMS: usize = 64;
+pub const MAX_ROOMS: usize = 64;
 
-static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| DashMap::new());
+pub static ROOMS: Lazy<DashMap<String, Arc<Mutex<RoomData>>>> = Lazy::new(|| DashMap::new());
 
 pub static CLIENTS: Lazy<DashMap<u128, SocketInfo>> = Lazy::new(|| DashMap::new());
 

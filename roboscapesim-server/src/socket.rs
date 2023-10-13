@@ -125,7 +125,11 @@ pub async fn ws_accept() {
 
     loop {
         let (conn, _) = listener.accept().await.unwrap();
-        accept_connection(conn).await;
+        let conn = accept_connection(conn).await;
+
+        if let Err(e) = conn {
+            info!("Error accepting connection: {:?}", e);
+        }
     }
 }
 
