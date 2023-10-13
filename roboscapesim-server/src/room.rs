@@ -3,7 +3,7 @@ use std::f32::consts::FRAC_PI_2;
 use std::fs;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
@@ -28,6 +28,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
+mod netsblox_api;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum ProjectType {
@@ -209,7 +210,7 @@ impl RoomData {
                     let mut project = match environment {
                         ProjectType::RemoteProject(project_name) => {
                             info!("Loading remote project {}", project_name);
-                            reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).await.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
+                            reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).await.unwrap().json::<netsblox_api::Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
                         },
                         ProjectType::LocalProject(path) => {
                             info!("Loading local project {}", path);
@@ -622,10 +623,12 @@ impl RoomData {
 
         if time - self.last_full_update < 60 {
             if (now - self.last_update) > Duration::from_millis(120) {
+                // Send incremental state to clients
                 self.send_state_to_all_clients(false);
                 self.last_update = now;
             }
         } else {
+            // Send full state to clients
             self.send_state_to_all_clients(true);
             self.last_full_update = time;
             self.last_update = now;
@@ -689,7 +692,6 @@ impl RoomData {
                     }
                 }
             }
-
         }
         
         // If no robot, approve
@@ -907,79 +909,4 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
     let room_id = room.lock().unwrap().name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     room_id
-}
-
-
-/// NetsBlox API
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ProjectId(String);
-
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
-struct RoleId(String);
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-enum SaveState {
-    Created,
-    Transient,
-    Broken,
-    Saved,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-struct RoleMetadata {
-    pub name: String,
-    pub code: String,
-    pub media: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-enum PublishState {
-    Private,
-    ApprovalDenied,
-    PendingApproval,
-    Public,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct RoleData {
-    pub name: String,
-    pub code: String,
-    pub media: String,
-}
-
-impl RoleData {
-    pub fn to_xml(&self) -> String {
-        let name = self.name.replace('\"', "\\\"");
-        format!("<role name=\"{}\">{}{}</role>", name, self.code, self.media)
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Project {
-    pub id: ProjectId,
-    pub owner: String,
-    pub name: String,
-    pub updated: SystemTime,
-    pub state: PublishState,
-    pub collaborators: std::vec::Vec<String>,
-    pub origin_time: SystemTime,
-    pub save_state: SaveState,
-    pub roles: HashMap<RoleId, RoleData>,
-}
-
-
-impl Project {
-    pub fn to_xml(&self) -> String {
-        let role_str: String = self
-            .roles
-            .values()
-            .map(|role| role.to_xml())
-            .collect::<Vec<_>>()
-            .join(" ");
-        format!(
-            "<room name=\"{}\" app=\"{}\">{}</room>",
-            self.name, "NetsBlox", role_str
-        )
-    }
 }
