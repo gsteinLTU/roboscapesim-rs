@@ -50,7 +50,7 @@ async fn main() {
         .route("/rooms/list", get(get_rooms_list))
         .route("/rooms/create", post(post_create))
         .route("/rooms/info", get(get_room_info))
-        .route("/server/announce", post(post_announce))
+        .route("/server/announce", post(post_server_announce))
         .route("/server/rooms", put(put_server_rooms))
         .route("/environments/list", get(get_environments_list))
         .layer(
@@ -190,7 +190,7 @@ async fn get_room_info(Query(params): Query<HashMap<String, String>>) -> impl In
 }
 
 /// Receive announcement from server
-async fn post_announce(Json(data): Json<(String, ServerStatus)>) -> impl IntoResponse {
+async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl IntoResponse {
     let (ip, data) = data;
     let server = ServerInfo {
         address: ip,

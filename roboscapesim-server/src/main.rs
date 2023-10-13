@@ -61,6 +61,9 @@ async fn main() {
     // Update simulations
     let _update_loop = task::spawn(update_fn());
 
+    // Announce to master server
+    let _announce_api = task::spawn(api::announce_api());
+
     // Start API server
     create_api(SocketAddr::from(([0, 0, 0, 0], 3000))).await;
     info!("Running API server on port 3000 ...");

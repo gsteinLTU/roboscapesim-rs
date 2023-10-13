@@ -10,6 +10,26 @@ use crate::{ROOMS, MAX_ROOMS, room::{create_room, LOCAL_SCENARIOS, DEFAULT_SCENA
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
+pub async fn announce_api() {
+    // Every 5 minutes, announce to main server
+    let url = format!("{}/server/announce", get_main_api_server());
+    let client = reqwest::Client::new();
+    let server = get_external_ip().await.unwrap();
+    let max_rooms = MAX_ROOMS;
+    loop {
+        let data = (server.clone(), ServerStatus {
+            active_rooms: ROOMS.len(),
+            hibernating_rooms: 0,
+            max_rooms,
+        });
+        let res = client.post(&url).json(&data).send().await;
+        if let Err(err) = res {
+            error!("Error announcing to main server: {}", err);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
+    }
+}
+
 /// Create API server with routes
 pub async fn create_api(addr: SocketAddr) {
     let app = Router::new()
@@ -131,11 +151,30 @@ pub(crate) async fn get_environments_list() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/json"),], DEFAULT_SCENARIOS_FILE)
 }
 
+/// Get external IP address
 pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     // Final deployment is expected to be to AWS, although this URL currently works on other networks
-    Ok("127.0.0.1".into())
-    //let url = "http://checkip.amazonaws.com";
-    //reqwest::get(url).await.unwrap().text().await
+    #[cfg(debug_assertions)]
+    {
+        Ok("127.0.0.1".into())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let url = "http://checkip.amazonaws.com";
+        reqwest::get(url).await?.text().await
+    }
+}
+
+/// Get main API server URL
+pub(crate) fn get_main_api_server() -> String {
+    #[cfg(debug_assertions)]
+    {
+        "http://127.0.0.1:5000".to_owned()
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        "https://roboscapeonlineapi.netsblox.org".to_owned()
+    }
 }
 
 pub(crate) fn get_server() -> String {
