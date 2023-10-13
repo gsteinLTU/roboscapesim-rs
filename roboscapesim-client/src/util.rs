@@ -18,9 +18,14 @@ pub(crate) fn get_username() -> String
     //world.children[0].cloud.username
     let ide = get_ide();
     let cloud = Reflect::get(&ide, &"cloud".into()).unwrap();
-    Reflect::get(&cloud, &"username".into()).unwrap().as_string().unwrap_or("anonymous".into())
+
+    // If the username is not set, use the CLIENT_ID (although this is now less reliable)
+    Reflect::get(&cloud, &"username".into()).unwrap().as_string().unwrap_or_else(|| {
+        js_get(&window().unwrap(), "CLIENT_ID").unwrap().as_string().unwrap_or("Unknown".to_owned())
+    })
 }
 
+/// Get the NetsBloxMorph
 fn get_ide() -> JsValue {
     let window = window().unwrap();
     let world = Reflect::get(&window, &"world".into()).unwrap();
@@ -55,27 +60,33 @@ pub(crate) fn apply_transform(m: Rc<BabylonMesh>, transform: roboscapesim_common
     m.set_scaling(&Vector3::new(transform.scaling.x.into(), transform.scaling.y.into(), transform.scaling.z.into()));
 }
 
+/// Set a property on a JsValue
 pub(crate) fn js_set<T>(target: &JsValue, prop: &str, val: T) -> Result<bool, JsValue>
 where JsValue: From<T> {
     Reflect::set(target, &prop.into(), &JsValue::from(val))
 }
 
+/// Get a property from a JsValue
 pub(crate) fn js_get(target: &JsValue, prop: &str) -> Result<JsValue, JsValue> {
     Reflect::get(target, &prop.into())
 }
 
+/// Construct a new object
 pub(crate) fn js_construct(type_name: &str, arguments_list: &[&JsValue]) -> Result<JsValue, JsValue> {
     Reflect::construct(&Reflect::get(&window().unwrap(), &type_name.into()).unwrap().unchecked_into(), &Array::from_iter(arguments_list.into_iter()))
 }
 
+/// Call a method on a JsValue
 pub(crate) fn js_call_member(target: &JsValue, fn_name: &str, arguments_list: &[&JsValue]) -> Result<JsValue, JsValue> {
     Reflect::apply(Reflect::get(&target, &fn_name.into()).unwrap().unchecked_ref(), &target, &Array::from_iter(arguments_list.into_iter()))
 }
 
+/// Helper to get document
 pub(crate) fn document() -> Document {
     window().unwrap().document().unwrap()
 }
 
+/// Get the robot selected in the dropdown (or None if none selected)
 pub(crate) fn get_selected_robot() -> Option<String> {
     let robotmenu = get_nb_externalvar("roboscapedialog-robotmenu").unwrap();
     let value = js_get(&robotmenu, "value").unwrap().as_string().unwrap();
@@ -92,6 +103,7 @@ pub(crate) fn show_message(title: &str, body: &str) {
 }
 
 #[macro_export]
+/// Macro to make console.logging easier
 macro_rules! console_log {
     ($($tokens: tt)*) => {
         web_sys::console::log_1(&format!($($tokens)*).into())
