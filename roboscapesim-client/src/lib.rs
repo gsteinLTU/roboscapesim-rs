@@ -207,7 +207,14 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 }
         },
         Ok(UpdateMessage::RobotClaimed(robot, user)) => {
-            // TODO: Update claim message
+            if user.is_empty() {
+                game.borrow().robot_claims.borrow_mut().remove(&robot);
+            } else {
+                game.borrow().robot_claims.borrow_mut().insert(robot, user);
+            }
+
+            update_claim_text();
+            update_robot_buttons_visibility();
         },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }

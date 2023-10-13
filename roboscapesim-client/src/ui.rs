@@ -87,6 +87,7 @@ pub(crate) fn init_ui() {
     let robotmenu: HtmlElement = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
     robotmenu.set_onchange(Some(Closure::<dyn Fn() >::new(|| {
         update_robot_buttons_visibility();
+        update_claim_text();
     }).into_js_value().unchecked_ref()));
 
     update_robot_buttons_visibility();
@@ -378,6 +379,17 @@ pub(crate) fn update_robot_buttons_visibility() {
                 game.borrow().ui_elements.borrow().get("fps").unwrap().style().remove_property("display").unwrap();
                 game.borrow().ui_elements.borrow().get("encrypt").unwrap().style().remove_property("display").unwrap();
                 game.borrow().ui_elements.borrow().get("claim").unwrap().style().remove_property("display").unwrap();
+
+                let claimant = game.borrow().robot_claims.borrow().get(&get_selected_robot().unwrap_or_default()).unwrap_or(&"None".to_owned()).clone();
+
+                if claimant == get_username() {
+                    game.borrow().ui_elements.borrow().get("reset").unwrap().style().remove_property("display").unwrap();
+                    game.borrow().ui_elements.borrow().get("encrypt").unwrap().style().remove_property("display").unwrap();
+
+                    game.borrow().ui_elements.borrow().get("claim").unwrap().set_inner_text("Unclaim");
+                } else {
+                    game.borrow().ui_elements.borrow().get("claim").unwrap().set_inner_text("Claim");
+                }
                 game.borrow().ui_elements.borrow().get("claim_text").unwrap().style().set_property("display", "inline-block").unwrap();
             }
         }
@@ -387,4 +399,11 @@ pub(crate) fn update_robot_buttons_visibility() {
 pub(crate) fn clear_robots_menu() {
     let robotmenu: HtmlElement = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
     robotmenu.set_inner_html("");
+}
+
+pub(crate) fn update_claim_text() {
+    GAME.with(|game| {
+        let claimant = game.borrow().robot_claims.borrow().get(&get_selected_robot().unwrap_or_default()).unwrap_or(&"None".to_owned()).clone();
+        game.borrow().ui_elements.borrow().get("claim_text").unwrap().set_inner_text(format!("Claimed by: {}", claimant).as_str());
+    });
 }

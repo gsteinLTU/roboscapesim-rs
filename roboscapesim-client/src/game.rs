@@ -26,6 +26,7 @@ pub(crate) struct Game {
     pub(crate) main_camera: Rc<UniversalCamera>,
     pub(crate) follow_camera: Rc<FollowCamera>,
     pub(crate) first_person_camera: Rc<UniversalCamera>,
+    pub(crate) robot_claims: Rc<RefCell<HashMap<String, String>>>,
 }
 
 impl Game {
@@ -95,6 +96,7 @@ impl Game {
             main_camera,
             follow_camera,
             first_person_camera,
+            robot_claims: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -132,6 +134,7 @@ impl Game {
         self.state_server_time.set(0.0);
         self.last_state_server_time.set(0.0);
         self.room_state.borrow_mut().take();
+        self.robot_claims.borrow_mut().clear();
 
         // UI cleanup
         clear_robots_menu();

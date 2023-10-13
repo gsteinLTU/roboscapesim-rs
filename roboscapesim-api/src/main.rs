@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use log::{debug, error, info};
+use log::{debug, error};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus,

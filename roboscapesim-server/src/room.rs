@@ -857,10 +857,20 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
             visitors.push(username.to_owned());
         }
     }    
-    room.sockets.insert(peer_id.to_string(), peer_id);
+    room.sockets.insert(username.to_string(), peer_id);
     room.last_interaction_time = Utc::now().timestamp();
+
+    // Give client initial update
     room.send_info_to_client(peer_id);
     room.send_state_to_client(true, peer_id);
+
+    // Initial robot claim data
+    for robot in room.robots.iter() {
+        if robot.1.claimed_by.is_some() {   
+            RoomData::send_to_client(&UpdateMessage::RobotClaimed(robot.0.clone(), robot.1.claimed_by.clone().unwrap_or("".to_owned())), peer_id);
+        }
+    }
+
     Ok(())
 }
 
