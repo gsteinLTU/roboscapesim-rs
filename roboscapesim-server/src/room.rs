@@ -62,6 +62,7 @@ pub const DEFAULT_PROJECT: &str = include_str!("../assets/scenarios/Default.xml"
 pub struct RoomData {
     pub objects: DashMap<String, ObjectData>,
     pub name: String,
+    pub environment: String,
     pub password: Option<String>,
     pub timeout: i64,
     pub last_interaction_time: i64,
@@ -105,6 +106,7 @@ impl RoomData {
         let mut obj = RoomData {
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
+            environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
             timeout: 60 * 10,
             last_interaction_time: Utc::now().timestamp(),
@@ -242,10 +244,10 @@ impl RoomData {
                                                     //println!("{:?}", (service, rpc, &args));
                                                     vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
                                                 },
-                                                "RoboScape" => {
-                                                    // TODO: RoboScape service but in Rust
+                                                /*"RoboScape" => {
+                                                    // TODO: RoboScape service but in Rust?
                                                     key.complete(Ok(Intermediate::Json(json!(""))));
-                                                },
+                                                },*/
                                                 _ => return RequestStatus::UseDefault { key, request },
                                             }
                                         },

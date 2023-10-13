@@ -94,7 +94,7 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
     
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
         id: room_data.name.clone(),
-        environment: "rust".to_string(),
+        environment: room_data.environment.clone(),
         server: get_server(),
         creator: "TODO".to_owned(),
         has_password: room_data.password.is_some(),
@@ -124,7 +124,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 
         rooms.push(RoomInfo{
             id,
-            environment: "rust".to_string(),
+            environment: room_data.environment.clone(),
             server: get_server(),
             creator: "TODO".to_owned(),
             has_password: room_data.password.is_some(),
