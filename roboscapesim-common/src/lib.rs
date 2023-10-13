@@ -201,6 +201,8 @@ pub enum ClientMessage {
     ResetRobot(String),
     /// Claiming robot
     ClaimRobot(String),
+    /// Claiming robot
+    UnclaimRobot(String),
     /// Request encryption for robot
     EncryptRobot(String),
     /// Joining Room (room id, username, password)

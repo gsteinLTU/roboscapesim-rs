@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use chrono::Utc;
 use dashmap::DashMap;
 use derivative::Derivative;
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, ToJsonError, Key, System}, std_system::StdSystem};
 use rand::Rng;
@@ -514,8 +514,30 @@ impl RoomData {
 
                                         // Send claim message to clients
                                         self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
+                                    } else {
+                                        info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
                                     }
                                 }
+                            } else {
+                                info!("Client {} not authorized to claim robot {}", client_username, robot_id);
+                            }
+                        },
+                        ClientMessage::UnclaimRobot(robot_id) => {
+                            // Check if robot is free
+                            if self.is_authorized(*client.key(), &robot_id) {
+                                // Claim robot
+                                if let Some(robot) = self.robots.get_mut(&robot_id) {
+                                    if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == &client_username) {
+                                        robot.claimed_by = None;
+
+                                        // Send Unclaim message to clients
+                                        self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
+                                    } else {
+                                        info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
+                                    }
+                                }
+                            } else {
+                                info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
                             }
                         },
                         ClientMessage::EncryptRobot(robot_id) => {
@@ -524,7 +546,9 @@ impl RoomData {
                                 robot.send_roboscape_message(&[b'P', 1]).unwrap();
                             }
                         },
-                        _ => {}
+                        _ => {
+                            warn!("Unhandled client message: {:?}", msg);
+                        }
                     }
                 }
             }

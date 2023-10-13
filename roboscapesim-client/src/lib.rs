@@ -207,6 +207,7 @@ fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &R
                 }
         },
         Ok(UpdateMessage::RobotClaimed(robot, user)) => {
+            console_log!("Robot {} claimed by {}", &robot, &user);
             if user.is_empty() {
                 game.borrow().robot_claims.borrow_mut().remove(&robot);
             } else {

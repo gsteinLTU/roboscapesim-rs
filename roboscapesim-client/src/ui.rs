@@ -72,11 +72,21 @@ pub(crate) fn init_ui() {
             }
         })));
         
-        game.borrow().ui_elements.borrow_mut().insert("claim".into(), create_button("Claim", Closure::new(|| { 
+        let game_clone = game.clone();
+        game.borrow().ui_elements.borrow_mut().insert("claim".into(), create_button("Claim", Closure::new(move || { 
             console_log!("Claim");
 
+            // Claim or unclaim robot based on current claim status
             if let Some(robot) = get_selected_robot() {
-                send_message(&ClientMessage::ClaimRobot(robot));
+                if let Some(claim) = game_clone.borrow().robot_claims.borrow().get(&robot) {
+                    if claim.to_owned() == get_username() {
+                        send_message(&ClientMessage::UnclaimRobot(robot));
+                    } else {
+                        console_log!("Attempt to unclaim robot claimed by {}", claim);
+                    }
+                } else {
+                    send_message(&ClientMessage::ClaimRobot(robot));
+                }
             }
         })));
         
