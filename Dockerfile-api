@@ -15,5 +15,5 @@ RUN apt-get install -y libssl-dev
 
 WORKDIR /roboscape
 COPY --from=builder /roboscape_build/target/release/roboscape* .
-EXPOSE 5000
+EXPOSE 6000
 CMD [ "./roboscapesim-api" ]

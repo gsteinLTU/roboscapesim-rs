@@ -169,7 +169,7 @@ pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
 pub(crate) fn get_main_api_server() -> String {
     #[cfg(debug_assertions)]
     {
-        "http://127.0.0.1:5000".to_owned()
+        "http://127.0.0.1:6000".to_owned()
     }
     #[cfg(not(debug_assertions))]
     {
