@@ -509,7 +509,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         let options = options.as_array().unwrap();
 
         let shape = match entity_type.as_str() {
-            "box" | "block" | "cube" | "cuboid" => Shape::Box,
+            "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
             "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
             _ => Shape::Box
         };
@@ -588,6 +588,10 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
                 }
 
                 Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+            },
+            "trigger" => {
+                let name = "trigger".to_string() + &room.objects.len().to_string();
+                Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
             },
             _ => {
                 info!("Unknown entity type requested: {entity_type}");

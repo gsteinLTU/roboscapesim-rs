@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use nalgebra::Vector3;
 use rapier3d::prelude::*;
 
@@ -23,6 +23,7 @@ pub struct Simulation {
     pub physics_hooks: (),
     pub event_handler: (),
     pub rigid_body_labels: DashMap<String, RigidBodyHandle>,
+    pub sensors: DashMap<ColliderHandle, DashSet<ColliderHandle>>,
 }
 
 pub const SCALE: f32 = 3.0;
@@ -47,6 +48,7 @@ impl Simulation {
             physics_hooks: (),
             event_handler: (),
             rigid_body_labels: DashMap::new(),
+            sensors: DashMap::new(),
         }
     }
 

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
@@ -544,6 +544,27 @@ impl RoomData {
         let simulation = &mut self.sim.lock().unwrap();
         simulation.update(delta_time);
 
+        // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
+        for mut entry in simulation.sensors.iter_mut() {
+            let (sensor, in_sensor) = entry.pair_mut();
+            for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
+                if intersecting {
+                    if in_sensor.contains(&c2) {
+                        // Already in sensor
+                        continue;
+                    } else {
+                        trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                        in_sensor.insert(c2);
+                    }
+                } else {
+                    if in_sensor.contains(&c2) {
+                        in_sensor.remove(&c2);
+                        trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                    }
+                }
+            }
+        }
+
         // Update data before send
         for mut o in self.objects.iter_mut()  {
             if simulation.rigid_body_labels.contains_key(o.key()) {
@@ -695,8 +716,8 @@ impl RoomData {
         id
     }
 
-    /// Add a cuboid object to the room
-    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, mut visual_info: Option<VisualInfo>, mut size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
+    /// Add a physics object to the room
+    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
         let body_name = room.name.to_owned() + "_" + name;
         let rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
             .ccd_enabled(true)
@@ -704,21 +725,15 @@ impl RoomData {
             .rotation(rotation)
             .build();
         
-        if size.is_none() {
-            size = Some(vector![1.0, 1.0, 1.0]);
-        }
+        let mut size = size.unwrap_or_else(|| vector![1.0, 1.0, 1.0]);
 
-        let mut size = size.unwrap();
+        let visual_info = visual_info.unwrap_or_default();
 
-        if visual_info.is_none() {
-            visual_info = Some(VisualInfo::default());
-        }
-        
         let shape = match visual_info {
-            Some(VisualInfo::Color(_, _, _, s)) => {
+            VisualInfo::Color(_, _, _, s) => {
                 s
             },
-            Some(VisualInfo::Texture(_, _, _, s)) => {
+            VisualInfo::Texture(_, _, _, s) => {
                 s
             },
             _ => Shape::Box
@@ -751,8 +766,45 @@ impl RoomData {
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
             transform: Transform { position: position.into(), scaling: size, rotation: Orientation::Euler(rotation), ..Default::default() },
-            visual_info,
+            visual_info: Some(visual_info),
             is_kinematic,
+            updated: true,
+        });
+
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
+
+        let service = Arc::new(Mutex::new(create_entity_service(&body_name, &cube_body_handle)));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::Entity), service);
+        room.last_full_update = 0;
+        body_name
+    }
+
+    /// Specialized add_shape for triggers
+    pub(crate) fn add_trigger(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
+        let body_name = room.name.to_owned() + "_" + name;
+        let rigid_body =  RigidBodyBuilder::kinematic_position_based()
+            .ccd_enabled(true)
+            .translation(position)
+            .rotation(rotation)
+            .build();
+
+        let size = size.unwrap_or_else(|| vector![1.0, 1.0, 1.0]);
+
+        let collider = ColliderBuilder::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0).sensor(true).build();
+
+        let simulation = &mut room.sim.lock().unwrap();
+        let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
+        let rigid_body_set = simulation.rigid_body_set.clone();
+        let collider_handle = simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());
+        simulation.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+        simulation.sensors.insert(collider_handle, DashSet::new());
+
+        room.objects.insert(body_name.clone(), ObjectData {
+            name: body_name.clone(),
+            transform: Transform { position: position.into(), scaling: size, rotation: Orientation::Euler(rotation), ..Default::default() },
+            visual_info: Some(VisualInfo::None),
+            is_kinematic: true,
             updated: true,
         });
 
