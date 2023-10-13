@@ -1,12 +1,12 @@
 use axum::{Json, response::IntoResponse, extract::Query};
-use log::{info, error};
+use log::error;
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
 use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{ROOMS, MAX_ROOMS, room::{create_room, LOCAL_SCENARIOS, DEFAULT_SCENARIOS_FILE}};
+use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::DEFAULT_SCENARIOS_FILE};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 

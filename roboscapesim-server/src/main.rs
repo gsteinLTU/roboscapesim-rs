@@ -20,6 +20,7 @@ mod robot;
 mod room;
 mod simulation;
 mod vm;
+mod scenarios;
 
 #[path = "./util/mod.rs"]
 mod util;

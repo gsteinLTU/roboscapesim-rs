@@ -1,6 +1,5 @@
 use std::collections::{HashMap, BTreeMap};
 use std::f32::consts::FRAC_PI_2;
-use std::fs;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -15,12 +14,11 @@ use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runt
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
-use once_cell::sync::Lazy;
 
+use crate::scenarios::load_environment;
 use crate::{CLIENTS, ROOMS};
 use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
 use crate::simulation::Simulation;
@@ -28,34 +26,7 @@ use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
-mod netsblox_api;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum ProjectType {
-    // Project on NetsBlox server
-    RemoteProject(String),
-    // Project in default_scenarios file
-    LocalProject(String),
-    // Project as XML string
-    ProjectXML(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalScenarioDef {
-    pub name: String,
-    pub path: String,
-    pub creator: Option<String>,
-    pub description: Option<String>,
-    pub host: String,
-}
-
-pub const DEFAULT_SCENARIOS_FILE: &str = include_str!("../default_scenarios.json");
-
-pub static LOCAL_SCENARIOS: Lazy<BTreeMap<String, LocalScenarioDef>> = Lazy::new(|| {
-    serde_json::from_str(DEFAULT_SCENARIOS_FILE).unwrap()
-});
-
-pub const DEFAULT_PROJECT: &str = include_str!("../assets/scenarios/Default.xml");
+pub(crate) mod netsblox_api;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -175,59 +146,7 @@ impl RoomData {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    let environment = environment.and_then(|env| if env.trim().is_empty() { None } else { Some(env) });
-
-                    // First, check if environment is a project ID
-                    let environment: ProjectType = if let Some(env) = &environment {
-                        let env = env.to_owned();
-                        if env.contains('/') {
-                            // Assume it's a project ID
-                            ProjectType::RemoteProject(env)
-                        } else {
-                            // Check if it's a local scenario
-                            let env = env.to_lowercase();
-                            if LOCAL_SCENARIOS.contains_key(&env) {
-                                if let Some(scenario) = LOCAL_SCENARIOS.get(&env) {
-                                    if scenario.host == "local" {
-                                        ProjectType::LocalProject(LOCAL_SCENARIOS.get(&env).unwrap().path.to_owned())
-                                    } else {
-                                        ProjectType::RemoteProject(LOCAL_SCENARIOS.get(&env).unwrap().path.to_owned())
-                                    }
-                                } else {
-                                    // Default to sample project
-                                    ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
-                                }
-                            } else {
-                                // Default to sample project
-                                ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
-                            }
-                        }
-                    } else {
-                        // Default to sample project
-                        ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
-                    };
-
-                    let mut project = match environment {
-                        ProjectType::RemoteProject(project_name) => {
-                            info!("Loading remote project {}", project_name);
-                            reqwest::get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).await.unwrap().json::<netsblox_api::Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
-                        },
-                        ProjectType::LocalProject(path) => {
-                            info!("Loading local project {}", path);
-                            fs::read_to_string(path).and_then(|proj| Ok(proj)).map_err(|e| format!("failed to read file: {:?}", e))
-                        },
-                        ProjectType::ProjectXML(xml) => {
-                            info!("Loading project from XML");
-                            Ok(xml.clone())
-                        },
-                    };
-
-                    if let Err(err) = project {
-                        error!("Failed to load project: {:?}", err);
-                        project = Ok(DEFAULT_PROJECT.to_owned());
-                    }
-
-                    let project = project.unwrap();
+                    let project = load_environment(environment).await;
 
                     // Setup VM
                     let (project_name, role) = open_project(&project).unwrap_or_else(|_| panic!("failed to read file"));
