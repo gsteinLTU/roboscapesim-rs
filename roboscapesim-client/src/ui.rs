@@ -408,7 +408,7 @@ pub(crate) fn update_robot_buttons_visibility() {
 
 pub(crate) fn clear_robots_menu() {
     let robotmenu: HtmlElement = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
-    robotmenu.set_inner_html("");
+    robotmenu.set_inner_html("<option></option>");
 }
 
 pub(crate) fn update_claim_text() {
