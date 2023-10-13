@@ -485,7 +485,8 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for robot in self.robots.iter_mut() {
-            if RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time) {
+            let (updated, msg) = RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+            if updated {
                 self.last_interaction_time = Utc::now().timestamp();
             }
 
@@ -495,6 +496,18 @@ impl RoomData {
                     info!("Robot {} claimed by {} but not in room, unclaiming", robot.0, claimant);
                     robot.1.claimed_by = None;
                     RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.0.clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().to_owned()));
+                }
+            }
+
+            // Check if message to send
+            if let Some(msg) = msg {
+                if let Some(claimant) = &robot.1.claimed_by {
+                    if let Some(client) = self.sockets.get(claimant) {
+                        // Only send to owner
+                        RoomData::send_to_client(&msg, client.value().to_owned());
+                    }
+                } else {
+                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().to_owned()));
                 }
             }
         }

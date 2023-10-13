@@ -176,7 +176,7 @@ pub enum UpdateMessage {
     RoomInfo(RoomState),
     /// Sending information about objects in the room
     Update(f64, bool, HashMap<String, ObjectData>),
-    /// Tell client to display text for a duration
+    /// Tell client to display text for a duration (id, text, timeout)
     DisplayText(String, String, Option<f64>),
     /// Clear all text displayed
     ClearText,

@@ -250,9 +250,9 @@ impl RobotData {
         }
     }
 
-    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> bool {
+    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> (bool, Option<UpdateMessage>) {
         if robot.socket.is_none() {
-            return false;
+            return (false, None);
         }
 
         let mut had_messages = false;
@@ -291,6 +291,8 @@ impl RobotData {
 
         let mut buf = [0u8; 512];
         let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
+
+        let mut msg = None;
 
         if size > 0 {
             had_messages = true;
@@ -393,7 +395,8 @@ impl RobotData {
                 },
                 b'n' => { 
                     trace!("OnSetNumeric");
-                    // TODO: Decide on supporting this
+                    // TODO: Decide on supporting this better, for now show encrypt numbers
+                    msg = Some(UpdateMessage::DisplayText(robot.id.clone(), buf[1].to_string(), Some(1.0)));
                 },
                 b'P' => {
                     trace!("OnButtonPress");         
@@ -449,7 +452,7 @@ impl RobotData {
             }
         }
 
-        had_messages
+        (had_messages, msg)
     }
 }
 
