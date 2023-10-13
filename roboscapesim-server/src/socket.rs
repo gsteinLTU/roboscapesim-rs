@@ -28,13 +28,18 @@ pub struct SocketInfo {
     pub stream: Arc<Mutex<SplitStream<WebSocketStream<TcpStream>>>>,
 }
 
-pub async fn accept_connection(tcp_stream: TcpStream) -> u128 {
+pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
     let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
     info!("Peer address: {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(tcp_stream)
-        .await
-        .expect("Error during the websocket handshake occurred");
+        .await;
+
+    if let Err(e) = ws_stream {
+        return Err(format!("Error accepting websocket connection: {:?}", e));
+    }
+
+    let ws_stream = ws_stream.unwrap();
     
     let (sink, stream) = ws_stream.split();
 
@@ -51,7 +56,7 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> u128 {
         sink: Arc::new(Mutex::new(sink)),
         stream: Arc::new(Mutex::new(stream)),
     });
-    id
+    Ok(id)
 }
 
 pub async fn ws_rx() {
