@@ -73,7 +73,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
 #[debug_handler]
 /// Get list of rooms, optionally filtering to a specific user
 pub(crate) async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
-    let rooms = get_rooms(params.get("user").cloned().or(Some("INVALID".to_owned())), true);
+    let rooms = get_rooms(params.get("user").cloned().or(None), true);
     Json(rooms)
 }
 
