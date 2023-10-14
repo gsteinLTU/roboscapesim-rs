@@ -26,6 +26,7 @@
             const canvas = document.createElement('canvas');
             canvas.id = 'roboscape-canvas';
             canvas.style.flex = '1 1 auto';
+            canvas.style.overflow = 'hidden';
             const contentElement = element.querySelector('content');
             contentElement.style.display = 'flex';
             contentElement.style['flex-flow'] = 'column';
