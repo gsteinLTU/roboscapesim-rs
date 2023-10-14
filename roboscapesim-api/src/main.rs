@@ -43,7 +43,7 @@ async fn main() {
     EXTERNAL_IP
         .lock()
         .unwrap()
-        .replace(get_external_ip().await.unwrap());
+        .replace(get_external_ip().await.unwrap().trim().to_owned());
 
     let app = Router::new()
         .route("/server/status", get(get_server_status))

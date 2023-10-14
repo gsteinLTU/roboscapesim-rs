@@ -14,7 +14,7 @@ pub async fn announce_api() {
     // Every 5 minutes, announce to main server
     let url = format!("{}/server/announce", get_main_api_server());
     let client = reqwest::Client::new();
-    let server = get_external_ip().await.unwrap() + ":3000";
+    let server = get_external_ip().await.unwrap().trim().to_owned() + ":3000";
     let max_rooms = MAX_ROOMS;
     loop {
         let data = (server.clone(), ServerStatus {
