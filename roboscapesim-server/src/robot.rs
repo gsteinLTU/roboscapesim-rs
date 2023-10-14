@@ -230,8 +230,6 @@ impl RobotData {
     }
 
     pub fn setup_robot_socket(robot: &mut RobotData) {
-        //let server = "127.0.0.1";
-        
         let server = std::env::var("ROBOSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
         let port = std::env::var("ROBOSCAPE_PORT").unwrap_or("1973".to_string());
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();

@@ -62,7 +62,7 @@ async fn main() {
                 .allow_headers([header::CONTENT_TYPE]),
         );
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 5001));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
     debug!("listening on {}", addr);
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
 
