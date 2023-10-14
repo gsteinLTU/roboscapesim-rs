@@ -11,9 +11,10 @@ RUN cargo b -r
 FROM debian:bookworm-slim
 
 RUN apt-get update
-RUN apt-get install -y libssl-dev
+RUN apt-get install -y libssl-dev ca-certificates
+RUN update-ca-certificates
 
 WORKDIR /roboscape
-COPY --from=builder /roboscape_build/target/release/roboscape* .
+COPY --from=builder /roboscape_build/target/release/roboscapesim-server .
 EXPOSE 3000
 CMD [ "./roboscapesim-server" ]
