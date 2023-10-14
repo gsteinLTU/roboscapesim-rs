@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use log::{debug, error};
+use log::{debug, error, info};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus,
@@ -136,6 +136,7 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
 
     // Return error when no servers available
     if server.is_none() {
+        info!("No servers available");
         return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(None));
     }
 
@@ -149,6 +150,7 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
 
     // If error, return error
     if response.is_err() {
+        error!("Error sending request to server: {:?}", response);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
     }
 
@@ -193,11 +195,12 @@ async fn get_room_info(Query(params): Query<HashMap<String, String>>) -> impl In
 async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl IntoResponse {
     let (ip, data) = data;
     let server = ServerInfo {
-        address: ip,
+        address: ip.clone(),
         max_rooms: data.max_rooms,
         last_update: SystemTime::now(),
     };
     SERVERS.insert(server.address.clone(), server);
+    info!("Server {} announced", ip);
 }
 
 /// Update list of rooms on server
@@ -215,6 +218,10 @@ async fn get_environments_list() -> impl IntoResponse {
 /// Get number of non-hibernating rooms per server
 fn get_active_rooms_per_server() -> HashMap<String, usize> {
     let mut active_rooms_per_server = HashMap::new();
+
+    for server in SERVERS.iter() {
+        active_rooms_per_server.insert(server.key().clone(), 0);
+    }
 
     for room in ROOMS.iter() {
         if !room.value().is_hibernating {
