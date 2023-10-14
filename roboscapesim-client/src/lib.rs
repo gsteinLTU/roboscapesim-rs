@@ -43,7 +43,7 @@ const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOn
 #[cfg(debug_assertions)]
 const API_SERVER: &str = "http://localhost:5001/";
 #[cfg(not(debug_assertions))]
-const API_SERVER: &str = "https://roboscapeonlineapi.netsblox.org/";
+const API_SERVER: &str = "https://roboscapeonlineapi2.netsblox.org/";
 
 #[netsblox_extension_info]
 const INFO: ExtensionInfo = ExtensionInfo { 

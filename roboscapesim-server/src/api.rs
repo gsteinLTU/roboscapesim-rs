@@ -173,7 +173,7 @@ pub(crate) fn get_main_api_server() -> String {
     }
     #[cfg(not(debug_assertions))]
     {
-        "https://roboscapeonlineapi.netsblox.org".to_owned()
+        "https://roboscapeonlineapi2.netsblox.org".to_owned()
     }
 }
 
