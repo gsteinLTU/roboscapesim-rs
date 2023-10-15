@@ -135,7 +135,7 @@ pub async fn ws_tx() {
                                 to_send.push(msg);
                             } else {
                                 // Replace existing non-full update
-                                for i in to_send.len()..0 {
+                                for i in (0..to_send.len()).rev() {
                                     if let UpdateMessage::Update(_, false, _) = to_send[i] {
                                         to_send.remove(i);
                                         break;
