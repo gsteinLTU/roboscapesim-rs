@@ -113,7 +113,7 @@ pub async fn ws_rx() {
             CLIENTS.remove(&disconnect);
         }
 
-        sleep(Duration::from_nanos(25)).await;
+        sleep(Duration::from_nanos(50)).await;
     }
 }
 
@@ -123,10 +123,13 @@ pub async fn ws_tx() {
         for client in CLIENTS.iter() {                
             // TX
             let receiver = client.rx1.lock().unwrap();
+            let sink = &mut client.sink.lock().unwrap();
             while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
                 let msg = serde_json::to_string(&msg).unwrap();
-                client.sink.lock().unwrap().send(Message::Text(msg)).now_or_never();
+                sink.feed(Message::Text(msg)).now_or_never();
             }
+
+            sink.flush().now_or_never();
         }
         
         sleep(Duration::from_nanos(20)).await;
@@ -143,6 +146,8 @@ pub async fn ws_accept() {
         if let Err(e) = conn {
             info!("Error accepting connection: {:?}", e);
         }
+
+        sleep(Duration::from_nanos(100)).await;
     }
 }
 
