@@ -233,6 +233,7 @@ impl RobotData {
         let server = std::env::var("ROBOSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
         let port = std::env::var("ROBOSCAPE_PORT").unwrap_or("1973".to_string());
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+        socket.set_nonblocking(true).unwrap();
 
         socket.connect(server.to_owned() + ":" + &port).expect("Failed to connect");
 
@@ -288,123 +289,125 @@ impl RobotData {
         }
 
         let mut msg = None;
-        /*
+        
         let mut buf = [0u8; 512];
-        let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
+        let size = robot.socket.as_mut().unwrap().recv(&mut buf);
 
-        if size > 0 {
-            had_messages = true;
-            match &buf[0] {
-                b'D' => { 
-                    trace!("OnDrive");
+        if let Ok(size) = size {
+            if size > 0 {
+                had_messages = true;
+                match &buf[0] {
+                    b'D' => { 
+                        trace!("OnDrive");
 
-                    if buf.len() > 4 {
-                        robot.drive_state = DriveState::SetDistance;
+                        if buf.len() > 4 {
+                            robot.drive_state = DriveState::SetDistance;
 
-                        let d1 = i16::from_le_bytes([buf[1], buf[2]]);
-                        let d2 = i16::from_le_bytes([buf[3], buf[4]]);
+                            let d1 = i16::from_le_bytes([buf[1], buf[2]]);
+                            let d2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                        robot.distance_l = d2 as f64;
-                        robot.distance_r = d1 as f64;
+                            robot.distance_l = d2 as f64;
+                            robot.distance_r = d1 as f64;
 
-                        trace!("OnDrive {} {}", d1, d2);
+                            trace!("OnDrive {} {}", d1, d2);
 
-                        // Check prevents robots from inching forwards from "drive 0 0"
-                        if f64::abs(robot.distance_l) > f64::EPSILON {
-                            robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                            // Check prevents robots from inching forwards from "drive 0 0"
+                            if f64::abs(robot.distance_l) > f64::EPSILON {
+                                robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                            }
+
+                            if f64::abs(robot.distance_r) > f64::EPSILON {
+                                robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                            }                    
+                        }
+                    },
+                    b'S' => { 
+                        trace!("OnSetSpeed");
+                        robot.drive_state = DriveState::SetSpeed;
+
+                        if buf.len() > 4 {
+                            let s1 = i16::from_le_bytes([buf[1], buf[2]]);
+                            let s2 = i16::from_le_bytes([buf[3], buf[4]]);
+
+                            robot.speed_l = -s2 as f32 / 32.0;
+                            robot.speed_r = -s1 as f32 / 32.0;
+                        }
+                    },
+                    b'B' => { 
+                        trace!("OnBeep");
+                        
+                        if buf.len() > 4 {
+                            let freq = u16::from_le_bytes([buf[1], buf[2]]);
+                            let duration = u16::from_le_bytes([buf[3], buf[4]]);
+
+                            // Beep is only on client-side
+                            RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| *kvp.value()));
+                        }
+                    },
+                    b'L' => { 
+                        trace!("OnSetLED");
+                    },
+                    b'R' => { 
+                        trace!("OnGetRange");
+
+                        // Setup raycast
+                        let rigid_body_set = &sim.rigid_body_set.lock().unwrap();
+                        let body = rigid_body_set.get(robot.body_handle).unwrap();
+                        let body_pos = body.translation();
+                        let offset = body.rotation() * vector![0.17, 0.05, 0.0];
+                        let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
+                        let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
+                        let max_toi = 3.0;
+                        let solid = true;
+                        let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
+
+                        let mut distance = (max_toi * 100.0) as u16;
+                        if let Some((handle, toi)) = sim.query_pipeline.cast_ray(rigid_body_set,
+                            &sim.collider_set, &ray, max_toi, solid, filter
+                        ) {
+                            // The first collider hit has the handle `handle` and it hit after
+                            // the ray travelled a distance equal to `ray.dir * toi`.
+                            let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+                            distance = (toi * 100.0) as u16;
+                            trace!("Collider {:?} hit at point {}", handle, hit_point);
                         }
 
-                        if f64::abs(robot.distance_r) > f64::EPSILON {
-                            robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;
-                        }                    
-                    }
-                },
-                b'S' => { 
-                    trace!("OnSetSpeed");
-                    robot.drive_state = DriveState::SetSpeed;
+                        // Send result message
+                        let dist_bytes = u16::to_le_bytes(distance);
+                        if let Err(e) = robot.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
+                            error!("{}", e);
+                        }
+                    },
+                    b'T' => { 
+                        trace!("OnGetTicks");
+                        let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
+                        let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
+                        let mut message: [u8; 9] = [0; 9];
 
-                    if buf.len() > 4 {
-                        let s1 = i16::from_le_bytes([buf[1], buf[2]]);
-                        let s2 = i16::from_le_bytes([buf[3], buf[4]]);
+                        // Create message
+                        message[0] = b'T';
+                        message[1..5].copy_from_slice(&left_ticks);
+                        message[5..9].copy_from_slice(&right_ticks);
 
-                        robot.speed_l = -s2 as f32 / 32.0;
-                        robot.speed_r = -s1 as f32 / 32.0;
-                    }
-                },
-                b'B' => { 
-                    trace!("OnBeep");
-                    
-                    if buf.len() > 4 {
-                        let freq = u16::from_le_bytes([buf[1], buf[2]]);
-                        let duration = u16::from_le_bytes([buf[3], buf[4]]);
-
-                        // Beep is only on client-side
-                        RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| *kvp.value()));
-                    }
-                },
-                b'L' => { 
-                    trace!("OnSetLED");
-                },
-                b'R' => { 
-                    trace!("OnGetRange");
-
-                    // Setup raycast
-                    let rigid_body_set = &sim.rigid_body_set.lock().unwrap();
-                    let body = rigid_body_set.get(robot.body_handle).unwrap();
-                    let body_pos = body.translation();
-                    let offset = body.rotation() * vector![0.17, 0.05, 0.0];
-                    let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
-                    let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
-                    let max_toi = 3.0;
-                    let solid = true;
-                    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
-
-                    let mut distance = (max_toi * 100.0) as u16;
-                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(rigid_body_set,
-                        &sim.collider_set, &ray, max_toi, solid, filter
-                    ) {
-                        // The first collider hit has the handle `handle` and it hit after
-                        // the ray travelled a distance equal to `ray.dir * toi`.
-                        let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-                        distance = (toi * 100.0) as u16;
-                        trace!("Collider {:?} hit at point {}", handle, hit_point);
-                    }
-
-                    // Send result message
-                    let dist_bytes = u16::to_le_bytes(distance);
-                    if let Err(e) = robot.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
-                        error!("{}", e);
-                    }
-                },
-                b'T' => { 
-                    trace!("OnGetTicks");
-                    let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
-                    let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
-                    let mut message: [u8; 9] = [0; 9];
-
-                    // Create message
-                    message[0] = b'T';
-                    message[1..5].copy_from_slice(&left_ticks);
-                    message[5..9].copy_from_slice(&right_ticks);
-
-                    if let Err(e) = robot.send_roboscape_message(&message) {
-                        error!("{}", e);
-                    }
-                },
-                b'n' => { 
-                    trace!("OnSetNumeric");
-                    // TODO: Decide on supporting this better, for now show encrypt numbers
-                    msg = Some(UpdateMessage::DisplayText(robot.id.clone(), buf[1].to_string(), Some(1.0)));
-                },
-                b'P' => {
-                    trace!("OnButtonPress");         
-                },
-                _ => {}
+                        if let Err(e) = robot.send_roboscape_message(&message) {
+                            error!("{}", e);
+                        }
+                    },
+                    b'n' => { 
+                        trace!("OnSetNumeric");
+                        // TODO: Decide on supporting this better, for now show encrypt numbers
+                        msg = Some(UpdateMessage::DisplayText(robot.id.clone(), buf[1].to_string(), Some(1.0)));
+                    },
+                    b'P' => {
+                        trace!("OnButtonPress");         
+                    },
+                    _ => {}
+                }
+                // Return to sender
+                robot.send_roboscape_message(&buf[0..size]).unwrap();
             }
-            // Return to sender
-            robot.send_roboscape_message(&buf[0..size]).unwrap();
         }
-*/
+
         // Apply calculated speeds to wheels
         let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
         joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
