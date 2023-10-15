@@ -1,9 +1,10 @@
+use async_std::net::{TcpListener, TcpStream};
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
 use log::{info, trace};
 use once_cell::sync::Lazy;
-use tokio::net::{TcpStream, TcpListener};
-use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, protocol::WebSocketConfig}};
+
+use async_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex};
 use crossbeam_channel::{Sender, Receiver, self};
@@ -40,7 +41,7 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
     let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
     info!("Peer address: {}", addr);
 
-    let ws_stream = tokio_tungstenite::accept_async(tcp_stream).await;
+    let ws_stream = async_tungstenite::accept_async(tcp_stream).await;
 
     if let Err(e) = ws_stream {
         return Err(format!("Error accepting websocket connection: {:?}", e));

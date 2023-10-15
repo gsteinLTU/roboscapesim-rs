@@ -12,11 +12,8 @@ lto = "fat"
 roboscapesim-common = { path = "../roboscapesim-common" }
 rapier3d = { version = "0.17", features = ["serde-serialize", "simd-stable"] }
 tokio = { version = "1", features = ["full"] }
-base64 = "0.21"
 serde = { version = "1.0" }
 serde_json = "1.0"
-uuid = { version = "1.4", features = ["v4"] }
-bytes = "1.5"
 rand = "0.8"
 axum = {version = "0.6", features = ["headers"]}
 tower-http = { version = "0.4", features = ["cors"] }
@@ -33,12 +30,13 @@ netsblox-vm = { version = "0.2.12", default-features = false, features = ["std",
 axum-macros = "0.3.8"
 reqwest = "0.11"
 futures = "0.3.28"
-tokio-tungstenite = { version = "0.19" }
 rayon = "1.7.0"
 color-name = "1.1.0"
 colorsys = "0.6.7"
 gc-arena = "0.3"
 crossbeam-channel = "0.5.8"
+async-tungstenite = { version = "0.23" }
+async-std = "1.12.0"
 
 [dev-dependencies]
 float-cmp = "0.9"
