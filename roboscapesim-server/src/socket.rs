@@ -119,6 +119,9 @@ pub async fn ws_rx() {
 
 pub async fn ws_tx() {
     loop {
+        // print current time
+        info!("Time: {:?}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64());
+        
         // Get client updates
         for client in CLIENTS.iter() {                
             // TX
@@ -126,7 +129,7 @@ pub async fn ws_tx() {
             let sink = &mut client.sink.lock().unwrap();
             let mut to_send: Vec<UpdateMessage> = vec![];
             let mut msg_count = 0;
-            while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
+            while let Ok(msg) = receiver.recv_timeout(Duration::ZERO) {
                 msg_count += 1;
                 match msg {
                     UpdateMessage::Update(_, full_update, _) => {
@@ -155,7 +158,7 @@ pub async fn ws_tx() {
             }
 
             if msg_count > 0 {
-                info!("Sending {} messages to {}", msg_count, client.key());
+                trace!("Sending {} messages to {}", msg_count, client.key());
             }
 
             for msg in to_send {
