@@ -40,14 +40,7 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
     let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
     info!("Peer address: {}", addr);
 
-    let ws_stream = tokio_tungstenite::accept_async_with_config(tcp_stream, Some(WebSocketConfig {
-        write_buffer_size: 0,
-        max_write_buffer_size: 128000,
-        max_message_size: Some(128000),
-        max_frame_size: None,
-        ..Default::default()
-    }))
-        .await;
+    let ws_stream = tokio_tungstenite::accept_async(tcp_stream).await;
 
     if let Err(e) = ws_stream {
         return Err(format!("Error accepting websocket connection: {:?}", e));
@@ -114,7 +107,7 @@ pub async fn ws_rx() {
             CLIENTS.remove(&disconnect);
         }
 
-        sleep(Duration::from_micros(5)).await;
+        sleep(Duration::from_micros(15)).await;
     }
 }
 
@@ -123,7 +116,6 @@ pub async fn ws_tx() {
         // Get client updates
         for client in CLIENTS.iter() {                
             // TX
-            let sink = &mut client.sink.lock().unwrap();
             let mut to_send: Vec<UpdateMessage> = vec![];
             let mut msg_count = 0;
             while let Ok(msg) = client.rx1.recv_timeout(Duration::ZERO) {
@@ -158,6 +150,7 @@ pub async fn ws_tx() {
                 trace!("Sending {} messages to {}", msg_count, client.key());
             }
 
+            let sink = &mut client.sink.lock().unwrap();
             for msg in to_send {
                 let msg = serde_json::to_string(&msg).unwrap();
                 sink.feed(Message::Text(msg)).now_or_never();
@@ -165,7 +158,7 @@ pub async fn ws_tx() {
             sink.flush().now_or_never();
         }
         
-        sleep(Duration::from_micros(5)).await;
+        sleep(Duration::from_micros(15)).await;
     }
 }
 
