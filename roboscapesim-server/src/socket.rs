@@ -5,7 +5,8 @@ use once_cell::sync::Lazy;
 use tokio::net::{TcpStream, TcpListener};
 use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, protocol::WebSocketConfig}};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
-use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
+use std::sync::{Arc, Mutex};
+use crossbeam_channel::{Sender, Receiver, self};
 
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
@@ -22,13 +23,13 @@ pub static LOCAL_WS_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_WS_PORT"
 #[derivative(Debug)]
 pub struct SocketInfo {
     /// To client
-    pub tx: Arc<Mutex<Sender<UpdateMessage>>>, 
+    pub tx: Sender<UpdateMessage>, 
     /// To server, internal use
-    pub tx1: Arc<Mutex<Sender<ClientMessage>>>, 
+    pub tx1: Sender<ClientMessage>, 
     /// From client
-    pub rx: Arc<Mutex<Receiver<ClientMessage>>>, 
+    pub rx: Receiver<ClientMessage>, 
     /// From client, internal use
-    pub rx1: Arc<Mutex<Receiver<UpdateMessage>>>, 
+    pub rx1: Receiver<UpdateMessage>, 
     #[derivative(Debug = "ignore")]
     pub sink: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
     #[derivative(Debug = "ignore")]
@@ -59,13 +60,13 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
     let id = rand::random();
     info!("New WebSocket connection id {} ({})", id, addr);
     
-    let (tx, rx1) = mpsc::channel();
-    let (tx1, rx) = mpsc::channel();
+    let (tx, rx1) = crossbeam_channel::unbounded();
+    let (tx1, rx) = crossbeam_channel::unbounded();
     CLIENTS.insert(id, SocketInfo { 
-        tx: Arc::new(Mutex::new(tx)), 
-        tx1: Arc::new(Mutex::new(tx1)), 
-        rx: Arc::new(Mutex::new(rx)), 
-        rx1: Arc::new(Mutex::new(rx1)), 
+        tx,
+        tx1, 
+        rx, 
+        rx1, 
         sink: Arc::new(Mutex::new(sink)),
         stream: Arc::new(Mutex::new(stream)),
     });
@@ -94,7 +95,7 @@ pub async fn ws_rx() {
                                         join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
                                     },
                                     _ => {
-                                        client.tx1.lock().unwrap().send(msg.to_owned()).unwrap();
+                                        client.tx1.send(msg.to_owned()).unwrap();
                                     }
                                 }
                             } 
@@ -118,18 +119,14 @@ pub async fn ws_rx() {
 }
 
 pub async fn ws_tx() {
-    loop {
-        // print current time
-        info!("Time: {:?}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64());
-        
+    loop {        
         // Get client updates
         for client in CLIENTS.iter() {                
             // TX
-            let receiver = client.rx1.lock().unwrap();
             let sink = &mut client.sink.lock().unwrap();
             let mut to_send: Vec<UpdateMessage> = vec![];
             let mut msg_count = 0;
-            while let Ok(msg) = receiver.recv_timeout(Duration::ZERO) {
+            while let Ok(msg) = client.rx1.recv_timeout(Duration::ZERO) {
                 msg_count += 1;
                 match msg {
                     UpdateMessage::Update(_, full_update, _) => {

@@ -38,6 +38,7 @@ rayon = "1.7.0"
 color-name = "1.1.0"
 colorsys = "0.6.7"
 gc-arena = "0.3"
+crossbeam-channel = "0.5.8"
 
 [dev-dependencies]
 float-cmp = "0.9"

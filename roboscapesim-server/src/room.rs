@@ -266,7 +266,7 @@ impl RoomData {
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {
-            client.value().tx.lock().unwrap().send(msg.clone()).unwrap();
+            client.value().tx.send(msg.clone()).unwrap();
         } else {
             error!("Client {} not found!", client_id);
         }
@@ -278,7 +278,7 @@ impl RoomData {
             let client = CLIENTS.get(&client_id);
             
             if let Some(client) = client {
-                client.value().tx.lock().unwrap().send(msg.clone()).unwrap();
+                client.value().tx.send(msg.clone()).unwrap();
             } else {
                 error!("Client {} not found!", client_id);
             }
@@ -415,8 +415,7 @@ impl RoomData {
             let client = CLIENTS.get(client.value());
 
             if let Some(client) = client {
-                let receiver = &mut client.rx.lock().unwrap();
-                while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
+                while let Ok(msg) = client.rx.recv_timeout(Duration::default()) {
                     match msg {
                         ClientMessage::ResetAll => { needs_reset = true; },
                         ClientMessage::ResetRobot(robot_id) => {
