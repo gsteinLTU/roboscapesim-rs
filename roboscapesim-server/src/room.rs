@@ -484,8 +484,8 @@ impl RoomData {
         let time = Utc::now().timestamp();
 
         for robot in self.robots.iter_mut() {
-            //let (updated, msg) = RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
-            let (updated, msg) = (false, None);
+            let (updated, msg) = RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+            
             if updated {
                 self.last_interaction_time = Utc::now().timestamp();
             }

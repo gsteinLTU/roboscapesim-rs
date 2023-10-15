@@ -360,7 +360,7 @@ impl RobotData {
                     let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
 
                     let mut distance = (max_toi * 100.0) as u16;
-                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(&sim.rigid_body_set.lock().unwrap(),
+                    if let Some((handle, toi)) = sim.query_pipeline.cast_ray(rigid_body_set,
                         &sim.collider_set, &ray, max_toi, solid, filter
                     ) {
                         // The first collider hit has the handle `handle` and it hit after
@@ -404,7 +404,7 @@ impl RobotData {
             // Return to sender
             robot.send_roboscape_message(&buf[0..size]).unwrap();
         }
-
+/*
         // Apply calculated speeds to wheels
         let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
         joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
@@ -449,7 +449,7 @@ impl RobotData {
                 error!("{}", e);
             }
         }
-
+*/
         (had_messages, msg)
     }
 }
