@@ -1,6 +1,7 @@
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
 use log::{info, trace};
+use once_cell::sync::Lazy;
 use tokio::net::{TcpStream, TcpListener};
 use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, protocol::WebSocketConfig}};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
@@ -10,6 +11,12 @@ use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
 
 use crate::{CLIENTS, room::join_room};
+
+pub static LOCAL_WS_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_WS_PORT")
+    .unwrap_or_else(|_| "5000".to_string())
+    .parse::<u16>()
+    .expect("PORT must be a number")
+);
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -127,7 +134,7 @@ pub async fn ws_tx() {
 }
 
 pub async fn ws_accept() {
-    let listener = TcpListener::bind("0.0.0.0:5000").await.unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", LOCAL_WS_PORT.clone())).await.unwrap();
 
     loop {
         let (conn, _) = listener.accept().await.unwrap();

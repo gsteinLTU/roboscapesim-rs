@@ -1,5 +1,6 @@
 use axum::{Json, response::IntoResponse, extract::Query};
-use log::error;
+use log::{error, info};
+use once_cell::sync::Lazy;
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
 use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
@@ -9,6 +10,12 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::DEFAULT_SCENARIOS_FILE};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
+
+pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
+    .unwrap_or_else(|_| "3000".to_string())
+    .parse::<u16>()
+    .expect("PORT must be a number")
+);
 
 pub async fn announce_api() {
     // Every 5 minutes, announce to main server
@@ -31,7 +38,9 @@ pub async fn announce_api() {
 }
 
 /// Create API server with routes
-pub async fn create_api(addr: SocketAddr) {
+pub async fn create_api() {
+    let addr = SocketAddr::from(([0, 0, 0, 0], API_PORT.clone()));
+
     let app = Router::new()
     .route("/server/status", get(server_status))
     .route("/rooms/list", get(get_rooms_list))
@@ -47,6 +56,8 @@ pub async fn create_api(addr: SocketAddr) {
     
     let server = axum::Server::bind(&addr)
         .serve(app.into_make_service());
+
+    info!("API server listening on {}", addr);
 
     if let Err(err) = server.await {
         error!("server error: {}", err);
@@ -184,5 +195,6 @@ pub(crate) fn get_server() -> String {
 
 pub(crate) fn get_local_api_server() -> String {
     let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
+    // Port 3000 is what's exposed on deployed servers, even if locally running on a different port
     if ip == "127-0-0-1" {"http"} else {"https"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org:3000"
 }
