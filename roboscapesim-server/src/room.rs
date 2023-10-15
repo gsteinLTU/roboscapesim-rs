@@ -483,8 +483,9 @@ impl RoomData {
 
         let time = Utc::now().timestamp();
 
-        /*for robot in self.robots.iter_mut() {
-            let (updated, msg) = RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+        for robot in self.robots.iter_mut() {
+            //let (updated, msg) = RobotData::robot_update(robot.1, &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+            let (updated, msg) = (false, None);
             if updated {
                 self.last_interaction_time = Utc::now().timestamp();
             }
@@ -509,7 +510,7 @@ impl RoomData {
                     RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().to_owned()));
                 }
             }
-        }*/
+        }
         
         let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
 
