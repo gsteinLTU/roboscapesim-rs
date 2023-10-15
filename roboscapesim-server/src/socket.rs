@@ -133,6 +133,16 @@ pub async fn ws_tx() {
                         } else {
                             if to_send.is_empty() {
                                 to_send.push(msg);
+                            } else {
+                                // Replace existing non-full update
+                                for i in to_send.len()..0 {
+                                    if let UpdateMessage::Update(_, false, _) = to_send[i] {
+                                        to_send.remove(i);
+                                        break;
+                                    }
+                                }
+
+                                to_send.push(msg);
                             }
                         }
                     },
