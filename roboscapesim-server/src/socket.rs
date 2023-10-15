@@ -2,7 +2,7 @@ use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
 use log::{info, trace};
 use tokio::net::{TcpStream, TcpListener};
-use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
+use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, protocol::WebSocketConfig}};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex, mpsc::{Sender, Receiver, self}};
 
@@ -32,7 +32,13 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
     let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
     info!("Peer address: {}", addr);
 
-    let ws_stream = tokio_tungstenite::accept_async(tcp_stream)
+    let ws_stream = tokio_tungstenite::accept_async_with_config(tcp_stream, Some(WebSocketConfig {
+        write_buffer_size: 0,
+        max_write_buffer_size: 128000,
+        max_message_size: Some(128000),
+        max_frame_size: None,
+        ..Default::default()
+    }))
         .await;
 
     if let Err(e) = ws_stream {
@@ -100,7 +106,7 @@ pub async fn ws_rx() {
             CLIENTS.remove(&disconnect);
         }
 
-        sleep(Duration::from_nanos(50)).await;
+        sleep(Duration::from_nanos(25)).await;
     }
 }
 
@@ -116,7 +122,7 @@ pub async fn ws_tx() {
             }
         }
         
-        sleep(Duration::from_nanos(25)).await;
+        sleep(Duration::from_nanos(20)).await;
     }
 }
 

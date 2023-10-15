@@ -15,8 +15,11 @@ where Self: Sized {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
+    #[serde(rename="p")]
     pub position: Point3<f32>,
+    #[serde(rename="r")]
     pub rotation: Orientation,
+    #[serde(rename="s")]
     pub scaling: Vector3<f32>,
 }
 
@@ -50,7 +53,9 @@ impl Interpolatable<Transform> for Transform {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Orientation {
+    #[serde(rename="e")]
     Euler(Vector3<f32>),
+    #[serde(rename="q")]
     Quaternion(Quaternion<f32>),
 }
 
@@ -149,12 +154,17 @@ impl Default for VisualInfo {
 /// Generic data about an object to be sent to the client
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ObjectData {
+    #[serde(rename="n")]
     pub name: String,
+    #[serde(rename="t")]
     pub transform: Transform,
+    #[serde(rename="v")]
     pub visual_info: Option<VisualInfo>,
     /// If true, the object should be assumed to not move through physics
+    #[serde(rename="k")]
     pub is_kinematic: bool,
     /// If true, the object has been modified since last send
+    #[serde(rename="u")]
     pub updated: bool,
 }
 
@@ -171,22 +181,31 @@ pub struct RoomState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateMessage {
     /// Requesting a Heartbeat response
+    #[serde(rename="h")]
     Heartbeat,
     /// Sending information about the current room
+    #[serde(rename="ri")]
     RoomInfo(RoomState),
     /// Sending information about objects in the room
+    #[serde(rename="u")]
     Update(f64, bool, HashMap<String, ObjectData>),
     /// Tell client to display text for a duration (id, text, timeout)
+    #[serde(rename="dt")]
     DisplayText(String, String, Option<f64>),
     /// Clear all text displayed
+    #[serde(rename="ct")]
     ClearText,
     /// Tell client to play a beep from a given object, with a frequency and duration
+    #[serde(rename="bp")]
     Beep(String, u16, u16),
     /// Hibernation started
+    #[serde(rename="hib")]
     Hibernating,
     /// Client should remove an object with a given id
+    #[serde(rename="ro")]
     RemoveObject(String),
     /// Robot claimed and by whom
+    #[serde(rename="rc")]
     RobotClaimed(String, String),
 }
 
@@ -194,17 +213,24 @@ pub enum UpdateMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     /// Responding to a Heartbeat request
+    #[serde(rename="h")]
     Heartbeat,
     /// Requesting reset
+    #[serde(rename="R")]
     ResetAll,
     /// Requesting robot reset
+    #[serde(rename="rr")]
     ResetRobot(String),
     /// Claiming robot
+    #[serde(rename="c")]
     ClaimRobot(String),
     /// Claiming robot
+    #[serde(rename="uc")]
     UnclaimRobot(String),
     /// Request encryption for robot
+    #[serde(rename="er")]
     EncryptRobot(String),
     /// Joining Room (room id, username, password)
+    #[serde(rename="j")]
     JoinRoom(String, String, Option<String>)
 }

@@ -143,7 +143,7 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
     // Forward request to server
     let server = server.unwrap();
     let response = reqwest::Client::new()
-        .post(format!("http://{}/rooms/create", server))
+        .post(format!("{}/rooms/create", server))
         .json(&data)
         .send()
         .await;
@@ -154,18 +154,22 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
     }
 
+    let response = response.unwrap();
+
+    info!("Response from server: {:?}", response);
+
     // Parse as JSON
-    let response = response.unwrap().json::<CreateRoomResponseData>().await;
+    let parsed_response = response.json::<CreateRoomResponseData>().await;
     
     // If error, return error
-    if response.is_err() {
-        error!("Error parsing response from server: {:?}", response);
+    if let Err(e) = parsed_response {
+        error!("Error parsing response from server: {:?}", e);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
     }
 
     // If success, return created room's info
-    let response: CreateRoomResponseData = response.unwrap();
-    (axum::http::StatusCode::OK, Json(Some(response)))
+    let parsed_response: CreateRoomResponseData = parsed_response.unwrap();
+    (axum::http::StatusCode::OK, Json(Some(parsed_response)))
 }
 
 /// Get info about a room

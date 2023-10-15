@@ -14,7 +14,7 @@ pub async fn announce_api() {
     // Every 5 minutes, announce to main server
     let url = format!("{}/server/announce", get_main_api_server());
     let client = reqwest::Client::new();
-    let server = get_external_ip().await.unwrap().trim().to_owned() + ":3000";
+    let server = get_local_api_server();
     let max_rooms = MAX_ROOMS;
     loop {
         let data = (server.clone(), ServerStatus {
@@ -179,5 +179,10 @@ pub(crate) fn get_main_api_server() -> String {
 
 pub(crate) fn get_server() -> String {
     let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
-    if ip == "127-0-0-1" {"ws"} else {"wss"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org:5000"
+    if ip == "127-0-0-1" {"ws"} else {"wss"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org" + if ip == "127-0-0-1" {":5000"} else {""}
+}
+
+pub(crate) fn get_local_api_server() -> String {
+    let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
+    if ip == "127-0-0-1" {"http"} else {"https"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org:3000"
 }
