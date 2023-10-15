@@ -155,9 +155,9 @@ pub async fn ws_tx() {
             }
 
             if msg_count > 0 {
-                trace!("Sending {} messages to {}", msg_count, client.key());
+                info!("Sending {} messages to {}", msg_count, client.key());
             }
-            
+
             for msg in to_send {
                 let msg = serde_json::to_string(&msg).unwrap();
                 sink.feed(Message::Text(msg)).now_or_never();
