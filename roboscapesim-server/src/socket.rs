@@ -113,7 +113,7 @@ pub async fn ws_rx() {
             CLIENTS.remove(&disconnect);
         }
 
-        sleep(Duration::from_nanos(50)).await;
+        sleep(Duration::from_micros(5)).await;
     }
 }
 
@@ -149,7 +149,7 @@ pub async fn ws_tx() {
             sink.flush().now_or_never();
         }
         
-        sleep(Duration::from_nanos(150)).await;
+        sleep(Duration::from_micros(5)).await;
     }
 }
 
@@ -164,7 +164,7 @@ pub async fn ws_accept() {
             info!("Error accepting connection: {:?}", e);
         }
 
-        sleep(Duration::from_nanos(100)).await;
+        sleep(Duration::from_millis(1)).await;
     }
 }
 
