@@ -287,10 +287,10 @@ impl RobotData {
             }
         }
 
+        let mut msg = None;
+        /*
         let mut buf = [0u8; 512];
         let size = robot.socket.as_mut().unwrap().recv(&mut buf).unwrap_or_default();
-
-        let mut msg = None;
 
         if size > 0 {
             had_messages = true;
@@ -404,7 +404,7 @@ impl RobotData {
             // Return to sender
             robot.send_roboscape_message(&buf[0..size]).unwrap();
         }
-/*
+*/
         // Apply calculated speeds to wheels
         let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
         joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
@@ -449,7 +449,7 @@ impl RobotData {
                 error!("{}", e);
             }
         }
-*/
+
         (had_messages, msg)
     }
 }
