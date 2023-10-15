@@ -124,15 +124,32 @@ pub async fn ws_tx() {
             // TX
             let receiver = client.rx1.lock().unwrap();
             let sink = &mut client.sink.lock().unwrap();
+            let mut to_send: Vec<UpdateMessage> = vec![];
             while let Ok(msg) = receiver.recv_timeout(Duration::default()) {
+                match msg {
+                    UpdateMessage::Update(_, full_update, _) => {
+                        if full_update {
+                            to_send.push(msg);
+                        } else {
+                            if to_send.is_empty() {
+                                to_send.push(msg);
+                            }
+                        }
+                    },
+                    _ => {
+                        to_send.push(msg);
+                    }
+                }
+            }
+
+            for msg in to_send {
                 let msg = serde_json::to_string(&msg).unwrap();
                 sink.feed(Message::Text(msg)).now_or_never();
             }
-
             sink.flush().now_or_never();
         }
         
-        sleep(Duration::from_nanos(20)).await;
+        sleep(Duration::from_nanos(150)).await;
     }
 }
 
