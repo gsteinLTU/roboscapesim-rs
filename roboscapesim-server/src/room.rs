@@ -14,11 +14,13 @@ use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runt
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
+use roboscapesim_common::api::RoomInfo;
 use serde_json::{json, Value};
 use rmp_serde::{Deserializer, Serializer};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
+use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
 use crate::{CLIENTS, ROOMS};
 use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
@@ -863,6 +865,18 @@ impl RoomData {
     pub(crate) fn count_non_robots(&self) -> usize {
         (self.objects.len() - self.robots.len()).clamp(0, self.objects.len())
     }
+
+    pub(crate) fn get_room_info(&self) -> RoomInfo {
+        RoomInfo{
+            id: self.name.clone(),
+            environment: self.environment.clone(),
+            server: get_server(),
+            creator: "TODO".to_owned(),
+            has_password: self.password.is_some(),
+            is_hibernating: self.hibernating.load(std::sync::atomic::Ordering::Relaxed),
+            visitors: self.visitors.lock().unwrap().clone(),
+        }
+    }
 }
 
 pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
@@ -893,6 +907,14 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     // Give client initial update
     room.send_info_to_client(peer_id);
     room.send_state_to_client(true, peer_id);
+
+    // Send room info to API
+    let room_info = room.get_room_info();
+    tokio::task::spawn(async move {
+        REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
+        .json(&vec![room_info])
+        .send().await.unwrap();
+    });
 
     // Initial robot claim data
     for robot in room.robots.iter() {

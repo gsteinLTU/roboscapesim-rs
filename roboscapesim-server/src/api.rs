@@ -17,10 +17,12 @@ pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
     .expect("PORT must be a number")
 );
 
+
+pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| reqwest::Client::new());
+
 pub async fn announce_api() {
     // Every 5 minutes, announce to main server
     let url = format!("{}/server/announce", get_main_api_server());
-    let client = reqwest::Client::new();
     let server = get_local_api_server();
     let max_rooms = MAX_ROOMS;
     loop {
@@ -29,7 +31,7 @@ pub async fn announce_api() {
             hibernating_rooms: 0,
             max_rooms,
         });
-        let res = client.post(&url).json(&data).send().await;
+        let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
         if let Err(err) = res {
             error!("Error announcing to main server: {}", err);
         }
@@ -131,17 +133,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
             continue;
         }
 
-        let id = room_data.name.clone();
-
-        rooms.push(RoomInfo{
-            id,
-            environment: room_data.environment.clone(),
-            server: get_server(),
-            creator: "TODO".to_owned(),
-            has_password: room_data.password.is_some(),
-            is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
-            visitors: room_data.visitors.lock().unwrap().clone(),
-        });
+        rooms.push(room_data.get_room_info());
     }
     rooms
 }
@@ -149,6 +141,12 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 #[debug_handler]
 pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
+
+    // Send room info to API
+    let room_info = ROOMS.get(&room_id).unwrap().value().lock().unwrap().get_room_info().clone();
+    REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
+        .json(&vec![room_info])
+        .send().await.unwrap();
 
     Json(CreateRoomResponseData {
         server: get_server(),
