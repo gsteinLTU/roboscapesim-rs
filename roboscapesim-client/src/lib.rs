@@ -387,7 +387,9 @@ const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting {
 #[netsblox_extension_menu_item("New simulation...")]
 #[wasm_bindgen]
 pub async fn new_sim_menu() {
-    get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().show();
+    let dialog = get_nb_externalvar("roboscapedialog-new").unwrap();
+    get_window_fn("moveToFront").unwrap().call2(&JsValue::NULL, &dialog, &"dialog".into()).unwrap();
+    dialog.unchecked_into::<HtmlDialogElement>().show();
 }
 
 #[netsblox_extension_menu_item("Join room...")]
@@ -414,7 +416,9 @@ pub async fn join_sim_menu() {
                 console_log!("{:?}", &results);
             }
             
-            get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlDialogElement>().show();
+            let dialog = get_nb_externalvar("roboscapedialog-join").unwrap();
+            get_window_fn("moveToFront").unwrap().call2(&JsValue::NULL, &dialog, &"dialog".into()).unwrap();
+            dialog.unchecked_into::<HtmlDialogElement>().show();
         });
     });
 }
