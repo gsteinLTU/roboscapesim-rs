@@ -8,6 +8,8 @@ use async_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex};
 use crossbeam_channel::{Sender, Receiver, self};
+use serde::{Deserialize, Serialize};
+use rmp_serde::{Deserializer, Serializer};
 
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
@@ -74,6 +76,9 @@ pub async fn ws_rx() {
         for client in CLIENTS.iter() {
             // RX
             while let Some(Some(msg)) = client.value().stream.lock().unwrap().next().now_or_never() {
+
+                let mut deserialized_msg = None;
+
                 if let Ok(msg) = msg {
                     trace!("Websocket message from {}: {:?}", client.key(), msg);
                     match msg {
@@ -84,17 +89,26 @@ pub async fn ws_rx() {
                         },
                         Message::Text(msg) => {
                             if let Ok(msg) = serde_json::from_str::<ClientMessage>(&msg) {
-                                match msg {
-                                    ClientMessage::JoinRoom(id, username, password) => {
-                                        join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
-                                    },
-                                    _ => {
-                                        client.tx1.send(msg.to_owned()).unwrap();
-                                    }
-                                }
+                                deserialized_msg = Some(msg);
                             } 
-                        }
+                        },
+                        Message::Binary(msg) => {
+                            if let Ok(msg) = <ClientMessage>::deserialize(&mut Deserializer::new(msg.as_slice())) {
+                                deserialized_msg = Some(msg);
+                            } 
+                        },
                         _ => {}
+                    }
+
+                    if let Some(msg) = deserialized_msg {
+                        match msg {
+                            ClientMessage::JoinRoom(id, username, password) => {
+                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
+                            },
+                            _ => {
+                                client.tx1.send(msg.to_owned()).unwrap();
+                            }
+                        }
                     }
                        
                 } else if let Err(e) = msg {
@@ -153,8 +167,14 @@ pub async fn ws_tx() {
 
             let sink = &mut client.sink.lock().unwrap();
             for msg in to_send {
-                let msg = serde_json::to_string(&msg).unwrap();
-                sink.feed(Message::Text(msg)).now_or_never();
+                let mut buf = vec![];
+                let r = msg.serialize(&mut Serializer::new(&mut buf));
+
+                if r.is_ok() {
+                    sink.feed(Message::Binary(buf)).now_or_never();
+                } else if let Err(e) = r {
+                    info!("Error serializing message: {:?}", e);
+                }
             }
             sink.flush().now_or_never();
         }

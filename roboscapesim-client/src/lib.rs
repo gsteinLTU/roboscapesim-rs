@@ -5,16 +5,18 @@ mod ui;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
-use js_sys::{Reflect, Array, eval};
+use js_sys::{Reflect, Array, eval, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{window, WebSocket, Node, HtmlDialogElement, HtmlDataListElement};
+use web_sys::{window, WebSocket, Node, HtmlDialogElement, HtmlDataListElement, MessageEvent};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
+use serde::{Deserialize, Serialize};
+use rmp_serde::{Deserializer, Serializer};
 
 use self::util::*;
 use self::game::*;
@@ -104,15 +106,15 @@ fn send_message(msg: &ClientMessage) {
             console_log!("Attempt to send without socket!");
         } else if let Some(socket) = socket {
             let socket = socket.borrow();
-            let message = serde_json::to_string(msg).unwrap();
-            let message = message.as_str();
-            socket.send_with_str(message).unwrap();
+            let mut buf = Vec::new();
+            msg.serialize(&mut Serializer::new(&mut buf)).unwrap();
+            socket.send_with_u8_array(&buf).unwrap();
         }
     });
 }
 
 /// Process an UpdateMessage from the server
-fn handle_update_message(msg: Result<UpdateMessage, serde_json::Error>, game: &Rc<RefCell<Game>>) {
+fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, game: &Rc<RefCell<Game>>) {
     match msg {
         Ok(UpdateMessage::Heartbeat) => {
             send_message(&ClientMessage::Heartbeat);
@@ -496,11 +498,38 @@ async fn connect(server: &String) {
     WEBSOCKET.with(|socket| {
         let s = WebSocket::new(server);
         let s = Rc::new(RefCell::new(s.unwrap()));
+        s.borrow().set_binary_type(web_sys::BinaryType::Arraybuffer);
         GAME.with(|game| { 
             let gc = game.clone();
             let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
-                let msg = serde_json::from_str(&js_get(&evt, "data").unwrap().as_string().unwrap());
-                handle_update_message(msg, &gc);
+                let mut msg = None;
+                let data = js_get(&evt, "data").unwrap();
+
+                if data.is_string() {
+                    let parsed = serde_json::from_str(&data.as_string().unwrap());
+                    if let Ok(parsed) = parsed {
+                        msg = Some(parsed);
+                    } else if let Err(e) = parsed {
+                        console_log!("Failed to parse JSON: {}", e);
+                    }
+                } else if let Ok(array_buffer) = data.clone().dyn_into::<js_sys::ArrayBuffer>() {
+                    // Convert the ArrayBuffer to a Uint8Array
+                    let data = Uint8Array::new(&array_buffer).to_vec();
+                    
+                    let parsed = <UpdateMessage>::deserialize(&mut Deserializer::new(data.as_slice()));
+
+                    if let Ok(parsed) = parsed {
+                        msg = Some(parsed);
+                    } else if let Err(e) = parsed {
+                        console_log!("Failed to parse MessagePack: {}", e);
+                    }
+                } else {
+                    console_log!("Unknown message type: {:?}", &data);
+                }
+
+                if let Some(msg) = msg {
+                    handle_update_message(Ok(msg), &gc);
+                }
             });
             s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
             let gc = game.clone();

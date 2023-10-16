@@ -15,6 +15,7 @@ use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
 use serde_json::{json, Value};
+use rmp_serde::{Deserializer, Serializer};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 

@@ -37,6 +37,7 @@ gc-arena = "0.3"
 crossbeam-channel = "0.5.8"
 async-tungstenite = { version = "0.23" }
 async-std = "1.12.0"
+rmp-serde = "1.1.2"
 
 [dev-dependencies]
 float-cmp = "0.9"
