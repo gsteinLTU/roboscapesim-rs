@@ -136,17 +136,21 @@ pub(crate) fn init_ui() {
         let new_confirm_button = new_buttons.get(0).unwrap();
         new_confirm_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
             let new_inputs = get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlElement>().query_selector_all("input").unwrap();
-            let new_env = new_inputs.get(0).unwrap();
-            let new_password = new_inputs.get(1).unwrap();
+            let new_env = new_inputs.get(0).unwrap().unchecked_ref::<HtmlInputElement>().clone();
+            let new_password = new_inputs.get(1).unwrap().unchecked_ref::<HtmlInputElement>().clone();
 
             spawn_local(async move {
-                let mut env = new_env.unchecked_ref::<HtmlInputElement>().value();
-                let password = new_password.unchecked_ref::<HtmlInputElement>().value();
+                let mut env = new_env.value();
+                let password = new_password.value();
                 let password = if password.trim().is_empty() { None } else { Some(password) };
 
                 if env.trim().is_empty() {
                     env = "Default".to_owned();
                 }
+
+                // Clear inputs
+                new_env.set_value("");
+                new_password.set_value("");
 
                 new_room(Some(env), password, false).await;
             });
@@ -174,13 +178,17 @@ pub(crate) fn init_ui() {
         let join_button = join_buttons.get(0).unwrap();
         join_button.add_event_listener_with_callback("click", Closure::<dyn Fn()>::new(|| {
             let join_inputs = get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlElement>().query_selector_all("input").unwrap();
-            let join_id = join_inputs.get(0).unwrap();
-            let join_password = join_inputs.get(1).unwrap();
+            let join_id = join_inputs.get(0).unwrap().unchecked_ref::<HtmlInputElement>().clone();
+            let join_password = join_inputs.get(1).unwrap().unchecked_ref::<HtmlInputElement>().clone();
 
             spawn_local(async move {
-                let id = join_id.unchecked_ref::<HtmlInputElement>().value();
-                let password = join_password.unchecked_ref::<HtmlInputElement>().value();
+                let id = join_id.value();
+                let password = join_password.value();
                 let password = if password.trim().is_empty() { None } else { Some(password) };
+
+                // Clear inputs
+                join_id.set_value("");
+                join_password.set_value("");
 
                 if id.trim().is_empty() {
                     // TODO: Show error
