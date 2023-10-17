@@ -385,9 +385,7 @@ const ID_BILLBOARDS_ENABLED: ExtensionSetting = ExtensionSetting {
 #[netsblox_extension_menu_item("New simulation...")]
 #[wasm_bindgen]
 pub async fn new_sim_menu() {
-    let dialog = get_nb_externalvar("roboscapedialog-new").unwrap();
-    get_window_fn("moveToFront").unwrap().call2(&JsValue::NULL, &dialog, &"dialog".into()).unwrap();
-    dialog.unchecked_into::<HtmlDialogElement>().show();
+    show_dialog("roboscapedialog-new");
 }
 
 #[netsblox_extension_menu_item("Join room...")]
@@ -414,9 +412,7 @@ pub async fn join_sim_menu() {
                 console_log!("{:?}", &results);
             }
             
-            let dialog = get_nb_externalvar("roboscapedialog-join").unwrap();
-            get_window_fn("moveToFront").unwrap().call2(&JsValue::NULL, &dialog, &"dialog".into()).unwrap();
-            dialog.unchecked_into::<HtmlDialogElement>().show();
+            show_dialog("roboscapedialog-join");
         });
     });
 }
@@ -568,9 +564,7 @@ async fn connect(server: &String) {
 #[netsblox_extension_menu_item("Show 3D View")]
 #[wasm_bindgen]
 pub fn show_3d_view() {
-    let dialog = get_nb_externalvar("roboscapedialog").unwrap();
-    let f = get_window_fn("showDialog").unwrap();
-    f.call1(&JsValue::NULL, &dialog).unwrap();
+    show_dialog("roboscapedialog");
 }
 
 #[netsblox_extension_block(name = "robotsInRoom", category = "network", spec = "robots in room", target = netsblox_extension_util::TargetObject::Both)]

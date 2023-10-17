@@ -425,3 +425,9 @@ pub(crate) fn update_claim_text() {
         game.borrow().ui_elements.borrow().get("claim_text").unwrap().set_inner_text(format!("Claimed by: {}", claimant).as_str());
     });
 }
+
+pub(crate) fn show_dialog(dialog_name: &str) {
+    let dialog = get_nb_externalvar(dialog_name).unwrap();
+    let f = get_window_fn("showDialog").unwrap();
+    f.call1(&JsValue::NULL, &dialog).unwrap();
+}
