@@ -6,7 +6,7 @@ use room::RoomData;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
 use std::sync::Arc;
-use std::{net::SocketAddr, sync::Mutex};
+use std::sync::Mutex;
 use tokio::{
     task,
     time::{self, Duration},
@@ -43,6 +43,7 @@ async fn main() {
     SimpleLogger::new()
         .with_level(log::LevelFilter::Error)
         .with_module_level("roboscapesim_server", log::LevelFilter::Info)
+        .with_module_level("iotscape", log::LevelFilter::Trace)
         .env()
         .init()
         .unwrap();

@@ -313,12 +313,12 @@ pub fn create_world_service(id: &str) -> Service {
 
     definition.events.insert(
         "userJoined".to_owned(),
-        EventDescription { params: vec!["string".into()] },
+        EventDescription { params: vec!["username".into()] },
     );
 
     definition.events.insert(
         "userLeft".to_owned(),
-        EventDescription { params: vec!["string".into()] },
+        EventDescription { params: vec!["username".into()] },
     );
 
     let service = setup_service(definition, ServiceType::World, None);
@@ -354,6 +354,10 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             room.reset();
         },
         "showText" => {
+            if msg.params.len() < 2 {
+                return Ok(Intermediate::Json(Value::Bool(false)));
+            }
+
             let id = msg.params[0].as_str().unwrap().to_owned();
             let text = msg.params[1].as_str().unwrap().to_owned();
             let timeout = msg.params[2].as_f64();
@@ -423,6 +427,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             }).collect::<Vec<Value>>();
         },
         "addBlock" => {
+            if msg.params.len() < 7 {
+                return Ok(Intermediate::Json(Value::Bool(false)));
+            }
             let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
             let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
             let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
@@ -441,6 +448,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             response = vec![id.into()];            
         },
         "addRobot" => {
+            if msg.params.len() < 3 {
+                return Ok(Intermediate::Json(Value::Bool(false)));
+            }
             let x = num_val(&msg.params[0]);
             let y = num_val(&msg.params[1]);
             let z = num_val(&msg.params[2]);

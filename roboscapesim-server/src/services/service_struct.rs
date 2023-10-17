@@ -55,7 +55,7 @@ impl Service {
 
 pub(crate) fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<Mutex<IoTScapeService>> {
     let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
-    let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1975".to_string());
+    let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
     let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
         override_name.unwrap_or(
             match service_type {

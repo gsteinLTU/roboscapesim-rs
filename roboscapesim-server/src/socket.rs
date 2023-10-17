@@ -8,8 +8,6 @@ use async_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::{Arc, Mutex};
 use crossbeam_channel::{Sender, Receiver, self};
-use serde::{Deserialize, Serialize};
-use rmp_serde::{Deserializer, Serializer};
 
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
@@ -93,7 +91,7 @@ pub async fn ws_rx() {
                             } 
                         },
                         Message::Binary(msg) => {
-                            if let Ok(msg) = <ClientMessage>::deserialize(&mut Deserializer::new(msg.as_slice())) {
+                            if let Ok(msg) = postcard::from_bytes(&msg) {
                                 deserialized_msg = Some(msg);
                             } 
                         },
@@ -167,10 +165,9 @@ pub async fn ws_tx() {
 
             let sink = &mut client.sink.lock().unwrap();
             for msg in to_send {
-                let mut buf = vec![];
-                let r = msg.serialize(&mut Serializer::new(&mut buf));
+                let r = postcard::to_stdvec(&msg);
 
-                if r.is_ok() {
+                if let Ok(buf) = r {
                     sink.feed(Message::Binary(buf)).now_or_never();
                 } else if let Err(e) = r {
                     info!("Error serializing message: {:?}", e);

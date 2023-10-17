@@ -26,7 +26,7 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.3.0"
 dotenvy = "0.15"
-netsblox-vm = { version = "0.2.12", default-features = false, features = ["std", "native-tls"] }
+netsblox-vm = { version = "0.2.13", default-features = false, features = ["std", "native-tls"] }
 axum-macros = "0.3.8"
 reqwest = "0.11"
 futures = "0.3.28"
@@ -37,7 +37,7 @@ gc-arena = "0.3"
 crossbeam-channel = "0.5.8"
 async-tungstenite = { version = "0.23" }
 async-std = "1.12.0"
-rmp-serde = "1.1.2"
+postcard = { version = "1.0.8", features = ["use-std"] }
 
 [dev-dependencies]
 float-cmp = "0.9"

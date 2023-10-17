@@ -16,7 +16,6 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::*;
 use roboscapesim_common::api::RoomInfo;
 use serde_json::{json, Value};
-use rmp_serde::{Deserializer, Serializer};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -133,7 +132,7 @@ impl RoomData {
                         }
                     }
 
-                    sleep(Duration::from_millis(2)).await;
+                    sleep(Duration::from_millis(5)).await;
                 }
             }
         });
@@ -246,7 +245,7 @@ impl RoomData {
         } else {
             // In edit mode, send IoTScape messages to NetsBlox server
             let services = obj.services.clone();
-            let mut event_id: usize = rand::random();
+            let mut event_id: u32 = rand::random();
             spawn(async move {
                 loop {
                     while let Ok((service_id, msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
@@ -254,9 +253,11 @@ impl RoomData {
                         if let Some(service) = service {
                             service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
                             event_id += 1;
+                        } else {
+                            info!("Service {} not found", service_id);
                         }
                     }
-                    sleep(Duration::from_millis(2)).await;
+                    sleep(Duration::from_millis(5)).await;
                 }
             });
         }
@@ -384,7 +385,11 @@ impl RoomData {
             }
         }
         for client_id in disconnected {
-            self.sockets.remove(&client_id);
+            let username = self.sockets.remove(&client_id).unwrap().0.to_owned();
+
+            // Send leave message to clients
+            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
+            self.netsblox_msg_tx.send((world_service_id, "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
         }
 
         // Check if room empty/not empty
@@ -922,6 +927,10 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
             RoomData::send_to_client(&UpdateMessage::RobotClaimed(robot.0.clone(), robot.1.claimed_by.clone().unwrap_or("".to_owned())), peer_id);
         }
     }
+
+    // Send user join event
+    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
+    room.netsblox_msg_tx.send((world_service_id, "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
 
     Ok(())
 }

@@ -16,7 +16,6 @@ use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
 use serde::{Deserialize, Serialize};
-use rmp_serde::{Deserializer, Serializer};
 
 use self::util::*;
 use self::game::*;
@@ -106,15 +105,14 @@ fn send_message(msg: &ClientMessage) {
             console_log!("Attempt to send without socket!");
         } else if let Some(socket) = socket {
             let socket = socket.borrow();
-            let mut buf = Vec::new();
-            msg.serialize(&mut Serializer::new(&mut buf)).unwrap();
+            let buf = postcard::to_stdvec(&msg).unwrap();
             socket.send_with_u8_array(&buf).unwrap();
         }
     });
 }
 
 /// Process an UpdateMessage from the server
-fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, game: &Rc<RefCell<Game>>) {
+fn handle_update_message(msg: Result<UpdateMessage, postcard::Error>, game: &Rc<RefCell<Game>>) {
     match msg {
         Ok(UpdateMessage::Heartbeat) => {
             send_message(&ClientMessage::Heartbeat);
@@ -520,7 +518,7 @@ async fn connect(server: &String) {
                     // Convert the ArrayBuffer to a Uint8Array
                     let data = Uint8Array::new(&array_buffer).to_vec();
                     
-                    let parsed = <UpdateMessage>::deserialize(&mut Deserializer::new(data.as_slice()));
+                    let parsed = postcard::from_bytes(data.as_slice());
 
                     if let Ok(parsed) = parsed {
                         msg = Some(parsed);
