@@ -39,7 +39,7 @@ thread_local! {
 #[cfg(debug_assertions)]
 const ASSETS_DIR: &str = "http://localhost:4000/assets/";
 #[cfg(not(debug_assertions))]
-const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOnline/assets/";
+const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOnline2/assets/";
 
 #[cfg(debug_assertions)]
 const API_SERVER: &str = "http://localhost:5001/";
