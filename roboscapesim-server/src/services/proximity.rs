@@ -59,7 +59,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(30);
+    let announce_period = Duration::from_secs(50);
 
     let attached_rigid_bodies = DashMap::new();
     attached_rigid_bodies.insert("main".into(), *rigid_body);

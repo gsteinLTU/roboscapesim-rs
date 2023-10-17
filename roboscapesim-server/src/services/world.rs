@@ -330,7 +330,7 @@ pub fn create_world_service(id: &str) -> Service {
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(30);
+    let announce_period = Duration::from_secs(50);
 
     Service {
         id: id.to_string(),

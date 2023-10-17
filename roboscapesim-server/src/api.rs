@@ -170,7 +170,7 @@ pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     #[cfg(not(debug_assertions))]
     {
         let url = "http://checkip.amazonaws.com";
-        reqwest::get(url).await?.text().await
+        REQWEST_CLIENT.get(url).send().await?.text().await
     }
 }
 
