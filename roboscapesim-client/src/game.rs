@@ -5,7 +5,7 @@ use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window};
 
-use crate::ui::{clear_robots_menu, update_robot_buttons_visibility};
+use crate::ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -137,6 +137,9 @@ impl Game {
         self.robot_claims.borrow_mut().clear();
 
         // UI cleanup
+        TEXT_BLOCKS.with(|text_blocks| {
+            text_blocks.borrow_mut().clear();
+        });
         clear_robots_menu();
         update_robot_buttons_visibility();
     }

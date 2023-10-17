@@ -155,7 +155,7 @@ pub(crate) fn init_ui() {
                 new_room(Some(env), password, false).await;
             });
 
-            get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
+            hide_dialog("roboscapedialog-new");
         }).into_js_value().unchecked_ref()).unwrap();
 
         let new_edit_button = new_buttons.get(1).unwrap();
@@ -170,7 +170,7 @@ pub(crate) fn init_ui() {
                 new_room(None, password, true).await;
             });
 
-            get_nb_externalvar("roboscapedialog-new").unwrap().unchecked_into::<HtmlDialogElement>().close();
+            hide_dialog("roboscapedialog-new");
         }).into_js_value().unchecked_ref()).unwrap();
 
 
@@ -200,7 +200,7 @@ pub(crate) fn init_ui() {
                 join_room(id, password).await;
             });
 
-            get_nb_externalvar("roboscapedialog-join").unwrap().unchecked_into::<HtmlDialogElement>().close();
+            hide_dialog("roboscapedialog-join");
         }).into_js_value().unchecked_ref()).unwrap();
 
 }
@@ -233,7 +233,7 @@ pub(crate) fn set_title(title: &str) {
 }
 
 /// Holds information about a text message displayed overlaying the 3D view
-struct TextBlock {
+pub(crate) struct TextBlock {
     pub id: Rc<RefCell<String>>,
     pub js_value: RefCell<JsValue>,
     pub timeout: Cell<Option<i32>>,
@@ -269,7 +269,7 @@ impl Drop for TextBlock {
 }
 
 thread_local! {
-    static TEXT_BLOCKS: Rc<RefCell<BTreeMap<String, Rc::<RefCell<TextBlock>>>>> = Rc::new(RefCell::new(BTreeMap::new()));
+    pub(crate) static TEXT_BLOCKS: Rc<RefCell<BTreeMap<String, Rc::<RefCell<TextBlock>>>>> = Rc::new(RefCell::new(BTreeMap::new()));
 }
 
 /// Create a TextBlock in the 3D view's overlay.
@@ -429,5 +429,11 @@ pub(crate) fn update_claim_text() {
 pub(crate) fn show_dialog(dialog_name: &str) {
     let dialog = get_nb_externalvar(dialog_name).unwrap();
     let f = get_window_fn("showDialog").unwrap();
+    f.call1(&JsValue::NULL, &dialog).unwrap();
+}
+
+pub(crate) fn hide_dialog(dialog_name: &str) {
+    let dialog = get_nb_externalvar(dialog_name).unwrap();
+    let f = get_window_fn("hideDialog").unwrap();
     f.call1(&JsValue::NULL, &dialog).unwrap();
 }
