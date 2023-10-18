@@ -72,13 +72,13 @@
 
 
             element = document.createElement('datalist');
-            element.id = 'roboscapedialog-new-environment-list';
+            element.id = 'roboscapedialog-new-environments-list';
             document.body.appendChild(element);
-            window.externalVariables['roboscapedialog-new-environment-list'] = element;
+            window.externalVariables['roboscapedialog-new-environments-list'] = element;
 
             element = createDialog('Create a Session', false, ['Create', 'Edit Mode', 'Close']);
             element.querySelector('content').innerHTML += `
-            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input list="roboscapedialog-new-environment-list" id="roboscapedialog-new-environment" class="inset"/></div>
+            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input list="roboscapedialog-new-environments-list" id="roboscapedialog-new-environment" class="inset"/></div>
             <div><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
             `;
 

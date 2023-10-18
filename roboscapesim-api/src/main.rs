@@ -10,7 +10,6 @@ use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
 };
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, sync::Mutex, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
