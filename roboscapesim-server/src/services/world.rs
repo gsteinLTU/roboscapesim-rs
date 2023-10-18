@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}};
+use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::PI};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
@@ -358,8 +358,8 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
                 return Ok(Intermediate::Json(Value::Bool(false)));
             }
 
-            let id = msg.params[0].as_str().unwrap().to_owned();
-            let text = msg.params[1].as_str().unwrap().to_owned();
+            let id = str_val(&msg.params[0]);
+            let text = str_val(&msg.params[1]);
             let timeout = msg.params[2].as_f64();
             RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| *p.value()));
         },
@@ -454,7 +454,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
             let x = num_val(&msg.params[0]);
             let y = num_val(&msg.params[1]);
             let z = num_val(&msg.params[2]);
-            let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0))));
+            let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
             
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
             response = vec![id.into()];
@@ -500,13 +500,13 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
 
     // Parse rotation
     let rotation = match rotation {
-        serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32, 0.0),
-        serde_json::Value::String(s) => AngVector::new(0.0, s.parse().unwrap_or_default(), 0.0),
+        serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32  * PI / 180.0, 0.0),
+        serde_json::Value::String(s) => AngVector::new(0.0, s.parse::<f32>().unwrap_or_default()  * PI / 180.0, 0.0),
         serde_json::Value::Array(a) => {
             if a.len() >= 3 {
-                AngVector::new(num_val(&a[0]), num_val(&a[1]), num_val(&a[2]))
+                AngVector::new(num_val(&a[0]) * PI / 180.0, num_val(&a[1]) * PI / 180.0, num_val(&a[2]) * PI / 180.0)
             } else if !a.is_empty() {
-                AngVector::new(0.0, num_val(&a[0]), 0.0)
+                AngVector::new(0.0, num_val(&a[0]) * PI / 180.0, 0.0)
             } else {
                 AngVector::new(0.0, 0.0, 0.0)
             }

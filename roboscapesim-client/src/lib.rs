@@ -9,7 +9,7 @@ use js_sys::{Reflect, Array, eval, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo, EnvironmentInfo}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDataListElement};
 use neo_babylon::prelude::*;
@@ -55,6 +55,31 @@ async fn main() {
     console_error_panic_hook::set_once();
     console_log!("Assets dir: {}", ASSETS_DIR);
     console_log!("API server: {}", API_SERVER);
+
+    // Get environments list
+    REQWEST_CLIENT.with(|r| {
+        let get = r.get(format!("{}environments/list", API_SERVER));
+        spawn_local(async move {
+            let results = get.send().await;
+
+            if let Ok(results) = results {
+                let results = results.json::<Vec<EnvironmentInfo>>().await;
+
+                if let Ok(results) = &results {
+                    let list = get_nb_externalvar("roboscapedialog-new-environments-list").unwrap().unchecked_into::<HtmlDataListElement>();
+                    list.set_inner_html("");
+                    for result in results {
+                        let option = document().create_element("option").unwrap();
+                        option.set_attribute("value", &result.id).unwrap();
+                        list.append_child(&option).unwrap();
+                    }
+                }
+
+                console_log!("{:?}", &results);
+            }
+        });
+    });
+
     GAME.with(|game| {
         // Init game
         let game_clone = game.clone();
