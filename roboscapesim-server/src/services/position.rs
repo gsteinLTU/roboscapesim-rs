@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, time::{Instant, Duration}};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
-use log::info;
+use log::{info, warn};
 use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate};
@@ -117,6 +117,9 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
 pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String>  {
     let mut response = vec![];
     
+    let mut msg = msg;
+    // TODO: figure out why this is necessary for VM requests to PositionSensor
+    msg.device = msg.device.replace("\"", "");
     let s = room.services.get(&(msg.device.clone(), ServiceType::PositionSensor));
     if let Some(s) = s {
         if let Some(body) = s.value().lock().unwrap().attached_rigid_bodies.get("main") {
@@ -146,6 +149,8 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
             } else {
                 info!("Unrecognized object {}", msg.device);
             };
+        } else {
+            info!("No main rigid body found for {}", msg.device);
         }
         
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
@@ -154,5 +159,8 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
         info!("No service found for {}", msg.device);
     }
 
+    if response.len() == 1 {
+        return Ok(Intermediate::Json(response[0].clone()));
+    }
     Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
 }

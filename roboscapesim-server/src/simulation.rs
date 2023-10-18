@@ -23,7 +23,7 @@ pub struct Simulation {
     pub physics_hooks: (),
     pub event_handler: (),
     pub rigid_body_labels: DashMap<String, RigidBodyHandle>,
-    pub sensors: DashMap<ColliderHandle, DashSet<ColliderHandle>>,
+    pub sensors: DashMap<(String, ColliderHandle), DashSet<ColliderHandle>>,
 }
 
 pub const SCALE: f32 = 3.0;

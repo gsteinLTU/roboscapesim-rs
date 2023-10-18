@@ -6,11 +6,11 @@
         "path": "assets/scenarios/Default.xml",
         "creator": "Gordon Stein" 
     },
-    "cubespawn": {
-        "name": "CubeSpawn",
-        "description": "Cube Spawning example scenario",
+    "obstaclecourse": {
+        "name": "ObstacleCourse",
+        "description": "Obstacle course scenario",
         "host": "remote",
-        "path": "gstein/CubeSpawn",
+        "path": "gstein/Obstacle%20Course",
         "creator": "Gordon Stein"
     }
 }

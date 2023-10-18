@@ -51,6 +51,8 @@ pub const DEFAULT_PROJECT: &str = include_str!("../assets/scenarios/Default.xml"
 pub async fn load_environment(environment: Option<String>) -> String {
     let environment = environment.and_then(|env| if env.trim().is_empty() { None } else { Some(env) });
 
+    info!("Request to load environment {:?}", environment);
+    
     // First, check if environment is a project ID
     let environment: ProjectType = if let Some(env) = &environment {
         let env = env.to_owned();

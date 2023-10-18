@@ -43,7 +43,7 @@ async fn main() {
     SimpleLogger::new()
         .with_level(log::LevelFilter::Error)
         .with_module_level("roboscapesim_server", log::LevelFilter::Info)
-        .with_module_level("iotscape", log::LevelFilter::Trace)
+        .with_module_level("iotscape", log::LevelFilter::Info)
         .env()
         .init()
         .unwrap();

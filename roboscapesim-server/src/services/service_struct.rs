@@ -7,7 +7,7 @@ use rapier3d::prelude::RigidBodyHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
-    World, Entity, PositionSensor, LIDAR, ProximitySensor
+    World, Entity, PositionSensor, LIDAR, ProximitySensor, Trigger
 }
 
 #[derive(Derivative)]
@@ -64,6 +64,7 @@ pub(crate) fn setup_service(definition: ServiceDefinition, service_type: Service
                 ServiceType::LIDAR => "LIDARSensor",
                 ServiceType::PositionSensor => "PositionSensor",
                 ServiceType::ProximitySensor => "ProximitySensor",
+                ServiceType::Trigger => "RoboScapeTrigger",
             }
         ),
         definition,
