@@ -129,14 +129,14 @@ fn send_message(msg: &ClientMessage) {
             console_log!("Attempt to send without socket!");
         } else if let Some(socket) = socket {
             let socket = socket.borrow();
-            let buf = postcard::to_stdvec(&msg).unwrap();
+            let buf = rmp_serde::to_vec(&msg).unwrap();
             socket.send_with_u8_array(&buf).unwrap();
         }
     });
 }
 
 /// Process an UpdateMessage from the server
-fn handle_update_message(msg: Result<UpdateMessage, postcard::Error>, game: &Rc<RefCell<Game>>) {
+fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, game: &Rc<RefCell<Game>>) {
     match msg {
         Ok(UpdateMessage::Heartbeat) => {
             send_message(&ClientMessage::Heartbeat);
@@ -538,7 +538,7 @@ async fn connect(server: &String) {
                     // Convert the ArrayBuffer to a Uint8Array
                     let data = Uint8Array::new(&array_buffer).to_vec();
                     
-                    let parsed = postcard::from_bytes(data.as_slice());
+                    let parsed = rmp_serde::from_slice(data.as_slice());
 
                     if let Ok(parsed) = parsed {
                         msg = Some(parsed);

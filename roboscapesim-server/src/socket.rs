@@ -91,7 +91,7 @@ pub async fn ws_rx() {
                             } 
                         },
                         Message::Binary(msg) => {
-                            if let Ok(msg) = postcard::from_bytes(&msg) {
+                            if let Ok(msg) = rmp_serde::from_slice(msg.as_slice()) {
                                 deserialized_msg = Some(msg);
                             } 
                         },
@@ -165,7 +165,7 @@ pub async fn ws_tx() {
 
             let sink = &mut client.sink.lock().unwrap();
             for msg in to_send {
-                let r = postcard::to_stdvec(&msg);
+                let r = rmp_serde::to_vec(&msg);
 
                 if let Ok(buf) = r {
                     sink.feed(Message::Binary(buf)).now_or_never();
