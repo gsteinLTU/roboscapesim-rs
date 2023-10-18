@@ -1,13 +1,13 @@
 use axum::{Json, response::IntoResponse, extract::Query};
 use log::{error, info};
 use once_cell::sync::Lazy;
-use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo};
+use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo, EnvironmentInfo};
 use std::{sync::Mutex, net::SocketAddr, collections::HashMap};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::DEFAULT_SCENARIOS_FILE};
+use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::{DEFAULT_SCENARIOS_FILE, LOCAL_SCENARIOS}};
 
 pub(crate) static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
@@ -25,7 +25,28 @@ pub async fn announce_api() {
     let url = format!("{}/server/announce", get_main_api_server());
     let server = get_local_api_server();
     let max_rooms = MAX_ROOMS;
+
+    // Send initial announcement
+    let data = (server.clone(), ServerStatus {
+        active_rooms: 0,
+        hibernating_rooms: 0,
+        max_rooms,
+    });
+    let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
+    if let Err(err) = res {
+        error!("Error initial announce to main server: {}", err);
+    }
+
+    // Send environment list
+    let res = REQWEST_CLIENT.put(format!("{}/server/environments", get_main_api_server()))
+        .json(&LOCAL_SCENARIOS.values().cloned().map(|s| s.into()).collect::<Vec<EnvironmentInfo>>())
+        .send().await;
+    if let Err(err) = res {
+        error!("Error sending environments to main server: {}", err);
+    }
+
     loop {
+        tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         let data = (server.clone(), ServerStatus {
             active_rooms: ROOMS.len(),
             hibernating_rooms: 0,
@@ -35,7 +56,6 @@ pub async fn announce_api() {
         if let Err(err) = res {
             error!("Error announcing to main server: {}", err);
         }
-        tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
     }
 }
 

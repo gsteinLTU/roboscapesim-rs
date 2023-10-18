@@ -8,19 +8,12 @@ use dashmap::DashMap;
 use log::{debug, error, info};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
-    CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus,
+    CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, sync::Mutex, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct ServerInfo {
-    pub address: String,
-    pub max_rooms: usize,
-    pub last_update: SystemTime,
-}
 
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
 
@@ -52,6 +45,7 @@ async fn main() {
         .route("/rooms/info", get(get_room_info))
         .route("/server/announce", post(post_server_announce))
         .route("/server/rooms", put(put_server_rooms))
+        .route("/server/environments", put(put_server_environments))
         .route("/environments/list", get(get_environments_list))
         .layer(
             CorsLayer::new()
@@ -211,6 +205,14 @@ async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl 
 async fn put_server_rooms(Json(data): Json<Vec<RoomInfo>>) -> impl IntoResponse {
     for room in data {
         ROOMS.insert(room.id.clone(), room);
+    }
+}
+
+/// Update list of environments on server
+async fn put_server_environments(Json(data): Json<Vec<EnvironmentInfo>>) -> impl IntoResponse {
+    info!("{:?}", data);
+    for environment in data {
+        ENVIRONMENTS.insert(environment.id.clone(), environment);
     }
 }
 

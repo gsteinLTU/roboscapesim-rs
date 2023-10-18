@@ -11,11 +11,10 @@ use netsblox_extension_util::*;
 use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo}};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
-use web_sys::{window, WebSocket, Node, HtmlDialogElement, HtmlDataListElement, MessageEvent};
+use web_sys::{window, WebSocket, Node, HtmlDataListElement};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
-use serde::{Deserialize, Serialize};
 
 use self::util::*;
 use self::game::*;

@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, fs};
 
 use log::{error, info};
 use once_cell::sync::Lazy;
+use roboscapesim_common::api::EnvironmentInfo;
 use serde::{Serialize, Deserialize};
 use crate::{room::netsblox_api::Project, api::REQWEST_CLIENT};
 
@@ -26,6 +27,15 @@ pub struct LocalScenarioDef {
     pub host: String,
 }
 
+impl Into<EnvironmentInfo> for LocalScenarioDef {
+    fn into(self) -> EnvironmentInfo {
+        EnvironmentInfo {
+            id: self.name.clone(),
+            name: self.name,
+            description: self.description.unwrap_or_else(|| "".to_string()),
+        }
+    }
+}
 /// Local scenarios file
 pub const DEFAULT_SCENARIOS_FILE: &str = include_str!("../default_scenarios.json");
 

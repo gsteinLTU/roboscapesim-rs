@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, HtmlElement, HtmlInputElement, Event, HtmlDialogElement};
+use web_sys::{window, HtmlElement, HtmlInputElement, Event};
 
 use crate::{util::*, console_log, GAME, new_room, join_room};
 
@@ -427,6 +427,7 @@ pub(crate) fn update_claim_text() {
 }
 
 pub(crate) fn show_dialog(dialog_name: &str) {
+    hide_dialog(dialog_name);
     let dialog = get_nb_externalvar(dialog_name).unwrap();
     let f = get_window_fn("showDialog").unwrap();
     f.call1(&JsValue::NULL, &dialog).unwrap();

@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -42,4 +44,11 @@ pub struct EnvironmentInfo {
     pub id: String,
     pub name: String,
     pub description: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ServerInfo {
+    pub address: String,
+    pub max_rooms: usize,
+    pub last_update: SystemTime,
 }
