@@ -144,6 +144,10 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
     // If error, return error
     if response.is_err() {
         error!("Error sending request to server: {:?}", response);
+
+        // Remove server from list
+        SERVERS.remove(&server);
+        
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
     }
 
