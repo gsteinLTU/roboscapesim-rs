@@ -1,7 +1,7 @@
 use async_std::net::{TcpListener, TcpStream};
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
-use log::{info, trace};
+use log::{info, trace, error};
 use once_cell::sync::Lazy;
 
 use async_tungstenite::{WebSocketStream, tungstenite::Message};
@@ -101,7 +101,9 @@ pub async fn ws_rx() {
                     if let Some(msg) = deserialized_msg {
                         match msg {
                             ClientMessage::JoinRoom(id, username, password) => {
-                                join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id).unwrap();
+                                if let Err(e) = join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id){
+                                    error!("Error joining room: {:?}", e);
+                                }   
                             },
                             _ => {
                                 client.tx1.send(msg.to_owned()).unwrap();

@@ -107,8 +107,8 @@ impl RobotData {
 
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(vector![box_center.x * SCALE, box_center.y * SCALE, box_center.z * SCALE])
-            .linear_damping(2.0)
-            .angular_damping(2.0)
+            .angular_damping(5.0)
+            .linear_damping(5.0)
             .ccd_enabled(true)
             .can_sleep(false);
         
@@ -118,9 +118,10 @@ impl RobotData {
         sim.collider_set.insert_with_parent(collider, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
+        let wheel_half_width = 0.01;
         let wheel_positions = [
-            point![HW * 0.5, -HH + 0.015 * SCALE, HD + 0.01  * SCALE],
-            point![HW * 0.5, -HH + 0.015 * SCALE, -HD - 0.01  * SCALE],
+            point![HW * 0.5, -HH + 0.015 * SCALE, HD + wheel_half_width * SCALE],
+            point![HW * 0.5, -HH + 0.015 * SCALE, -HD - wheel_half_width * SCALE],
         ];
 
         const BALL_WHEEL_RADIUS: f32 = 0.015 * SCALE;
@@ -144,17 +145,20 @@ impl RobotData {
                         wheel_pos_in_world.y,
                         wheel_pos_in_world.z
                     ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
+                    .angular_damping(500.0).linear_damping(50.0)
+                    .enabled_rotations(false, false, true)
+                    .enabled_translations(false, false, false)
             );
 
-            let collider = ColliderBuilder::cylinder(0.01  * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
+            let collider = ColliderBuilder::cylinder(wheel_half_width * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
             //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
             sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
                 .local_anchor1(pos)
-                .local_anchor2(point![0.0, 0.01 * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
+                .local_anchor2(point![0.0, 0.01 * SCALE * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
                 .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
-                .motor_max_force(JointAxis::AngZ, 1000.0)
+                .motor_max_force(JointAxis::AngZ, 750.0)
                 .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
                 .motor_velocity(JointAxis::AngZ, 0.0, 4.0)
                 .build();
@@ -174,10 +178,11 @@ impl RobotData {
                         wheel_pos_in_world.y,
                         wheel_pos_in_world.z
                     ]).ccd_enabled(true)
-                    .can_sleep(false)
+                    .can_sleep(false).angular_damping(15.0).linear_damping(5.0)
+                    .enabled_translations(false, false, false)
             );
 
-            let collider = ColliderBuilder::ball(BALL_WHEEL_RADIUS).density(5.0).friction(0.2);
+            let collider = ColliderBuilder::ball(BALL_WHEEL_RADIUS).density(5.0).friction(0.25);
             sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
@@ -411,7 +416,7 @@ impl RobotData {
         // Apply calculated speeds to wheels
         let joint1 = sim.multibody_joint_set.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
         joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
-        
+
         let joint2 = sim.multibody_joint_set.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
         joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_r, 4.0);
         

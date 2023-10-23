@@ -43,7 +43,7 @@ impl Game {
         main_camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
         main_camera.set_min_z(0.05);
         main_camera.set_max_z(200.0);
-        main_camera.set_speed(0.3);
+        main_camera.set_speed(0.125);
         
         // Other cameras
         let follow_camera = Rc::new(FollowCamera::new("followcam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));

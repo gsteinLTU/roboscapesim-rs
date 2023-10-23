@@ -772,7 +772,7 @@ impl RoomData {
         };
 
         let simulation = &mut room.sim.lock().unwrap();
-        let collider = collider.restitution(0.3).density(0.1).build();
+        let collider = collider.restitution(0.3).density(0.095).friction(0.65).build();
         let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
         let rigid_body_set = simulation.rigid_body_set.clone();
         simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());
