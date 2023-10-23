@@ -1,13 +1,13 @@
 use std::{collections::BTreeMap, time::{Instant, Duration}};
 
 use dashmap::DashMap;
-use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, Response, EventResponse, EventDescription};
 use log::info;
 use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate};
 
-use super::service_struct::{setup_service, ServiceType, Service};
+use super::{service_struct::{setup_service, ServiceType, Service}, HandleMessageResult};
 
 pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: &RigidBodyHandle, override_name: Option<&str>) -> Service {
     // Create definition struct
@@ -49,6 +49,11 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
             },
         },
     );
+
+    definition.events.insert("dig".to_owned(),
+    EventDescription {
+        params: vec![],
+    });
     
     let service = setup_service(definition, ServiceType::ProximitySensor, override_name);
 
@@ -75,8 +80,9 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
     }
 }
 
-pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
     let mut response = vec![];
+    let mut message_response = None;
 
     let s = room.services.get(&(msg.device.clone(), ServiceType::ProximitySensor));
     if let Some(s) = s {
@@ -94,7 +100,19 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
                                 response = vec![dist.into()];
                             },
                             "dig" => {
-                                // TODO:
+                                // TODO: Something better than this?
+                                // For now, sending a message to the project that a dig was attempted
+                                message_response.replace(Response {
+                                    id: "".to_owned(),
+                                    request: "".to_owned(),
+                                    service: service.service.lock().unwrap().name.to_owned(),
+                                    response: None,
+                                    event: Some(EventResponse {
+                                        r#type: Some("dig".to_owned()),
+                                        args: Some(BTreeMap::new()),
+                                    }),
+                                    error: None,
+                                });
                             },
                             f => {
                                 info!("Unrecognized function {}", f);
@@ -113,5 +131,5 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Res
         info!("No service found for {}", msg.device);
     }
 
-    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), message_response)
 }

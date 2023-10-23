@@ -7,7 +7,7 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate};
 
-use super::service_struct::{setup_service, ServiceType, Service};
+use super::{service_struct::{setup_service, ServiceType, Service}, HandleMessageResult};
 
 
 pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
@@ -114,7 +114,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
     }
 }
 
-pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String>  {
+pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> HandleMessageResult  {
     let mut response = vec![];
     
     let mut msg = msg;
@@ -160,7 +160,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Resu
     }
 
     if response.len() == 1 {
-        return Ok(Intermediate::Json(response[0].clone()));
+        return (Ok(Intermediate::Json(response[0].clone())), None);
     }
-    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }

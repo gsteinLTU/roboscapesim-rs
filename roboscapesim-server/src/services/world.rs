@@ -10,7 +10,7 @@ use serde_json::{Number, Value};
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
 
-use super::service_struct::{Service, ServiceType, setup_service};
+use super::{service_struct::{Service, ServiceType, setup_service}, HandleMessageResult};
 
 const ENTITY_LIMIT: usize = 50;
 const ROBOT_LIMIT: usize = 10;
@@ -344,7 +344,7 @@ pub fn create_world_service(id: &str) -> Service {
 
 const MAX_COORD: f32 = 10000.0;
 
-pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResult {
     let mut response: Vec<Value> = vec![];
 
     info!("{:?}", msg);
@@ -355,7 +355,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         },
         "showText" => {
             if msg.params.len() < 2 {
-                return Ok(Intermediate::Json(Value::Bool(false)));
+                return (Ok(Intermediate::Json(Value::Bool(false))), None);
             }
 
             let id = str_val(&msg.params[0]);
@@ -428,7 +428,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         },
         "addBlock" => {
             if msg.params.len() < 7 {
-                return Ok(Intermediate::Json(Value::Bool(false)));
+                return (Ok(Intermediate::Json(Value::Bool(false))), None);
             }
             let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
             let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
@@ -449,7 +449,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         },
         "addRobot" => {
             if msg.params.len() < 3 {
-                return Ok(Intermediate::Json(Value::Bool(false)));
+                return (Ok(Intermediate::Json(Value::Bool(false))), None);
             }
             let x = num_val(&msg.params[0]);
             let y = num_val(&msg.params[1]);
@@ -470,7 +470,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> Result<Intermediat
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
-    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }
 
 fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {

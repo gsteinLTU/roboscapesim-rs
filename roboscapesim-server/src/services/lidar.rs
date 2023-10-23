@@ -9,7 +9,7 @@ use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
 use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
 
-use super::service_struct::{setup_service, ServiceType, Service};
+use super::{service_struct::{setup_service, ServiceType, Service}, HandleMessageResult};
 
 pub struct LIDARConfig {
     pub num_beams: u8, 
@@ -98,7 +98,7 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
     rays
 }
 
-pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
     let mut response = vec![];
 
     let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
@@ -141,7 +141,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> Result<Interme
         service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));
     }
 
-    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate, util::util::num_val};
 
-use super::service_struct::{Service, ServiceType, setup_service};
+use super::{service_struct::{Service, ServiceType, setup_service}, HandleMessageResult};
 
 pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     // Create definition struct
@@ -150,7 +150,7 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
     }
 }
 
-pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Intermediate, String> {
+pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
     let mut response = vec![];
 
     info!("{:?}", msg);
@@ -196,5 +196,5 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> Result<Interm
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
-    Ok(Intermediate::Json(serde_json::to_value(response).unwrap()))
+    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }

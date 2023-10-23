@@ -12,7 +12,7 @@ use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, ToJsonError, Key, System}, std_system::StdSystem};
 use rand::Rng;
-use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
 use roboscapesim_common::*;
 use roboscapesim_common::api::RoomInfo;
 use serde_json::{json, Value};
@@ -21,6 +21,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
+use crate::services::proximity::create_proximity_service;
 use crate::services::trigger::{handle_trigger_message, create_trigger_service};
 use crate::{CLIENTS, ROOMS};
 use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
@@ -526,7 +527,8 @@ impl RoomData {
 
         while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
             if msg.0.function != "heartbeat" {
-                self.last_interaction_time = Utc::now().timestamp();
+                // TODO: figure out which interactions should keep room alive
+                //self.last_interaction_time = Utc::now().timestamp();
                 msgs.push(msg);
             }
         }
@@ -543,12 +545,12 @@ impl RoomData {
                 "RoboScapeTrigger" => handle_trigger_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
-                    Err(format!("Service type {:?} not yet implemented.", t))
+                    (Err(format!("Service type {:?} not yet implemented.", t)), None)
                 }
             };
 
             if let Some(key) = key {
-                key.complete(response);
+                key.complete(response.0);
             }
         }
         
@@ -699,16 +701,7 @@ impl RoomData {
             updated: true,
         });
         RobotData::setup_robot_socket(&mut robot);
-            
-        let service = Arc::new(Mutex::new(create_position_service(&robot.id, &robot.body_handle)));
-        let service_id = service.lock().unwrap().id.clone();
-        room.services.insert((service_id, ServiceType::PositionSensor), service);
-            
-        let service = Arc::new(Mutex::new(create_lidar_service(&robot.id, &robot.body_handle)));
-        let service_id = service.lock().unwrap().id.clone();
-        room.services.insert((service_id, ServiceType::LIDAR), service);
-        room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
-            
+
         // Wheel debug
         if wheel_debug {
             let mut i = 0;
@@ -794,6 +787,34 @@ impl RoomData {
         room.services.insert((service_id, ServiceType::Entity), service);*/
         room.last_full_update = 0;
         body_name
+    }
+
+    pub(crate) fn add_service(room: &mut RoomData, service_type: ServiceType, id: &str, service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<(), String> {
+        
+        let service = match service_type {
+            ServiceType::World => Err("Cannot add World service".to_owned()),
+            ServiceType::Entity => Ok(create_entity_service(id, &target_rigid_body)),
+            ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
+            ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
+            //ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body)),
+            ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
+            _ => Err(format!("Service type {:?} not yet implemented.", service_type))
+        };
+
+        if service.is_err() {
+            return service;
+        }
+
+        let service = Arc::new(Mutex::new(service.unwrap()));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::PositionSensor), service);
+            
+        let service = Arc::new(Mutex::new(create_lidar_service(&robot.id, &robot.body_handle)));
+        let service_id = service.lock().unwrap().id.clone();
+        room.services.insert((service_id, ServiceType::LIDAR), service);
+        room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
+            
+        Ok(())
     }
 
     /// Specialized add_shape for triggers
