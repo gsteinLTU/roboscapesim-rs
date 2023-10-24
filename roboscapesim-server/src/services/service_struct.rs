@@ -3,7 +3,8 @@ use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, hash::Hash};
 use dashmap::DashMap;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition};
-use rapier3d::prelude::RigidBodyHandle;
+use nalgebra::Vector3;
+use rapier3d::prelude::{RigidBodyHandle, Real};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
@@ -20,6 +21,7 @@ pub struct Service {
     pub last_announce: Instant,
     pub announce_period: Duration,
     pub attached_rigid_bodies: DashMap<String, RigidBodyHandle>,
+    pub key_points: DashMap<String, Vector3<Real>>,
 }
 
 impl Hash for Service {
@@ -72,3 +74,5 @@ pub(crate) fn setup_service(definition: ServiceDefinition, service_type: Service
     )));
     service
 }
+
+pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(45);

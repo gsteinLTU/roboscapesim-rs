@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}};
+use std::{collections::BTreeMap, time::Instant};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, Request, EventDescription};
@@ -7,7 +7,7 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate};
 
-use super::{service_struct::{Service, ServiceType, setup_service}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
 pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     // Create definition struct
@@ -42,7 +42,7 @@ pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(50);
+    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
     attached_rigid_bodies.insert("main".into(), *rigid_body);
@@ -54,11 +54,12 @@ pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service
         last_announce,
         announce_period,
         attached_rigid_bodies,
+        key_points: DashMap::new(),
     }
 }
 
 pub fn handle_trigger_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let mut response = vec![];
+    let response = vec![];
 
     info!("{:?}", msg);
     

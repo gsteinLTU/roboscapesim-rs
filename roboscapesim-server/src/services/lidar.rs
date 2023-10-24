@@ -1,15 +1,15 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::FRAC_PI_2};
+use std::{collections::BTreeMap, time::Instant, f32::consts::FRAC_PI_2};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 
-use log::trace;
+use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
 use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
 
-use super::{service_struct::{setup_service, ServiceType, Service}, HandleMessageResult};
+use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
 pub struct LIDARConfig {
     pub num_beams: u8, 
@@ -63,7 +63,7 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(50);
+    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
     attached_rigid_bodies.insert("main".into(), *rigid_body);
@@ -75,6 +75,7 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
         last_announce,
         announce_period,
         attached_rigid_bodies,
+        key_points: DashMap::new(),
     }
 }
 
@@ -99,6 +100,7 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 }
 
 pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
+    info!("{:?}", msg);
     let mut response = vec![];
 
     let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
@@ -120,7 +122,8 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
                 let solid = true;
                 let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(*body);
 
-                let mut distances = vec![];
+                let mut distances: Vec<f32> = vec![];
+                // TODO: figure out LIDAR not working
                 for ray in rays {
                     let mut distance = config.max_distance * 100.0;
                     if let Some((handle, toi)) = simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),

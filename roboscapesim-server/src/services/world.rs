@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}, f32::consts::PI};
+use std::{collections::BTreeMap, time::Instant, f32::consts::PI};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
@@ -10,7 +10,7 @@ use serde_json::{Number, Value};
 
 use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
 
-use super::{service_struct::{Service, ServiceType, setup_service}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
 const ENTITY_LIMIT: usize = 50;
 const ROBOT_LIMIT: usize = 10;
@@ -187,6 +187,39 @@ pub fn create_world_service(id: &str) -> Service {
 
     
     definition.methods.insert(
+        "addSensor".to_owned(),
+        MethodDescription {
+            documentation: Some("Add a sensor to some object in the World".to_owned()),
+            params: vec![
+                MethodParam {
+                    name: "type".to_owned(),
+                    documentation: Some("Type of sensor (position, LIDAR, proximity, etc)".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "object".to_owned(),
+                    documentation: Some("Object to attach service to".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: false,
+                },
+                MethodParam {
+                    name: "options".to_owned(),
+                    // TODO: Better documentation
+                    documentation: Some("Two-dimensional list of options, e.g. lidar settings".to_owned()),
+                    r#type: "string".to_owned(),
+                    optional: true,
+                },
+            ],
+            returns: MethodReturns {
+                documentation: Some("ID of created sensor".to_owned()),
+                r#type: vec!["string".to_owned()],
+            },
+        },
+    );
+
+    
+    definition.methods.insert(
         "instantiateEntities".to_owned(),
         MethodDescription {
             documentation: Some("Add a list of Entities to the World".to_owned()),
@@ -330,7 +363,7 @@ pub fn create_world_service(id: &str) -> Service {
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(50);
+    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     Service {
         id: id.to_string(),
@@ -339,6 +372,7 @@ pub fn create_world_service(id: &str) -> Service {
         last_announce,
         announce_period,
         attached_rigid_bodies: DashMap::new(),
+        key_points: DashMap::new(),
     }
 }
 
@@ -459,6 +493,61 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
             response = vec![id.into()];
         },
+        "addSensor" => {
+            if msg.params.len() < 2 {
+                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+            }
+
+            let service_type = str_val(&msg.params[0]).to_owned().to_lowercase();
+            let object = str_val(&msg.params[1]);
+
+            // Check if object exists
+            if !room.objects.contains_key(&object) {
+                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+            }
+
+            let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
+            let mut override_name = None;
+            
+            if options.is_array() {
+                for option in options.as_array().unwrap() {
+                    if option.is_array() {
+                        let option = option.as_array().unwrap();
+                        if option.len() >= 2 && option[0].is_string() {
+                            let key = str_val(&option[0]).to_lowercase();
+                            let value = &option[1];
+                            match key.as_str() {
+                                "name" => {
+                                    if value.is_string() {
+                                        override_name = Some(str_val(value));
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            let body = room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone();
+
+            response = vec![match service_type.as_str() {
+                "position" => {
+                    RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
+                },
+                "proximity" => {
+                    RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap().into()
+                },
+                "lidar" => {
+                    RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap().into()
+                },
+                _ => {
+                    info!("Unrecognized service type {}", service_type);
+                    false.into()
+                }
+            }];
+        },
         f => {
             info!("Unrecognized function {}", f);
 
@@ -478,8 +567,6 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     if params.len() < 6 {
         return None;
     }
-
-
 
     // TODO: use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
 

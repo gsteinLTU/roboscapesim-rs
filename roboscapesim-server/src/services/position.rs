@@ -1,13 +1,13 @@
-use std::{collections::BTreeMap, time::{Instant, Duration}};
+use std::{collections::BTreeMap, time::Instant};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
-use log::{info, warn};
+use log::info;
 use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, vm::Intermediate};
 
-use super::{service_struct::{setup_service, ServiceType, Service}, HandleMessageResult};
+use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
 
 pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
@@ -99,7 +99,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
         .expect("Could not announce to server");
 
     let last_announce = Instant::now();
-    let announce_period = Duration::from_secs(50);
+    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
     attached_rigid_bodies.insert("main".into(), *rigid_body);
@@ -111,6 +111,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
         last_announce,
         announce_period,
         attached_rigid_bodies,
+        key_points: DashMap::new(),
     }
 }
 

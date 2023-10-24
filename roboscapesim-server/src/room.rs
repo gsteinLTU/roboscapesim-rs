@@ -164,7 +164,7 @@ impl RoomData {
                                     match args.iter().map(|(_k, v)| v.to_json()).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
-                                                "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDAR" => {
+                                                "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
                                                     // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
                                                     vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
@@ -540,7 +540,7 @@ impl RoomData {
                 "RoboScapeWorld" => handle_world_msg(self, msg),
                 "RoboScapeEntity" => handle_entity_message(self, msg),
                 "PositionSensor" => handle_position_sensor_message(self, msg),
-                "LIDAR" => handle_lidar_message(self, msg),
+                "LIDARSensor" => handle_lidar_message(self, msg),
                 "ProximitySensor" => handle_proximity_sensor_message(self, msg),
                 "RoboScapeTrigger" => handle_trigger_message(self, msg),
                 t => {
@@ -789,32 +789,32 @@ impl RoomData {
         body_name
     }
 
-    pub(crate) fn add_service(room: &mut RoomData, service_type: ServiceType, id: &str, service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<(), String> {
+    pub(crate) fn add_sensor(room: &mut RoomData, service_type: ServiceType, id: &str, service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<String, String> {
         
         let service = match service_type {
             ServiceType::World => Err("Cannot add World service".to_owned()),
             ServiceType::Entity => Ok(create_entity_service(id, &target_rigid_body)),
             ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
             ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
-            //ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body)),
+            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body, &vector![0.0, 0.0, 0.0], service_name_override)),
             ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
             _ => Err(format!("Service type {:?} not yet implemented.", service_type))
         };
 
         if service.is_err() {
-            return service;
+            return Err(service.unwrap_err());
         }
 
         let service = Arc::new(Mutex::new(service.unwrap()));
         let service_id = service.lock().unwrap().id.clone();
-        room.services.insert((service_id, ServiceType::PositionSensor), service);
-            
-        let service = Arc::new(Mutex::new(create_lidar_service(&robot.id, &robot.body_handle)));
-        let service_id = service.lock().unwrap().id.clone();
-        room.services.insert((service_id, ServiceType::LIDAR), service);
-        room.lidar_configs.insert(robot.id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
-            
-        Ok(())
+        room.services.insert((service_id.clone(), service_type), service);
+
+        // TODO: accept lidar config as input
+        if service_type == ServiceType::LIDAR {
+            room.lidar_configs.insert(service_id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
+        }   
+
+        Ok(service_id.clone())
     }
 
     /// Specialized add_shape for triggers
