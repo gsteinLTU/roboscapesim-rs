@@ -5,7 +5,7 @@ use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window};
 
-use crate::ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS};
+use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, console_log};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -43,7 +43,7 @@ impl Game {
         main_camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
         main_camera.set_min_z(0.05);
         main_camera.set_max_z(200.0);
-        main_camera.set_speed(0.125);
+        main_camera.set_speed(0.5);
         
         // Other cameras
         let follow_camera = Rc::new(FollowCamera::new("followcam", Vector3::new(5.0, 5.0, 5.0), Some(&scene.borrow())));
@@ -76,7 +76,8 @@ impl Game {
         shadow_generator.set_frustum_edge_falloff(1.0);
         shadow_generator.set_shadow_max_z(50.0);
 
-        neo_babylon::api::setup_vr_experience(&scene.borrow());
+        //neo_babylon::api::setup_vr_experience(&scene.borrow());
+        scene.borrow().set_active_camera(&main_camera);
 
         Game {
             in_room: Rc::new(Cell::new(false)),
