@@ -5,7 +5,7 @@ use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window};
 
-use crate::ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS};
+use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, console_log};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -103,8 +103,12 @@ impl Game {
 
     pub(crate) async fn load_model(&self, name: &str, url: &str) -> Result<Rc<BabylonMesh>, JsValue> {
         let model = BabylonMesh::create_gltf(&self.scene.borrow(), name, url).await;
+        if let Err(e) =  model {
+            console_log!("Failed to load mesh: {:?}", e);
+            return Err(e);
+        }
 
-        let model = Rc::new(model);
+        let model = Rc::new(model.unwrap());
         self.models.borrow_mut().insert(name.to_owned(), model.clone());
 
         Ok(model)

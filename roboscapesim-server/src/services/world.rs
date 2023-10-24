@@ -442,8 +442,8 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                         options.push(vec!["uscale".into(), (*u).into()]);
                         options.push(vec!["vscale".into(), (*v).into()]);
                     },
-                    Some(VisualInfo::Mesh(_m)) => {
-                        // TODO: Implement mesh vis info
+                    Some(VisualInfo::Mesh(m)) => {
+                        options.push(vec!["mesh".into(), m.clone().into()]);
                     },
                     Some(VisualInfo::None) => {},
                     None => {},
@@ -672,6 +672,9 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         } else if options.contains_key("color") {
             // Parse color data
             parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
+        } else if options.contains_key("mesh") {
+            // Use mesh
+            parsed_visualinfo = Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
         }
 
         let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));

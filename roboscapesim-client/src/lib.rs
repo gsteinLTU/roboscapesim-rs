@@ -328,7 +328,13 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             let mesh = Arc::new(mesh.clone());
             let obj = Arc::new(obj.clone());
             spawn_local(async move {
-                let m = Rc::new(BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, (ASSETS_DIR.to_owned() + (&mesh).as_str()).as_str()).await);
+                let value = BabylonMesh::create_gltf(&game_rc.borrow().scene.borrow(), &obj.name, (ASSETS_DIR.to_owned() + (&mesh).as_str()).as_str()).await;
+                if let Err(e) = value {
+                    console_log!("Failed to load mesh: {:?}", e);
+                    return;
+                }
+
+                let m = Rc::new(value.unwrap());
                 game_rc.borrow().shadow_generator.add_shadow_caster(&m, true);
                 apply_transform(m.clone(), obj.transform);
                 game_rc.borrow().models.borrow_mut().insert(obj.name.to_owned(), m.clone());
