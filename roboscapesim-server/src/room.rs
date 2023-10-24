@@ -19,12 +19,10 @@ use serde_json::{json, Value};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
+use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
-use crate::services::proximity::create_proximity_service;
-use crate::services::trigger::{handle_trigger_message, create_trigger_service};
-use crate::{CLIENTS, ROOMS};
-use crate::services::{entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, proximity::handle_proximity_sensor_message, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
+use crate::services::{proximity::{create_proximity_service, handle_proximity_sensor_message}, trigger::{handle_trigger_message, create_trigger_service}, entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
 use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
@@ -62,9 +60,9 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
-    pub netsblox_msg_tx: mpsc::Sender<(String, String, BTreeMap<String, String>)>,
+    pub netsblox_msg_tx: mpsc::Sender<((String, ServiceType), String, BTreeMap<String, String>)>,
     #[derivative(Debug = "ignore")]
-    pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<(String, String, BTreeMap<String, String>)>>>,
+    pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<((String, ServiceType), String, BTreeMap<String, String>)>>>,
     /// Whether the room is in edit mode, if so, IoTScape messages are sent to NetsBlox server instead of being handled locally by VM
     pub edit_mode: bool,
     /// Thread with VM if not in edit mode
@@ -251,8 +249,8 @@ impl RoomData {
             let mut event_id: u32 = rand::random();
             spawn(async move {
                 loop {
-                    while let Ok((service_id, msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        let service = services.iter().find(|s| s.key().0 == service_id);
+                    while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                        let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                         if let Some(service) = service {
                             service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
                             event_id += 1;
@@ -392,7 +390,7 @@ impl RoomData {
 
             // Send leave message to clients
             let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
-            self.netsblox_msg_tx.send((world_service_id, "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
+            self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
         }
 
         // Check if room empty/not empty
@@ -552,6 +550,11 @@ impl RoomData {
             if let Some(key) = key {
                 key.complete(response.0);
             }
+
+            // If an IoTScape event was included in the response, send it to the NetsBlox server
+            if let Some(iotscape) = response.1 {
+                self.netsblox_msg_tx.send(iotscape).unwrap();
+            }
         }
         
         let simulation = &mut self.sim.lock().unwrap();
@@ -630,7 +633,7 @@ impl RoomData {
         // Send
         let world_service = self.services.iter().find(|s| s.key().1 == ServiceType::World);
         if let Some(world_service) = world_service {
-            self.netsblox_msg_tx.send((world_service.lock().unwrap().id.clone(), "reset".to_string(), BTreeMap::new())).unwrap();
+            self.netsblox_msg_tx.send(((world_service.lock().unwrap().id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
         self.last_interaction_time = Utc::now().timestamp();
@@ -959,7 +962,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
 
     // Send user join event
     let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
-    room.netsblox_msg_tx.send((world_service_id, "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
+    room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
 
     Ok(())
 }

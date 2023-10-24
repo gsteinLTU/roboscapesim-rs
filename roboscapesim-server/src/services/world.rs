@@ -542,6 +542,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 "lidar" => {
                     RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap().into()
                 },
+                "entity" => {
+                    RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
+                },
                 _ => {
                     info!("Unrecognized service type {}", service_type);
                     false.into()

@@ -105,33 +105,30 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
                         "dig" => {
                             // TODO: Something better than this?
                             // For now, sending a message to the project that a dig was attempted
-                            message_response.replace(Response {
-                                id: "".to_owned(),
-                                request: "".to_owned(),
-                                service: service.service.lock().unwrap().name.to_owned(),
-                                response: None,
-                                event: Some(EventResponse {
-                                    r#type: Some("dig".to_owned()),
-                                    args: Some(BTreeMap::new()),
-                                }),
-                                error: None,
-                            });
+                            message_response.replace(((service.id.to_owned(), ServiceType::ProximitySensor), "dig".to_owned(), BTreeMap::new()));
                         },
                         f => {
                             info!("Unrecognized function {}", f);
                         }
                     };
+                } else {
+                    info!("No target defined for {}", msg.device);
                 }
             } else {
                 info!("Unrecognized object {}", msg.device);
             };
+        } else {
+            info!("No main rigid body found for {}", msg.device);
         }
 
-        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
 
     } else {
         info!("No service found for {}", msg.device);
     }
 
+    if response.len() == 1 {
+        return (Ok(Intermediate::Json(response[0].clone())), message_response);
+    }
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), message_response)
 }

@@ -1,6 +1,8 @@
-use iotscape::Response;
+use std::collections::BTreeMap;
 
 use crate::vm::Intermediate;
+
+use self::service_struct::ServiceType;
 
 pub(crate) mod service_struct;
 pub(crate) mod world;
@@ -11,4 +13,4 @@ pub(crate) mod proximity;
 pub(crate) mod trigger;
 
 /// The result of a message handler, combines the intermediate result and a possible IoTScape event message
-type HandleMessageResult = (Result<Intermediate, String>, Option<Response>);
+type HandleMessageResult = (Result<Intermediate, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>);
