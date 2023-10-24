@@ -69,9 +69,6 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
 
     let attached_rigid_bodies = DashMap::new();
     attached_rigid_bodies.insert("main".into(), *rigid_body);
-    
-    let key_points = DashMap::new();
-    key_points.insert("target".into(), *target);
 
     Service {
         id: id.to_string(),
@@ -80,7 +77,6 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
         last_announce,
         announce_period,
         attached_rigid_bodies,
-        key_points,
     }
 }
 
@@ -95,7 +91,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
             let simulation = &mut room.sim.lock().unwrap();
             
             if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                if let Some(t) = service.key_points.get("target") {
+                if let Some(t) = room.proximity_targets.get(&msg.device) {
                     match msg.function.as_str() {
                         "getIntensity" => {
                             // TODO: apply some function definable through some config setting

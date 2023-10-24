@@ -75,7 +75,6 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
         last_announce,
         announce_period,
         attached_rigid_bodies,
-        key_points: DashMap::new(),
     }
 }
 

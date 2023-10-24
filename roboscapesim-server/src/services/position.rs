@@ -111,7 +111,6 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
         last_announce,
         announce_period,
         attached_rigid_bodies,
-        key_points: DashMap::new(),
     }
 }
 

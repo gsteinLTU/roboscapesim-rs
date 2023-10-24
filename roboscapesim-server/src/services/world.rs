@@ -372,7 +372,6 @@ pub fn create_world_service(id: &str) -> Service {
         last_announce,
         announce_period,
         attached_rigid_bodies: DashMap::new(),
-        key_points: DashMap::new(),
     }
 }
 
@@ -508,6 +507,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
 
             let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
             let mut override_name = None;
+      
+            // Target position for proximity sensor
+            let mut targetpos = None;
             
             if options.is_array() {
                 for option in options.as_array().unwrap() {
@@ -522,13 +524,20 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                                         override_name = Some(str_val(value));
                                     }
                                 },
+                                "targetpos" => {
+                                    if value.is_array() {
+                                        let value = value.as_array().unwrap();
+                                        if value.len() >= 3 {
+                                            targetpos = Some(vector![num_val(&value[0]), num_val(&value[1]), num_val(&value[2])]);
+                                        }
+                                    }
+                                },
                                 _ => {}
                             }
                         }
                     }
                 }
             }
-
 
             let body = room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone();
 
@@ -537,7 +546,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                     RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
                 },
                 "proximity" => {
-                    RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap().into()
+                    let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
+                    room.proximity_targets.insert(result.clone(), targetpos.unwrap_or(vector![0.0, 0.0, 0.0]));
+                    result.into()
                 },
                 "lidar" => {
                     RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap().into()

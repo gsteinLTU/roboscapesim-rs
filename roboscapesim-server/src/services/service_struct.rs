@@ -21,7 +21,6 @@ pub struct Service {
     pub last_announce: Instant,
     pub announce_period: Duration,
     pub attached_rigid_bodies: DashMap<String, RigidBodyHandle>,
-    pub key_points: DashMap<String, Vector3<Real>>,
 }
 
 impl Hash for Service {

@@ -58,6 +58,8 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
+    pub proximity_targets: HashMap<String, Vector3<Real>>,
+    #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
     pub netsblox_msg_tx: mpsc::Sender<((String, ServiceType), String, BTreeMap<String, String>)>,
@@ -95,6 +97,7 @@ impl RoomData {
             reseters: HashMap::new(),
             services: Arc::new(DashMap::new()),
             lidar_configs: HashMap::new(),
+            proximity_targets: HashMap::new(),
             last_sim_update: Instant::now(),
             iotscape_rx,
             netsblox_msg_tx,
