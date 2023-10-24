@@ -22,9 +22,9 @@
 
         getMenu() {
             return {
-                'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
+				'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
 				'Join room...': window.RoboScapeOnline_fns.join_sim_menu,
-                'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
+				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
 
             };
         }
@@ -140,7 +140,7 @@
             buttonbar.appendChild(robotmenu_label);
             const robotmenu = document.createElement('select');
             robotmenu.className = 'inset';
-            robotmenu.onmousedown = (e) => { e.stopPropagation(); };
+            robotmenu.onpointerdown = (e) => { e.stopPropagation(); disableDrag(); };
             const nonchoice = document.createElement('option');
             robotmenu.appendChild(nonchoice);
             buttonbar.appendChild(robotmenu);
@@ -165,13 +165,13 @@
 
 
             element = document.createElement('datalist');
-            element.id = 'roboscapedialog-new-environment-list';
+            element.id = 'roboscapedialog-new-environments-list';
             document.body.appendChild(element);
-            window.externalVariables['roboscapedialog-new-environment-list'] = element;
+            window.externalVariables['roboscapedialog-new-environments-list'] = element;
 
             element = createDialog('Create a Session', false, ['Create', 'Edit Mode', 'Close']);
             element.querySelector('content').innerHTML += `
-            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input list="roboscapedialog-new-environment-list" id="roboscapedialog-new-environment" class="inset"/></div>
+            <div style="margin-bottom: 12px;"><label>Environment:&nbsp;</label><input list="roboscapedialog-new-environments-list" id="roboscapedialog-new-environment" class="inset"/></div>
             <div><label>Password:&nbsp;</label><input id="roboscapedialog-new-password" class="inset"/></div>
             `;
 
@@ -193,17 +193,17 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {room_id, robots_in_room, new_sim_menu, show_3d_view, join_sim_menu} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {show_3d_view, robots_in_room, room_id, join_sim_menu, new_sim_menu} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.room_id = room_id;
-				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
-				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
+				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
+				window.RoboScapeOnline_fns.room_id = room_id;
 				window.RoboScapeOnline_fns.join_sim_menu = join_sim_menu;
+				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
 		        `;
 		    document.body.appendChild(s);
 		};
