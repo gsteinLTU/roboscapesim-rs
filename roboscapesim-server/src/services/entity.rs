@@ -155,7 +155,8 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessage
 
     info!("{:?}", msg);
     
-    let s = room.services.get(&(msg.device.clone(), ServiceType::Entity));
+    // TODO: Determine why quotes are being added to device name in VM
+    let s = room.services.get(&(msg.device.clone().replace("\"", ""), ServiceType::Entity));
     if let Some(s) = s {
         if let Some(body) = s.value().lock().unwrap().attached_rigid_bodies.get("main") {
             if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(*body) {
@@ -190,10 +191,16 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessage
                         info!("Unrecognized function {}", f);
                     }
                 };
+            } else {
+                info!("Could not find rigid body for {}", msg.device);
             }
+        } else {
+            info!("Could not find rigid body for {}", msg.device);
         }
 
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    } else {
+        info!("No service found for {}", msg.device);
     }
 
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)

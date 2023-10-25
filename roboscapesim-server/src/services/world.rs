@@ -583,6 +583,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
+    if response.len() == 1 {
+        return (Ok(Intermediate::Json(response[0].clone())), None);
+    }
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }
 
