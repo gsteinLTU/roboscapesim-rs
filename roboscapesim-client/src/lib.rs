@@ -203,6 +203,7 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
             set_title("Disconnected");
         },
         Ok(UpdateMessage::RemoveObject(obj)) => {
+            console_log!("Removing object {}", &obj);
             game.borrow().models.borrow_mut().remove(&obj);
 
                 // Robot-specific behavior
@@ -492,7 +493,7 @@ async fn request_room(username: String, password: Option<String>, edit_mode: boo
         password,
         edit_mode,
         environment
-    }).send().await.unwrap();
+    }).send().await?;
 
     response.json().await
 }
@@ -503,7 +504,7 @@ async fn request_room_info(id: &String) -> Result<RoomInfo, reqwest::Error> {
         client_clone = client.clone();
     });
 
-    let response = client_clone.get(format!("{}rooms/info?id={}", API_SERVER, id)).send().await.unwrap();
+    let response = client_clone.get(format!("{}rooms/info?id={}", API_SERVER, id)).send().await?;
 
     response.json().await
 }

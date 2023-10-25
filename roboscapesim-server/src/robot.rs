@@ -189,6 +189,8 @@ impl RobotData {
                 .local_anchor1(pos)
                 .local_anchor2(point![0.0, 0.0, 0.0])
                 .build();
+            
+            wheel_bodies.push(wheel_rb);
 
             sim.multibody_joint_set.insert(vehicle_handle, wheel_rb, joint, true);
         }
