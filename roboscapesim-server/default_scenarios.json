@@ -12,5 +12,19 @@
         "host": "remote",
         "path": "gstein/Obstacle%20Course",
         "creator": "Gordon Stein"
+    },
+    "squaredriving": {
+        "name": "SquareDriving",
+        "description": "Square Driving scenario",
+        "host": "remote",
+        "path": "gstein/Square%20Driving",
+        "creator": "Gordon Stein"
+    },
+    "treasurehunt": {
+        "name": "TreasureHunt",
+        "description": "Treasure hunt scenario",
+        "host": "remote",
+        "path": "gstein/Treasure%20Hunt",
+        "creator": "Gordon Stein"
     }
 }

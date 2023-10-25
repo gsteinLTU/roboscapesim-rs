@@ -87,7 +87,12 @@ pub async fn load_environment(environment: Option<String>) -> String {
         ProjectType::RemoteProject(project_name) => {
             info!("Loading remote project {}", project_name);
             // TODO: make cloud URL configurable
-            REQWEST_CLIENT.get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).send().await.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
+            let request = REQWEST_CLIENT.get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).send().await;
+            if request.is_err() {
+                Err(format!("failed to read file: {:?}", request.unwrap_err()))
+            } else {
+                request.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
+            }
         },
         ProjectType::LocalProject(path) => {
             info!("Loading local project {}", path);
