@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
+use crate::services::proximity::ProximityConfig;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
@@ -58,7 +59,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
-    pub proximity_targets: HashMap<String, Vector3<Real>>,
+    pub proximity_configs: HashMap<String, ProximityConfig>,
     #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
@@ -97,7 +98,7 @@ impl RoomData {
             reseters: HashMap::new(),
             services: Arc::new(DashMap::new()),
             lidar_configs: HashMap::new(),
-            proximity_targets: HashMap::new(),
+            proximity_configs: HashMap::new(),
             last_sim_update: Instant::now(),
             iotscape_rx,
             netsblox_msg_tx,

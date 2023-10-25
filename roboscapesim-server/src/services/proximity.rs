@@ -10,6 +10,23 @@ use crate::{room::RoomData, vm::Intermediate};
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProximityConfig {
+    pub target: Vector3<Real>,
+    pub multiplier: f32,
+    pub offset: f32,
+}
+
+impl Default for ProximityConfig {
+    fn default() -> Self {
+        Self {
+            target: Vector3::new(0.0, 0.0, 0.0),
+            multiplier: 1.0,
+            offset: 0.0,
+        }
+    }
+}
+
 pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: &Vector3<Real>, override_name: Option<String>) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
@@ -34,7 +51,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: 
             params: vec![],
             returns: MethodReturns {
                 documentation: None,
-                r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
+                r#type: vec!["number".to_owned()],
             },
         },
     );
@@ -91,11 +108,11 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
             let simulation = &mut room.sim.lock().unwrap();
             
             if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                if let Some(t) = room.proximity_targets.get(&msg.device) {
+                if let Some(t) = room.proximity_configs.get(&msg.device) {
                     match msg.function.as_str() {
                         "getIntensity" => {
                             // TODO: apply some function definable through some config setting
-                            let dist = (t.to_owned() - o.translation()).norm();
+                            let dist = ((t.target.to_owned() - o.translation()).norm() * t.multiplier) + t.offset;
                             response = vec![dist.into()];
                         },
                         "dig" => {

@@ -8,7 +8,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}};
+use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}, services::proximity::ProximityConfig};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -501,16 +501,20 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let object = str_val(&msg.params[1]);
 
             // Check if object exists
-            if !room.objects.contains_key(&object) {
+            if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
                 return (Ok(Intermediate::Json(Value::Bool(false))), None);
             }
 
+
+            let is_robot = room.robots.contains_key(&object);
             let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
             let mut override_name = None;
       
-            // Target position for proximity sensor
+            // Options for proximity sensor
             let mut targetpos = None;
-            
+            let mut multiplier = 1.0;
+            let mut offset = 0.0;
+
             if options.is_array() {
                 for option in options.as_array().unwrap() {
                     if option.is_array() {
@@ -519,11 +523,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                             let key = str_val(&option[0]).to_lowercase();
                             let value = &option[1];
                             match key.as_str() {
-                                "name" => {
-                                    if value.is_string() {
-                                        override_name = Some(str_val(value));
-                                    }
-                                },
+                                // "name" => {
+                                //     if value.is_string() {
+                                //         override_name = Some(str_val(value));
+                                //     }
+                                // },
                                 "targetpos" => {
                                     if value.is_array() {
                                         let value = value.as_array().unwrap();
@@ -532,6 +536,12 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                                         }
                                     }
                                 },
+                                "multiplier" => {
+                                    multiplier = num_val(&value);
+                                },
+                                "offset" => {
+                                    offset = num_val(&value);
+                                },
                                 _ => {}
                             }
                         }
@@ -539,7 +549,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 }
             }
 
-            let body = room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone();
+            let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
 
             response = vec![match service_type.as_str() {
                 "position" => {
@@ -547,7 +557,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 },
                 "proximity" => {
                     let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
-                    room.proximity_targets.insert(result.clone(), targetpos.unwrap_or(vector![0.0, 0.0, 0.0]));
+                    room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
                     result.into()
                 },
                 "lidar" => {
