@@ -265,7 +265,7 @@ impl RobotData {
 
         if Utc::now().timestamp() - robot.last_heartbeat > 50 {
             if let Err(e) = robot.send_roboscape_message(b"I") {
-                panic!("{}", e);
+                error!("{}", e);
             }
         }
 

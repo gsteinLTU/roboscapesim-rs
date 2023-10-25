@@ -238,7 +238,7 @@ impl RoomData {
                                 for _ in 0..STEPS_PER_IO_ITER {
                                     let res = proj.step(mc);
                                     if let ProjectStep::Error { error, proc } = &res {
-                                        println!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                                        error!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
                                     }
                                     idle_sleeper.consume(&res);
                                 }
