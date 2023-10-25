@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Instant};
 
 use dashmap::DashMap;
-use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, Response, EventResponse, EventDescription};
+use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, EventDescription};
 use log::info;
 use nalgebra::Vector3;
 use rapier3d::prelude::{RigidBodyHandle, Real};

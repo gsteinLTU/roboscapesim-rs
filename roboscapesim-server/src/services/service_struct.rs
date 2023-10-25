@@ -3,8 +3,7 @@ use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, hash::Hash};
 use dashmap::DashMap;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition};
-use nalgebra::Vector3;
-use rapier3d::prelude::{RigidBodyHandle, Real};
+use rapier3d::prelude::RigidBodyHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
