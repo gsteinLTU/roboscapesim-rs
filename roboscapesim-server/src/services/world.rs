@@ -574,7 +574,6 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         },
         f => {
             info!("Unrecognized function {}", f);
-
         }
     };
     

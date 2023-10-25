@@ -540,7 +540,15 @@ impl RoomData {
 
             let response = match msg.service.as_str() {
                 "RoboScapeWorld" => handle_world_msg(self, msg),
-                "RoboScapeEntity" => handle_entity_message(self, msg),
+                "RoboScapeEntity" => {
+                    if msg.function == "setPosition" || msg.function == "setRotation" {
+                        if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
+                            obj.value_mut().updated = true;
+                        }
+                    }
+
+                    handle_entity_message(self, msg)
+                },
                 "PositionSensor" => handle_position_sensor_message(self, msg),
                 "LIDARSensor" => handle_lidar_message(self, msg),
                 "ProximitySensor" => handle_proximity_sensor_message(self, msg),
@@ -550,6 +558,7 @@ impl RoomData {
                     (Err(format!("Service type {:?} not yet implemented.", t)), None)
                 }
             };
+
 
             if let Some(key) = key {
                 key.complete(response.0);
