@@ -796,11 +796,7 @@ impl RoomData {
         });
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
-
-        // TODO: make creating an entity service opt-in
-        /*let service = Arc::new(Mutex::new(create_entity_service(&body_name, &cube_body_handle)));
-        let service_id = service.lock().unwrap().id.clone();
-        room.services.insert((service_id, ServiceType::Entity), service);*/
+        
         room.last_full_update = 0;
         body_name
     }
