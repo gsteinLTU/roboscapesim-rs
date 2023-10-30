@@ -1,5 +1,5 @@
 
-use std::time::{SystemTime, Duration};
+use std::time::{SystemTime, Duration, Instant};
 
 use async_tungstenite::tungstenite::Message;
 use clap::Parser;
@@ -135,7 +135,10 @@ async fn run_test_client(args: &Args, id: usize) {
     let robots = robots.clone();
     let services_server = args.netsblox_services_server.clone().unwrap();
     let iotscape_task = task::spawn(async move {
-        let mut client = reqwest::Client::new();
+        let client = reqwest::Client::new();
+        let mut count = 0;
+        let start = Instant::now();
+        let mut last_stat = Instant::now();
         loop {
             if robots.lock().await.len() > 0 {
                 let iotscape_request = client.post(format!("{}/ProximitySensor/getIntensity?clientId={}&t={}", services_server, &client_id, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()))
@@ -148,10 +151,16 @@ async fn run_test_client(args: &Args, id: usize) {
 
                 if let Ok(iotscape_request) = iotscape_request {
                     trace!("Client {}: IoTScape request: {:?}", id, iotscape_request);
+                    count += 1;
                 } else if let Err(e) = iotscape_request {
                     warn!("Client {}: IoTScape request error: {:?}", id, e);
                 }
 
+            }
+
+            if last_stat.elapsed() > Duration::from_secs(1) {
+                info!("Client {}: {} requests in {} seconds ({} per second)", id, count, start.elapsed().as_secs(), count as f64 / start.elapsed().as_secs() as f64);
+                last_stat = Instant::now();
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
