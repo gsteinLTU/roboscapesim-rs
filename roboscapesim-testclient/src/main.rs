@@ -3,12 +3,11 @@ use std::time::{SystemTime, Duration};
 
 use async_tungstenite::tungstenite::Message;
 use clap::Parser;
-use dashmap::DashSet;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use serde::{Deserialize, Serialize};
 use log::{info, trace};
-use futures::prelude::*;
-use tokio::task;
+use futures::{prelude::*, future::join_all};
+use tokio::{task, select};
 
 #[derive(Parser, Debug, Clone)]
 #[command(name="roboscapesim-testclient", version="0.1.0", about="Test client for RoboScape Online")]
@@ -55,20 +54,31 @@ async fn main() {
         args.scenario = Some("Default".to_owned());
     }
 
+
+    // Wait on rx task
+    let mut tasks = vec![];
+    for i in 0..args.num_clients {
+        tasks.push(run_test_client(&args, i));
+    }
+
+    join_all(tasks).await;
+}
+
+async fn run_test_client(args: &Args, id: usize) {
     let client = reqwest::Client::new();
     
     // Get configuration from NetsBlox cloud server
-    let config = client.get(format!("{}/configuration", args.netsblox_cloud_server.unwrap()))
+    let config = client.get(format!("{}/configuration", args.netsblox_cloud_server.clone().unwrap()))
         .send()
         .await
         .expect("Failed to get NetsBlox cloud config")
         .json::<NetsBloxCloudConfig>().await.expect("Failed to parse NetsBlox cloud config");
 
-    info!("NetsBlox cloud config: {:?}", config);
+    trace!("Client {}: NetsBlox cloud config: {:?}", id, config);
 
     // Send request to API server
     let username = config.username.unwrap_or(config.client_id.clone()).to_owned();
-    let room = client.post(format!("{}/rooms/create", args.roboscape_online_server.unwrap()))
+    let room = client.post(format!("{}/rooms/create", args.roboscape_online_server.clone().unwrap()))
         .json(&roboscapesim_common::api::CreateRoomRequestData {
             environment: args.scenario.clone(),
             password: None,
@@ -82,7 +92,7 @@ async fn main() {
 
     // Create websocket connection to simulation server
     let (mut ws_stream, _) = async_tungstenite::tokio::connect_async(room.server).await.expect("Failed to connect to simulation server");
-    info!("Connected to simulation server");
+    info!("Client {}: Connected to simulation server", id);
 
     // Send join message
     ws_stream.send(Message::Binary(rmp_serde::to_vec(&ClientMessage::JoinRoom(room.room_id.clone(), username.clone(), None)).unwrap())).await.expect("Failed to send join message");
@@ -113,7 +123,7 @@ async fn main() {
                     }    
                 }
 
-                trace!("Received: {:?}", msg);
+                trace!("Client {}: Received: {:?}", id, msg);
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -123,11 +133,12 @@ async fn main() {
     // Send IoTScape requests to services server
     let client_id = config.client_id.clone();
     let robots = robots.clone();
+    let services_server = args.netsblox_services_server.clone().unwrap();
     let iotscape_task = task::spawn(async move {
         let mut client = reqwest::Client::new();
         loop {
             if robots.lock().await.len() > 0 {
-                let iotscape_request = client.post(format!("{}/ProximitySensor/getIntensity?clientId={}&t={}", args.netsblox_services_server.clone().unwrap(), &client_id, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()))
+                let iotscape_request = client.post(format!("{}/ProximitySensor/getIntensity?clientId={}&t={}", services_server, &client_id, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()))
                     .json(&serde_json::json!({
                         "id": robots.lock().await[0].clone(),
                     }))
@@ -136,17 +147,18 @@ async fn main() {
                     .await
                     .expect("Failed to send IoTScape request");
 
-                trace!("IoTScape request: {:?}", iotscape_request);
+                trace!("Client {}: IoTScape request: {:?}", id, iotscape_request);
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }
     });
 
-    // Wait on rx task
-    rx_task.await.unwrap();
+    select! {
+        _ = rx_task => (),
+        _ = iotscape_task => (),
+    }
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
