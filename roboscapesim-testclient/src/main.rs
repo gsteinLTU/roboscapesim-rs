@@ -5,7 +5,7 @@ use async_tungstenite::tungstenite::Message;
 use clap::Parser;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use serde::{Deserialize, Serialize};
-use log::{info, trace};
+use log::{info, trace, warn};
 use futures::{prelude::*, future::join_all};
 use tokio::{task, select};
 
@@ -118,7 +118,7 @@ async fn run_test_client(args: &Args, id: usize) {
                         let robot_id = o.0.clone().replace("robot_", "");
                         if o.0.starts_with("robot_") && !rx_robots.lock().await.contains(&robot_id) {
                             rx_robots.lock().await.push(robot_id.clone());
-                            info!("Robot {} seen", robot_id.clone());
+                            info!("Client {}: Robot {} seen", id, robot_id.clone());
                         }
                     }    
                 }
@@ -144,13 +144,17 @@ async fn run_test_client(args: &Args, id: usize) {
                     }))
                     .timeout(Duration::from_secs(1))
                     .send()
-                    .await
-                    .expect("Failed to send IoTScape request");
+                    .await;
 
-                trace!("Client {}: IoTScape request: {:?}", id, iotscape_request);
+                if let Ok(iotscape_request) = iotscape_request {
+                    trace!("Client {}: IoTScape request: {:?}", id, iotscape_request);
+                } else if let Err(e) = iotscape_request {
+                    warn!("Client {}: IoTScape request error: {:?}", id, e);
+                }
+
             }
 
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     });
 
