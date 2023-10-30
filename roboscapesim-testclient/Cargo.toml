@@ -16,3 +16,5 @@ async-tungstenite = { version = "0.23.0", features = ["tokio-native-tls", "tokio
 serde = { version = "1.0.190", features = ["derive"] }
 log = "0.4.20"
 futures = "0.3.29"
+dashmap = "5.5.3"
+serde_json = "1.0.108"

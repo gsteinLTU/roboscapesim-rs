@@ -1,10 +1,14 @@
 
+use std::time::{SystemTime, Duration};
+
 use async_tungstenite::tungstenite::Message;
-use clap::{Parser, Subcommand};
+use clap::Parser;
+use dashmap::DashSet;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use serde::{Deserialize, Serialize};
-use log::{info};
+use log::{info, trace};
 use futures::prelude::*;
+use tokio::task;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name="roboscapesim-testclient", version="0.1.0", about="Test client for RoboScape Online")]
@@ -63,7 +67,7 @@ async fn main() {
     info!("NetsBlox cloud config: {:?}", config);
 
     // Send request to API server
-    let username = config.username.unwrap_or(config.client_id).to_owned();
+    let username = config.username.unwrap_or(config.client_id.clone()).to_owned();
     let room = client.post(format!("{}/rooms/create", args.roboscape_online_server.unwrap()))
         .json(&roboscapesim_common::api::CreateRoomRequestData {
             environment: args.scenario.clone(),
@@ -83,13 +87,64 @@ async fn main() {
     // Send join message
     ws_stream.send(Message::Binary(rmp_serde::to_vec(&ClientMessage::JoinRoom(room.room_id.clone(), username.clone(), None)).unwrap())).await.expect("Failed to send join message");
 
+    let ws_stream = std::sync::Arc::new(tokio::sync::Mutex::new(ws_stream));
+
+    let ws_rx = ws_stream.clone();
+    
+    let robots = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
     // Read incoming
-    loop {
-        let incoming = ws_stream.next().await.ok_or("didn't receive anything").unwrap().unwrap().into_data();
-        let msg: UpdateMessage = rmp_serde::from_slice(incoming.as_slice()).unwrap();
-        info!("Received: {:?}", msg);
-    }
-    //http://localhost:8080/PublicRoles/getUserVariable?clientId=_netsblox69d5c21e-629f-4f5e-af1a-3d8bd7196762&t=1698638825397
+    let rx_robots = robots.clone();
+    let rx_task = task::spawn(async move {
+        loop {
+            let incoming = ws_rx.lock().await.next().await.ok_or("didn't receive anything");
+            
+            if incoming.is_ok() {
+                let incoming = incoming.unwrap().unwrap().into_data();
+                let msg: UpdateMessage = rmp_serde::from_slice(incoming.as_slice()).unwrap();
+
+                if let UpdateMessage::Update(_, _, objects) = &msg  {
+                    for o in objects {
+                        let robot_id = o.0.clone().replace("robot_", "");
+                        if o.0.starts_with("robot_") && !rx_robots.lock().await.contains(&robot_id) {
+                            rx_robots.lock().await.push(robot_id.clone());
+                            info!("Robot {} seen", robot_id.clone());
+                        }
+                    }    
+                }
+
+                trace!("Received: {:?}", msg);
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    });
+
+    // Send IoTScape requests to services server
+    let client_id = config.client_id.clone();
+    let robots = robots.clone();
+    let iotscape_task = task::spawn(async move {
+        let mut client = reqwest::Client::new();
+        loop {
+            if robots.lock().await.len() > 0 {
+                let iotscape_request = client.post(format!("{}/ProximitySensor/getIntensity?clientId={}&t={}", args.netsblox_services_server.clone().unwrap(), &client_id, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()))
+                    .json(&serde_json::json!({
+                        "id": robots.lock().await[0].clone(),
+                    }))
+                    .timeout(Duration::from_secs(1))
+                    .send()
+                    .await
+                    .expect("Failed to send IoTScape request");
+
+                trace!("IoTScape request: {:?}", iotscape_request);
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }
+    });
+
+    // Wait on rx task
+    rx_task.await.unwrap();
 }
 
 
