@@ -79,6 +79,7 @@ impl CustomTypes<StdSystem<C>> for C {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum OpenProjectError<'a> {
     ParseError { error: Box<ast::Error> },

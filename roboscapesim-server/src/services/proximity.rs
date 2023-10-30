@@ -27,7 +27,7 @@ impl Default for ProximityConfig {
     }
 }
 
-pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, target: &Vector3<Real>, override_name: Option<String>) -> Service {
+pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, override_name: Option<String>) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),

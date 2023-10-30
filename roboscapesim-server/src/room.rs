@@ -801,14 +801,16 @@ impl RoomData {
         body_name
     }
 
+    /// Add a service to the room
     pub(crate) fn add_sensor(room: &mut RoomData, service_type: ServiceType, id: &str, service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<String, String> {
         
+        #[allow(unreachable_patterns)]
         let service = match service_type {
             ServiceType::World => Err("Cannot add World service".to_owned()),
             ServiceType::Entity => Ok(create_entity_service(id, &target_rigid_body)),
             ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
             ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
-            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body, &vector![0.0, 0.0, 0.0], service_name_override)),
+            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body, service_name_override)),
             ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
             _ => Err(format!("Service type {:?} not yet implemented.", service_type))
         };
