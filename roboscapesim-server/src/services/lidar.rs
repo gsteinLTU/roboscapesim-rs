@@ -7,6 +7,7 @@ use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use once_cell::sync::Lazy;
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
+use serde_json::Value;
 
 use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
 
@@ -118,45 +119,55 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
     let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
     if let Some(s) = s {
         let service = s.value().lock().unwrap();
-        if let Some(body) = service.attached_rigid_bodies.get("main") {
-            let simulation = room.sim.lock().unwrap();
+        if msg.function == "getRange" {
+            if !room.lidar_configs.contains_key(&service.id) {
+                info!("Adding default LIDAR config for {}", service.id);
+                room.lidar_configs.insert(service.id.clone(), LIDARConfig::default());
+            }
 
-            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                if !room.lidar_configs.contains_key(&service.id) {
-                    room.lidar_configs.insert(service.id.clone(), LIDARConfig::default());
-                }
-
-                let get = room.lidar_configs.get(&service.id).unwrap();
-                let config = get;
-                let rays = calculate_rays(config, o.rotation(), o.translation());
-                
-                // Raycast each ray
-                let solid = true;
-                let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(*body);
-
-                let mut distances: Vec<f32> = vec![];
-                // TODO: figure out LIDAR not working
-                for ray in rays {
-                    let mut distance = config.max_distance * 100.0;
-                    if let Some((handle, toi)) = simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),
-                        &simulation.collider_set, &ray, config.max_distance * SCALE, solid, filter
-                    ) {
-                        // The first collider hit has the handle `handle` and it hit after
-                        // the ray travelled a distance equal to `ray.dir * toi`.
-                        let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-                        distance = toi * 100.0 / SCALE;
-                        trace!("Collider {:?} hit at point {}", handle, hit_point);
-                    }
-                    distances.push(distance);
-                }
-
-                response = distances.iter().map(|f| (*f).into() ).collect();     
-            };
+            if let Some(body) = service.attached_rigid_bodies.get("main") {
+                let simulation = room.sim.lock().unwrap();
+                response = fun_name(room.lidar_configs.get(&service.id).unwrap(), body.to_owned(), simulation);     
+            } else {
+                info!("Could not find rigid body for {}", msg.device);
+            }
+        } else {
+            info!("Unrecognized function {}", msg.function);
         }
         service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));
     }
 
+
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+}
+
+fn fun_name(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
+    let mut rays = vec![];
+
+    if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body) {
+        rays = calculate_rays(config, o.rotation(), o.translation());
+    }
+
+    // Raycast each ray
+    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(body);
+
+    let mut distances: Vec<f32> = vec![];
+    // TODO: figure out LIDAR not working
+    for ray in rays {
+        let mut distance = config.max_distance * 100.0;
+        if let Some((handle, toi)) = simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),
+            &simulation.collider_set, &ray, config.max_distance * SCALE, true, filter
+        ) {
+            // The first collider hit has the handle `handle` and it hit after
+            // the ray travelled a distance equal to `ray.dir * toi`.
+            let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+            distance = toi * 100.0 / SCALE;
+            trace!("Collider {:?} hit at point {}", handle, hit_point);
+        }
+        distances.push(distance);
+    }
+
+    distances.iter().map(|f| (*f).into() ).collect()
 }
 
 #[cfg(test)]

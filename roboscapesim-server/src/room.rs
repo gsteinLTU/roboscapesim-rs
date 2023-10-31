@@ -895,6 +895,9 @@ impl RoomData {
         }
         self.objects.clear();
 
+        // Remove non-world services
+        self.services.retain(|k, _| k.1 == ServiceType::World);
+
         let simulation = &mut self.sim.lock().unwrap();
         let labels = simulation.rigid_body_labels.clone();
         for l in labels.iter() {

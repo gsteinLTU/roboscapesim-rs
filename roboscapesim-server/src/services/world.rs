@@ -570,7 +570,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 },
                 "lidar" => {
                     let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
-                    let config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or(DEFAULT_LIDAR_CONFIGS.get("default").unwrap()).clone();
+                    let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
+                    let config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
+                        info!("Unrecognized LIDAR config {}, using default", config);
+                        &default
+                    }).clone();
                     room.lidar_configs.insert(result.clone(), config);
                     result.into()
                 },
