@@ -133,7 +133,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
         } else {
             info!("Unrecognized function {}", msg.function);
         }
-        service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));
+        service.enqueue_response_to(msg, Ok(response.clone()));
     } else {
         info!("Could not find service for {}", msg.device);
     }

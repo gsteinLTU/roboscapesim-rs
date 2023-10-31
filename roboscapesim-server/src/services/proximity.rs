@@ -135,7 +135,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
             info!("No main rigid body found for {}", msg.device);
         }
 
-        service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        service.enqueue_response_to(msg, Ok(response.clone()));      
 
     } else {
         info!("No service found for {}", msg.device);

@@ -595,7 +595,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
     
     let s = room.services.get(&(msg.device.clone(), ServiceType::World));
     if let Some(s) = s {
-        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().enqueue_response_to(msg, Ok(response.clone()));      
     } else {
         info!("No service found for {}", msg.device);
     }

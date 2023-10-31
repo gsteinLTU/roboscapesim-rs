@@ -24,8 +24,8 @@ pub mod resettable {
 
     impl Resettable for RigidBodyResetter {
         fn reset(&mut self, sim: &mut Simulation) {
-            if sim.rigid_body_set.lock().unwrap().contains(self.body_handle){
-                let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+            let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+            if rigid_body_set.contains(self.body_handle){
                 let body = rigid_body_set.get_mut(self.body_handle).unwrap();
                 body.set_position(self.initial_position, true);
                 body.set_angvel(self.initial_angvel, true);

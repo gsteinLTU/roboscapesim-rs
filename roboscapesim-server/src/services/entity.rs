@@ -199,7 +199,7 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessage
             info!("Could not find rigid body for {}", msg.device);
         }
 
-        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.enqueue_response_to(msg, Ok(response.clone()));      
     } else {
         info!("No service found for {}", msg.device);
     }

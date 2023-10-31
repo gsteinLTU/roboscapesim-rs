@@ -71,7 +71,7 @@ pub fn handle_trigger_message(room: &mut RoomData, msg: Request) -> HandleMessag
             }
         };
 
-        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.enqueue_response_to(msg, Ok(response.clone()));      
     }
 
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)

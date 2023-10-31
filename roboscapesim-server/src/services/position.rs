@@ -154,7 +154,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
             info!("No main rigid body found for {}", msg.device);
         }
         
-        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.enqueue_response_to(msg, Ok(response.clone()));      
 
     } else {
         info!("No service found for {}", msg.device);

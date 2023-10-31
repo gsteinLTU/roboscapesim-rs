@@ -44,7 +44,7 @@ pub struct RoomData {
     pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, u128>,
     /// List of usernames of users who have visited the room
-    pub visitors: Arc<Mutex<Vec<String>>>,
+    pub visitors: DashSet<String>,
     pub last_update: Instant,
     pub last_full_update: i64,
     pub last_sim_update: Instant,
@@ -89,7 +89,7 @@ impl RoomData {
             last_interaction_time: Utc::now().timestamp(),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
-            visitors: Arc::new(Mutex::new(Vec::new())),
+            visitors: DashSet::new(),
             last_full_update: 0,
             roomtime: 0.0,
             sim: Arc::new(Mutex::new(Simulation::new())),
@@ -126,8 +126,7 @@ impl RoomData {
                 } else {
                     for service in services.iter() {
                         // Handle messages
-                        let service = &mut service.value();
-                        if service.update() > 0 {
+                        if service.value().update() > 0 {
                             let rx = &mut service.service.lock().unwrap().rx_queue;
                             while !rx.is_empty() {
                                 let msg = rx.pop_front().unwrap();
@@ -301,7 +300,7 @@ impl RoomData {
     pub fn send_info_to_client(&self, client: u128) {
         Self::send_to_client(
             &UpdateMessage::RoomInfo(
-                RoomState { name: self.name.clone(), roomtime: self.roomtime, users: self.visitors.lock().unwrap().clone() }
+                RoomState { name: self.name.clone(), roomtime: self.roomtime, users: self.visitors.clone().into_iter().collect() }
             ),
             client,
         );
@@ -932,7 +931,7 @@ impl RoomData {
             creator: "TODO".to_owned(),
             has_password: self.password.is_some(),
             is_hibernating: self.hibernating.load(std::sync::atomic::Ordering::Relaxed),
-            visitors: self.visitors.lock().unwrap().clone(),
+            visitors: self.visitors.clone().into_iter().collect(),
         }
     }
 }
@@ -953,12 +952,9 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
     
     // Setup connection to room
-    {
-        let visitors = &mut room.visitors.lock().unwrap();
-        if !visitors.contains(&username.to_owned()) {
-            visitors.push(username.to_owned());
-        }
-    }    
+    if !room.visitors.contains(&username.to_owned()) {
+        room.visitors.insert(username.to_owned());
+    }
     room.sockets.insert(username.to_string(), peer_id);
     room.last_interaction_time = Utc::now().timestamp();
 

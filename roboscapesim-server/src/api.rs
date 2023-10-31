@@ -123,7 +123,7 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
     let room = room.unwrap().clone();
     let room_data = room.lock().unwrap();
 
-    let visitors = room_data.visitors.lock().unwrap().clone();
+    let visitors = room_data.visitors.clone().into_iter().collect();
     
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
         id: room_data.name.clone(),
@@ -145,7 +145,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
     for r in ROOMS.iter() {
         let room_data = r.lock().unwrap();
         // Skip if user not in visitors
-        if !user_filter.is_empty() && !room_data.visitors.lock().unwrap().contains(&user_filter) {
+        if !user_filter.is_empty() && !room_data.visitors.contains(&user_filter) {
             continue;
         }
 

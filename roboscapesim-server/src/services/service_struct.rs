@@ -3,9 +3,9 @@ use std::{sync::{Arc, Mutex}, time::Duration, hash::Hash};
 use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use derivative::Derivative;
-use iotscape::{IoTScapeService, ServiceDefinition};
-use netsblox_vm::runtime::System;
+use iotscape::{IoTScapeService, ServiceDefinition, Request};
 use rapier3d::prelude::RigidBodyHandle;
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
@@ -38,7 +38,10 @@ impl PartialEq for Service {
 }
 
 impl Service {
-
+    pub fn enqueue_response_to(&self, request: Request, params: Result<Vec<Value>, String>) {
+        self.service.lock().unwrap().enqueue_response_to(request, params);
+    }
+    
     pub fn update(&self) -> usize {
         let iotscape_service = &mut self.service.lock().unwrap();
         iotscape_service.poll(Some(Duration::from_millis(1)));
