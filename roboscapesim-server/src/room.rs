@@ -251,15 +251,18 @@ impl RoomData {
             // In edit mode, send IoTScape messages to NetsBlox server
             let services = obj.services.clone();
             let mut event_id: u32 = rand::random();
+            let hibernating = obj.hibernating.clone();
             spawn(async move {
                 loop {
                     while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
-                        if let Some(service) = service {
-                            service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
-                            event_id += 1;
-                        } else {
-                            info!("Service {} not found", service_id);
+                        if !hibernating.load(Ordering::Relaxed) {
+                            let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
+                            if let Some(service) = service {
+                                service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
+                                event_id += 1;
+                            } else {
+                                info!("Service {} not found", service_id);
+                            }
                         }
                     }
                     sleep(Duration::from_millis(5)).await;
