@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, time::Instant, f32::consts::PI};
+use std::{collections::BTreeMap, f32::consts::PI};
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
@@ -362,7 +363,7 @@ pub fn create_world_service(id: &str) -> Service {
         .announce()
         .expect("Could not announce to server");
 
-    let last_announce = Instant::now();
+    let last_announce = AtomicInstant::now();
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     Service {
@@ -594,7 +595,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
     
     let s = room.services.get(&(msg.device.clone(), ServiceType::World));
     if let Some(s) = s {
-        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     } else {
         info!("No service found for {}", msg.device);
     }

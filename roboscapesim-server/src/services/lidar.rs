@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, time::Instant, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}};
+use std::{collections::BTreeMap, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}};
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
-
 use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
 use once_cell::sync::Lazy;
@@ -76,7 +76,7 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
         .announce()
         .expect("Could not announce to server");
 
-    let last_announce = Instant::now();
+    let last_announce = AtomicInstant::now();
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
@@ -118,7 +118,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
 
     let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
     if let Some(s) = s {
-        let service = s.value().lock().unwrap();
+        let service = s.value();
         if msg.function == "getRange" {
             if !room.lidar_configs.contains_key(&service.id) {
                 info!("Adding default LIDAR config for {}", service.id);

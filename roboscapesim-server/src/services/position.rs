@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
@@ -98,7 +99,7 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
         .announce()
         .expect("Could not announce to server");
 
-    let last_announce = Instant::now();
+    let last_announce = AtomicInstant::now();
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
@@ -122,7 +123,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
     msg.device = msg.device.replace("\"", "");
     let s = room.services.get(&(msg.device.clone(), ServiceType::PositionSensor));
     if let Some(s) = s {
-        if let Some(body) = s.value().lock().unwrap().attached_rigid_bodies.get("main") {
+        if let Some(body) = s.value().attached_rigid_bodies.get("main") {
             let simulation = &mut room.sim.lock().unwrap();
 
             if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
@@ -153,7 +154,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
             info!("No main rigid body found for {}", msg.device);
         }
         
-        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
 
     } else {
         info!("No service found for {}", msg.device);

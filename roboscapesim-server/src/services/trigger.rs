@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, Request, EventDescription};
 use log::info;
@@ -41,7 +42,7 @@ pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service
         .announce()
         .expect("Could not announce to server");
 
-    let last_announce = Instant::now();
+    let last_announce = AtomicInstant::now();
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
@@ -70,7 +71,7 @@ pub fn handle_trigger_message(room: &mut RoomData, msg: Request) -> HandleMessag
             }
         };
 
-        s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+        s.value().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
     }
 
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)

@@ -1,8 +1,10 @@
-use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, hash::Hash};
+use std::{sync::{Arc, Mutex}, time::Duration, hash::Hash};
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition};
+use netsblox_vm::runtime::System;
 use rapier3d::prelude::RigidBodyHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,7 +19,7 @@ pub struct Service {
     pub service_type: ServiceType,
     #[derivative(Debug = "ignore")]
     pub service: Arc<Mutex<IoTScapeService>>,
-    pub last_announce: Instant,
+    pub last_announce: AtomicInstant,
     pub announce_period: Duration,
     pub attached_rigid_bodies: DashMap<String, RigidBodyHandle>,
 }
@@ -36,20 +38,20 @@ impl PartialEq for Service {
 }
 
 impl Service {
-    pub fn update(&mut self) -> usize {
-        self.service.lock().unwrap().poll(Some(Duration::from_millis(1)));
+
+    pub fn update(&self) -> usize {
+        let iotscape_service = &mut self.service.lock().unwrap();
+        iotscape_service.poll(Some(Duration::from_millis(1)));
 
         // Re-announce to server regularly
         if self.last_announce.elapsed() > self.announce_period {
-            self.service
-                .lock()
-                .unwrap()
+            iotscape_service
                 .announce()
                 .expect("Could not announce to server");
-            self.last_announce = Instant::now();
+            self.last_announce.set_now();
         }
         
-        self.service.lock().unwrap().rx_queue.len()
+        iotscape_service.rx_queue.len()
     }
 }
 

@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
 
+use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, EventDescription};
 use log::info;
@@ -81,7 +82,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, override
         .announce()
         .expect("Could not announce to server");
 
-    let last_announce = Instant::now();
+    let last_announce = AtomicInstant::now();
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
@@ -103,7 +104,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
 
     let s = room.services.get(&(msg.device.clone(), ServiceType::ProximitySensor));
     if let Some(s) = s {
-        let service = s.value().lock().unwrap();
+        let service = s.value();
         if let Some(body) = service.attached_rigid_bodies.get("main") {
             let simulation = &mut room.sim.lock().unwrap();
             

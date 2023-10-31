@@ -55,7 +55,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Arc<DashMap<(String, ServiceType), Arc<Mutex<Service>>>>,
+    pub services: Arc<DashMap<(String, ServiceType), Arc<Service>>>,
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
@@ -111,8 +111,8 @@ impl RoomData {
 
         // Setup test room
         // Create IoTScape service
-        let service = Arc::new(Mutex::new(world::create_world_service(obj.name.as_str())));
-        let service_id = service.lock().unwrap().id.clone();
+        let service = Arc::new(world::create_world_service(obj.name.as_str()));
+        let service_id = service.id.clone();
         obj.services.insert((service_id, ServiceType::World), service);
         
         // Create IoTScape network I/O Task
@@ -126,7 +126,7 @@ impl RoomData {
                 } else {
                     for service in services.iter() {
                         // Handle messages
-                        let service = &mut service.value().lock().unwrap();
+                        let service = &mut service.value();
                         if service.update() > 0 {
                             let rx = &mut service.service.lock().unwrap().rx_queue;
                             while !rx.is_empty() {
@@ -258,7 +258,7 @@ impl RoomData {
                         if !hibernating.load(Ordering::Relaxed) {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
-                                service.value().lock().unwrap().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
+                                service.value().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
                                 event_id += 1;
                             } else {
                                 info!("Service {} not found", service_id);
@@ -396,7 +396,7 @@ impl RoomData {
             let username = self.sockets.remove(&client_id).unwrap().0.to_owned();
 
             // Send leave message to clients
-            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
+            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
             self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
         }
 
@@ -591,7 +591,7 @@ impl RoomData {
                             // TODO: find other object name
                             self.services.get(&(name.clone(), ServiceType::Trigger))
                                 .and_then(|s| Some(
-                                    s.value().lock().unwrap().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                                    s.value().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
                         }
                     } else {
                         if in_sensor.contains(&c2) {
@@ -651,7 +651,7 @@ impl RoomData {
         // Send
         let world_service = self.services.iter().find(|s| s.key().1 == ServiceType::World);
         if let Some(world_service) = world_service {
-            self.netsblox_msg_tx.send(((world_service.lock().unwrap().id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
+            self.netsblox_msg_tx.send(((world_service.id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
         self.last_interaction_time = Utc::now().timestamp();
@@ -824,8 +824,8 @@ impl RoomData {
             return Err(service.unwrap_err());
         }
 
-        let service = Arc::new(Mutex::new(service.unwrap()));
-        let service_id = service.lock().unwrap().id.clone();
+        let service = Arc::new(service.unwrap());
+        let service_id = service.id.clone();
         room.services.insert((service_id.clone(), service_type), service);
 
         // // TODO: accept lidar config as input
@@ -865,8 +865,8 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
 
-        let service = Arc::new(Mutex::new(create_trigger_service(&body_name, &cube_body_handle)));
-        let service_id = service.lock().unwrap().id.clone();
+        let service = Arc::new(create_trigger_service(&body_name, &cube_body_handle));
+        let service_id = service.id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         simulation.sensors.insert((service_id, collider_handle), DashSet::new());
         room.last_full_update = 0;
@@ -982,7 +982,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     // Send user join event
-    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().lock().unwrap().id.clone();
+    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
     room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
 
     Ok(())
