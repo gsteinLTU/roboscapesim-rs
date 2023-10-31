@@ -269,10 +269,6 @@ impl RobotData {
             }
         }
 
-        // Update ticks
-        robot.ticks[0] += (robot.speed_l * -32.0) as f64 * dt;
-        robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
-
         if robot.drive_state == DriveState::SetDistance {
 
             // Stop robot if distance reached
@@ -294,6 +290,10 @@ impl RobotData {
                 robot.drive_state = DriveState::SetSpeed;
             }
         }
+
+        // Update ticks
+        robot.ticks[0] += (robot.speed_l * -32.0) as f64 * dt;
+        robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
 
         let mut msg = None;
         
@@ -336,8 +336,8 @@ impl RobotData {
                             let s1 = i16::from_le_bytes([buf[1], buf[2]]);
                             let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                            robot.speed_l = -s2 as f32 / 32.0;
-                            robot.speed_r = -s1 as f32 / 32.0;
+                            robot.speed_l = -s1 as f32 / 32.0;
+                            robot.speed_r = -s2 as f32 / 32.0;
                         }
                     },
                     b'B' => { 
@@ -393,8 +393,8 @@ impl RobotData {
 
                         // Create message
                         message[0] = b'T';
-                        message[1..5].copy_from_slice(&left_ticks);
-                        message[5..9].copy_from_slice(&right_ticks);
+                        message[1..5].copy_from_slice(&right_ticks);
+                        message[5..9].copy_from_slice(&left_ticks);
 
                         if let Err(e) = robot.send_roboscape_message(&message) {
                             error!("{}", e);
