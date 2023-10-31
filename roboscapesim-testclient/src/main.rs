@@ -19,7 +19,7 @@ struct Args {
     #[arg(short = 'r', long)]
     roboscape_online_server: Option<String>,
 
-    #[arg(short = 'n', long)]
+    #[arg(short = 's', long)]
     netsblox_services_server: Option<String>,
 
     #[arg(short = 'c', long)]
@@ -53,7 +53,6 @@ async fn main() {
     if args.scenario.is_none() {
         args.scenario = Some("Default".to_owned());
     }
-
 
     // Wait on rx task
     let mut tasks = vec![];

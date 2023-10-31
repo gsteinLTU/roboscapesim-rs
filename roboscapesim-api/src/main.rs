@@ -120,11 +120,12 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
     // Sort servers by number of active rooms
     let mut active_rooms_per_server = active_rooms_per_server.iter().map(|x| (x.0.clone(), x.1.clone())).collect::<Vec<_>>();
     active_rooms_per_server.sort_by(|a, b| a.1.cmp(&b.1));
+    active_rooms_per_server = active_rooms_per_server.iter().take_while(|r| r.1 == active_rooms_per_server[0].1).map(|r| r.to_owned()).collect();
 
     // Pick server with fewest active rooms
     let mut server = None;
     if active_rooms_per_server.len() > 0 {
-        server = Some(active_rooms_per_server[0].0.clone());
+        server = Some(active_rooms_per_server[rand::random::<usize>() % active_rooms_per_server.len()].0.clone());
     }
 
     // Return error when no servers available
