@@ -573,46 +573,48 @@ impl RoomData {
             }
         }
         
-        let simulation = &mut self.sim.lock().unwrap();
-        simulation.update(delta_time);
+        {
+            let simulation = &mut self.sim.lock().unwrap();
+            simulation.update(delta_time);
 
-        // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
-        for mut entry in simulation.sensors.iter_mut() {
-            let ((name, sensor), in_sensor) = entry.pair_mut();
-            for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
-                if intersecting {
-                    if in_sensor.contains(&c2) {
-                        // Already in sensor
-                        continue;
+            // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
+            for mut entry in simulation.sensors.iter_mut() {
+                let ((name, sensor), in_sensor) = entry.pair_mut();
+                for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
+                    if intersecting {
+                        if in_sensor.contains(&c2) {
+                            // Already in sensor
+                            continue;
+                        } else {
+                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                            in_sensor.insert(c2);
+                            // TODO: find other object name
+                            self.services.get(&(name.clone(), ServiceType::Trigger))
+                                .and_then(|s| Some(
+                                    s.value().lock().unwrap().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                        }
                     } else {
-                        trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
-                        in_sensor.insert(c2);
-                        // TODO: find other object name
-                        self.services.get(&(name.clone(), ServiceType::Trigger))
-                            .and_then(|s| Some(
-                                s.value().lock().unwrap().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
-                    }
-                } else {
-                    if in_sensor.contains(&c2) {
-                        in_sensor.remove(&c2);
-                        trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                        if in_sensor.contains(&c2) {
+                            in_sensor.remove(&c2);
+                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                        }
                     }
                 }
             }
-        }
 
-        // Update data before send
-        for mut o in self.objects.iter_mut()  {
-            if simulation.rigid_body_labels.contains_key(o.key()) {
-                let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
-                let handle = get.value();
-                let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
-                let body = rigid_body_set.get(*handle).unwrap();
-                let old_transform = o.value().transform;
-                o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
+            // Update data before send
+            for mut o in self.objects.iter_mut()  {
+                if simulation.rigid_body_labels.contains_key(o.key()) {
+                    let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
+                    let handle = get.value();
+                    let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
+                    let body = rigid_body_set.get(*handle).unwrap();
+                    let old_transform = o.value().transform;
+                    o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
 
-                if old_transform != o.value().transform {
-                    o.value_mut().updated = true;
+                    if old_transform != o.value().transform {
+                        o.value_mut().updated = true;
+                    }
                 }
             }
         }
@@ -826,10 +828,10 @@ impl RoomData {
         let service_id = service.lock().unwrap().id.clone();
         room.services.insert((service_id.clone(), service_type), service);
 
-        // TODO: accept lidar config as input
-        if service_type == ServiceType::LIDAR {
-            room.lidar_configs.insert(service_id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
-        }   
+        // // TODO: accept lidar config as input
+        // if service_type == ServiceType::LIDAR {
+        //     room.lidar_configs.insert(service_id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
+        // }   
 
         Ok(service_id.clone())
     }
@@ -890,6 +892,7 @@ impl RoomData {
     }
 
     pub(crate) fn remove_all(&mut self) {
+        info!("Removing all entities from {}", self.name);
         for obj in self.objects.iter() {
             self.send_to_all_clients(&UpdateMessage::RemoveObject(obj.key().to_string()));
         }
@@ -905,6 +908,7 @@ impl RoomData {
                 simulation.remove_body(*l.value());
             }
         }
+
         simulation.rigid_body_labels.clear();
 
         for r in self.robots.iter() {

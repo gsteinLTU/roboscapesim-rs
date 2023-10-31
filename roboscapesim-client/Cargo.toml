@@ -49,3 +49,4 @@ lto = true
 lto = true
 debug = false
 opt-level = 's'
+strip = true

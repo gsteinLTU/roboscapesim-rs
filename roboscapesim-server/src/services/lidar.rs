@@ -80,7 +80,7 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     let announce_period = DEFAULT_ANNOUNCE_PERIOD;
 
     let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
+    attached_rigid_bodies.insert("main".into(), rigid_body.to_owned());
 
     Service {
         id: id.to_string(),
@@ -126,8 +126,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
             }
 
             if let Some(body) = service.attached_rigid_bodies.get("main") {
-                let simulation = room.sim.lock().unwrap();
-                response = fun_name(room.lidar_configs.get(&service.id).unwrap(), body.to_owned(), simulation);     
+                response = do_rays(room.lidar_configs.get(&service.id).unwrap(), body.to_owned(), room.sim.lock().unwrap());     
             } else {
                 info!("Could not find rigid body for {}", msg.device);
             }
@@ -135,13 +134,14 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
             info!("Unrecognized function {}", msg.function);
         }
         service.service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));
+    } else {
+        info!("Could not find service for {}", msg.device);
     }
-
 
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }
 
-fn fun_name(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
+fn do_rays(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
     let mut rays = vec![];
 
     if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body) {
@@ -155,9 +155,8 @@ fn fun_name(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::
     // TODO: figure out LIDAR not working
     for ray in rays {
         let mut distance = config.max_distance * 100.0;
-        if let Some((handle, toi)) = simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),
-            &simulation.collider_set, &ray, config.max_distance * SCALE, true, filter
-        ) {
+        if let Some((handle, toi)) = 
+            simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),&simulation.collider_set, &ray, config.max_distance * SCALE, true, filter) {
             // The first collider hit has the handle `handle` and it hit after
             // the ray travelled a distance equal to `ray.dir * toi`.
             let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`

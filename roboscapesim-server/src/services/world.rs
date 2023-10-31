@@ -595,11 +595,14 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
     let s = room.services.get(&(msg.device.clone(), ServiceType::World));
     if let Some(s) = s {
         s.value().lock().unwrap().service.lock().unwrap().enqueue_response_to(msg, Ok(response.clone()));      
+    } else {
+        info!("No service found for {}", msg.device);
     }
 
     if response.len() == 1 {
         return (Ok(Intermediate::Json(response[0].clone())), None);
     }
+
     (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
 }
 
@@ -744,6 +747,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         }
     } else {
         // TODO: IoTScape error
+        info!("Invalid options provided");
     }
     None
 }
