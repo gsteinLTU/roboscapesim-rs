@@ -8,7 +8,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}, services::proximity::ProximityConfig};
+use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS}};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -514,6 +514,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let mut targetpos = None;
             let mut multiplier = 1.0;
             let mut offset = 0.0;
+            
+            // Options for lidar
+            let mut config = "default".to_owned();
 
             if options.is_array() {
                 for option in options.as_array().unwrap() {
@@ -542,6 +545,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                                 "offset" => {
                                     offset = num_val(&value);
                                 },
+                                "config" => {
+                                    if value.is_string() {
+                                        config = str_val(&value);
+                                    }
+                                },
                                 _ => {}
                             }
                         }
@@ -561,7 +569,10 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                     result.into()
                 },
                 "lidar" => {
-                    RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap().into()
+                    let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
+                    let config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or(DEFAULT_LIDAR_CONFIGS.get("default").unwrap()).clone();
+                    room.lidar_configs.insert(result.clone(), config);
+                    result.into()
                 },
                 "entity" => {
                     RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()

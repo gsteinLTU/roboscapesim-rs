@@ -1,16 +1,18 @@
-use std::{collections::BTreeMap, time::Instant, f32::consts::FRAC_PI_2};
+use std::{collections::BTreeMap, time::Instant, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}};
 
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 
 use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
+use once_cell::sync::Lazy;
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 
 use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LIDARConfig {
     pub num_beams: u8, 
     pub start_angle: Real, 
@@ -24,6 +26,17 @@ impl Default for LIDARConfig {
         Self { num_beams: 3, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: Vector3::zeros(), max_distance: 3.0 }
     }
 }
+
+/// Map of names to built-in configs
+pub const DEFAULT_LIDAR_CONFIGS: Lazy<BTreeMap<String, LIDARConfig>> = Lazy::new(|| {
+    BTreeMap::from_iter(
+        vec![
+            ("default".to_owned(), LIDARConfig::default()),
+            ("ninety".to_owned(), LIDARConfig { num_beams: 3, start_angle: -FRAC_PI_4, end_angle: FRAC_PI_4, ..Default::default()}),
+            ("onetwenty".to_owned(), LIDARConfig { num_beams: 3, start_angle: -FRAC_PI_3, end_angle: FRAC_PI_3, ..Default::default()}),
+            ("sweeper".to_owned(), LIDARConfig { num_beams: 8, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, max_distance: 5.0, ..Default::default()}),
+        ].iter().cloned())
+});
 
 pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     // Create definition struct
@@ -147,7 +160,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
 }
 
 #[cfg(test)]
-use std::f32::consts::{PI, FRAC_PI_4};
+use std::f32::consts::PI;
 
 #[test]
 fn test_calculate_rays() {
