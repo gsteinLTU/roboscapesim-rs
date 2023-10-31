@@ -20,6 +20,12 @@ use self::util::*;
 use self::game::*;
 use self::ui::*;
 
+extern crate wee_alloc;
+
+// Use `wee_alloc` as the global allocator.
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
 extern crate console_error_panic_hook;
 
 thread_local! {

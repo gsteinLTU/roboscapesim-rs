@@ -37,9 +37,16 @@ serde_json = "1.0"
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
-serde = "1.0.189"
-postcard = { version = "1.0.8", features = ["use-std"] }
 rmp-serde = "1.1.2"
+wee_alloc = "0.4.5"
 
 [build-dependencies]
 netsblox-extension-util = "*"
+
+[profile.dev]
+lto = true
+
+[profile.release]
+lto = true
+debug = false
+opt-level = 's'
