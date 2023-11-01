@@ -5,11 +5,12 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
+use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, vm::Intermediate, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS}};
+use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS}};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -389,7 +390,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         },
         "showText" => {
             if msg.params.len() < 2 {
-                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+                return (Ok(SimpleValue::Bool(false)), None);
             }
 
             let id = str_val(&msg.params[0]);
@@ -462,7 +463,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         },
         "addBlock" => {
             if msg.params.len() < 7 {
-                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+                return (Ok(SimpleValue::Bool(false)), None);
             }
             let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
             let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
@@ -482,7 +483,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         },
         "addRobot" => {
             if msg.params.len() < 3 {
-                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+                return (Ok(SimpleValue::Bool(false)), None);
             }
             let x = num_val(&msg.params[0]);
             let y = num_val(&msg.params[1]);
@@ -494,7 +495,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
         },
         "addSensor" => {
             if msg.params.len() < 2 {
-                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+                return (Ok(SimpleValue::Bool(false)), None);
             }
 
             let service_type = str_val(&msg.params[0]).to_owned().to_lowercase();
@@ -502,7 +503,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
 
             // Check if object exists
             if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
-                return (Ok(Intermediate::Json(Value::Bool(false))), None);
+                return (Ok(SimpleValue::Bool(false)), None);
             }
 
 
@@ -605,10 +606,10 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
     }
 
     if response.len() == 1 {
-        return (Ok(Intermediate::Json(response[0].clone())), None);
+        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
     }
 
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }
 
 fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {

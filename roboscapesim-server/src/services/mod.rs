@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::vm::Intermediate;
+use netsblox_vm::runtime::SimpleValue;
 
 use self::service_struct::ServiceType;
 
@@ -13,4 +13,4 @@ pub(crate) mod proximity;
 pub(crate) mod trigger;
 
 /// The result of a message handler, combines the intermediate result and a possible IoTScape event message
-type HandleMessageResult = (Result<Intermediate, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>);
+type HandleMessageResult = (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>);

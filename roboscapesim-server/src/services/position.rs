@@ -4,9 +4,10 @@ use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
+use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::{room::RoomData, vm::Intermediate};
+use crate::{room::RoomData};
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -161,7 +162,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
     }
 
     if response.len() == 1 {
-        return (Ok(Intermediate::Json(response[0].clone())), None);
+        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
     }
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }

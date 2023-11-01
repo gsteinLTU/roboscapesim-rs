@@ -10,7 +10,8 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, ToJsonError, Key, System}, std_system::StdSystem};
+use netsblox_vm::runtime::{SimpleValue, ErrorCause};
+use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, Key, System}, std_system::StdSystem};
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
 use roboscapesim_common::*;
@@ -28,7 +29,7 @@ use crate::simulation::Simulation;
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
-use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, Intermediate, C, get_env};
+use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, C, get_env};
 pub(crate) mod netsblox_api;
 
 #[derive(Derivative)]
@@ -162,7 +163,7 @@ impl RoomData {
                         request: Some(Rc::new(move |_system: &StdSystem<C>, _, key, request, _| {
                             match &request {
                                 netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
-                                    match args.iter().map(|(_k, v)| v.to_json()).collect::<Result<Vec<_>,ToJsonError<_,_>>>() {
+                                    match args.iter().map(|(_k, v)| Ok(v.to_simple()?.into_json()?)).collect::<Result<Vec<_>,ErrorCause<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
                                                 "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
@@ -184,11 +185,11 @@ impl RoomData {
                                 netsblox_vm::runtime::Request::UnknownBlock { name, args: _ } => {
                                     match name.as_str() {
                                         "roomID" => {
-                                            key.complete(Ok(Intermediate::Json(json!(format!("\"{id_clone}\"")))));
+                                            key.complete(Ok(SimpleValue::String(format!("{id_clone}"))));
                                             RequestStatus::Handled
                                         },
                                         "robotsInRoom" => {
-                                            key.complete(Ok(Intermediate::Json(Value::Array(robots.iter().map(|r| r.key().clone().into()).collect::<Vec<Value>>()))));
+                                            key.complete(Ok(SimpleValue::List(robots.iter().map(|r| r.key().clone().into()).collect::<Vec<SimpleValue>>())));
                                             RequestStatus::Handled
                                         },
                                         _ => {

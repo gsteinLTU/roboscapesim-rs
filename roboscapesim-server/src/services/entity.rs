@@ -5,9 +5,10 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion};
+use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::{room::RoomData, vm::Intermediate, util::util::num_val};
+use crate::{room::RoomData, util::util::num_val};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -204,5 +205,5 @@ pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessage
         info!("No service found for {}", msg.device);
     }
 
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }

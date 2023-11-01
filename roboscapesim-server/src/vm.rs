@@ -1,7 +1,7 @@
 use std::{fmt, rc::Rc};
 use std::time::Duration;
-use netsblox_vm::runtime::GetType;
-use netsblox_vm::{ast, runtime::{CustomTypes, Value, EntityKind, IntermediateType, ErrorCause, FromAstError, Settings}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::Json, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
+use netsblox_vm::runtime::{GetType, SimpleValue};
+use netsblox_vm::{ast, runtime::{CustomTypes, Value, EntityKind, ErrorCause, FromAstError, Settings}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, json::Json, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
 
 pub const DEFAULT_BASE_URL: &str = "https://cloud.netsblox.org";
 pub const STEPS_PER_IO_ITER: usize = 64;
@@ -44,38 +44,16 @@ impl From<EntityKind<'_, '_, C, StdSystem<C>>> for EntityState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Intermediate {
-    Json(Json),
-    Image(Vec<u8>),
-    Audio(Vec<u8>),
-}
-impl IntermediateType for Intermediate {
-    fn from_json(json: Json) -> Self {
-        Self::Json(json)
-    }
-    fn from_image(img: Vec<u8>) -> Self {
-        Self::Image(img)
-    }
-    fn from_audio(audio: Vec<u8>) -> Self {
-        Self::Audio(audio)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct C;
 impl CustomTypes<StdSystem<C>> for C {
     type NativeValue = NativeValue;
-    type Intermediate = Intermediate;
+    type Intermediate = SimpleValue;
 
     type EntityState = EntityState;
 
     fn from_intermediate<'gc>(mc: &Mutation<'gc>, value: Self::Intermediate) -> Result<Value<'gc, C, StdSystem<C>>, ErrorCause<C, StdSystem<C>>> {
-        Ok(match value {
-            Intermediate::Json(x) => Value::from_json(mc, x)?,
-            Intermediate::Image(x) => Value::Image(Rc::new(x)),
-            Intermediate::Audio(x) => Value::Audio(Rc::new(x)),
-        })
+        Ok(Value::from_simple(mc, value))
     }
 }
 

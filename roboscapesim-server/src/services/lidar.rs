@@ -5,11 +5,12 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
+use netsblox_vm::runtime::SimpleValue;
 use once_cell::sync::Lazy;
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 use serde_json::Value;
 
-use crate::{room::RoomData, simulation::SCALE, vm::Intermediate};
+use crate::{room::RoomData, simulation::SCALE};
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -138,7 +139,7 @@ pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageR
         info!("Could not find service for {}", msg.device);
     }
 
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }
 
 fn do_rays(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {

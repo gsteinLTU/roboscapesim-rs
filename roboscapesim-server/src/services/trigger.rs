@@ -4,9 +4,10 @@ use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, Request, EventDescription};
 use log::info;
+use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::{room::RoomData, vm::Intermediate};
+use crate::{room::RoomData};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -74,5 +75,5 @@ pub fn handle_trigger_message(room: &mut RoomData, msg: Request) -> HandleMessag
         s.enqueue_response_to(msg, Ok(response.clone()));      
     }
 
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), None)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }

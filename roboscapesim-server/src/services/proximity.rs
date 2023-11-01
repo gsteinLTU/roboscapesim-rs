@@ -5,9 +5,10 @@ use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, EventDescription};
 use log::info;
 use nalgebra::Vector3;
+use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::{RigidBodyHandle, Real};
 
-use crate::{room::RoomData, vm::Intermediate};
+use crate::{room::RoomData};
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -142,7 +143,7 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
     }
 
     if response.len() == 1 {
-        return (Ok(Intermediate::Json(response[0].clone())), message_response);
+        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), message_response);
     }
-    (Ok(Intermediate::Json(serde_json::to_value(response).unwrap())), message_response)
+    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), message_response)
 }
