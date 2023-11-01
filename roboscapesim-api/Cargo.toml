@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-once-cell = "0.5.3"
 axum = "0.6.20"
 axum-macros = "0.3.8"
 dashmap = "5.5.3"

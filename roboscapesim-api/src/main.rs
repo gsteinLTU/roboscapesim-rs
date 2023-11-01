@@ -1,3 +1,4 @@
+use async_once_cell::OnceCell;
 use axum::{extract::Query, response::IntoResponse, Json};
 use axum::{
     http::{header, Method},
@@ -14,7 +15,6 @@ use roboscapesim_common::api::{
 use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
-use futures_executor::block_on;
 
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
 
@@ -22,11 +22,8 @@ static ENVIRONMENTS: Lazy<DashMap<String, EnvironmentInfo>> = Lazy::new(|| DashM
 
 static ROOMS: Lazy<DashMap<String, RoomInfo>> = Lazy::new(|| DashMap::new());
 
-static EXTERNAL_IP: Lazy<String> = Lazy::new(|| {
-    block_on(async {
-    get_external_ip().await.unwrap().trim().to_owned()
-    })
-});
+static EXTERNAL_IP: OnceCell<String> = OnceCell::new();
+
 #[tokio::main]
 async fn main() {
     // Setup logger
@@ -36,7 +33,7 @@ async fn main() {
         .env()
         .init()
         .unwrap();
-
+    
     let app = Router::new()
         .route("/server/status", get(get_server_status))
         .route("/rooms/list", get(get_rooms_list))
@@ -94,7 +91,7 @@ async fn main() {
 /// Get status of rooms on server
 async fn get_server_status() -> impl IntoResponse {
     serde_json::to_string(&ServerInfo {
-        address: EXTERNAL_IP.to_owned(),
+        address: EXTERNAL_IP.get_or_init(async { get_external_ip().await.unwrap().trim().to_owned() }).await.to_owned(),
         max_rooms: SERVERS.iter().map(|x| x.value().max_rooms).sum(),
         last_update: SystemTime::now(),
     }).unwrap()
