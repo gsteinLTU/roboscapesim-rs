@@ -47,5 +47,12 @@
         "host": "remote",
         "path": "gstein/LIDAR%20Road%20Very%20Hard",
         "creator": "Gordon Stein"
+    },
+    "boxpushing": {
+        "name": "BoxPushing",
+        "description": "Box Pushing scenario",
+        "host": "remote",
+        "path": "gstein/Box%20Pushing",
+        "creator": "Gordon Stein"
     }
 }

@@ -35,7 +35,7 @@ pub const DEFAULT_LIDAR_CONFIGS: Lazy<BTreeMap<String, LIDARConfig>> = Lazy::new
             ("default".to_owned(), LIDARConfig::default()),
             ("ninety".to_owned(), LIDARConfig { num_beams: 3, start_angle: -FRAC_PI_4, end_angle: FRAC_PI_4, ..Default::default()}),
             ("onetwenty".to_owned(), LIDARConfig { num_beams: 3, start_angle: -FRAC_PI_3, end_angle: FRAC_PI_3, ..Default::default()}),
-            ("sweeper".to_owned(), LIDARConfig { num_beams: 8, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, max_distance: 5.0, ..Default::default()}),
+            ("sweeper".to_owned(), LIDARConfig { num_beams: 11, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, max_distance: 5.0, ..Default::default()}),
         ].iter().cloned())
 });
 
