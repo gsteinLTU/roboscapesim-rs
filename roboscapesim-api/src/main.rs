@@ -10,9 +10,11 @@ use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
 };
-use std::{collections::HashMap, net::SocketAddr, sync::Mutex, time::SystemTime};
+
+use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
+use futures_executor::block_on;
 
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
 
@@ -20,8 +22,11 @@ static ENVIRONMENTS: Lazy<DashMap<String, EnvironmentInfo>> = Lazy::new(|| DashM
 
 static ROOMS: Lazy<DashMap<String, RoomInfo>> = Lazy::new(|| DashMap::new());
 
-static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
-
+static EXTERNAL_IP: Lazy<String> = Lazy::new(|| {
+    block_on(async {
+    get_external_ip().await.unwrap().trim().to_owned()
+    })
+});
 #[tokio::main]
 async fn main() {
     // Setup logger
@@ -31,11 +36,6 @@ async fn main() {
         .env()
         .init()
         .unwrap();
-
-    EXTERNAL_IP
-        .lock()
-        .unwrap()
-        .replace(get_external_ip().await.unwrap().trim().to_owned());
 
     let app = Router::new()
         .route("/server/status", get(get_server_status))
@@ -94,7 +94,7 @@ async fn main() {
 /// Get status of rooms on server
 async fn get_server_status() -> impl IntoResponse {
     serde_json::to_string(&ServerInfo {
-        address: EXTERNAL_IP.lock().unwrap().clone().unwrap(),
+        address: EXTERNAL_IP.to_owned(),
         max_rooms: SERVERS.iter().map(|x| x.value().max_rooms).sum(),
         last_update: SystemTime::now(),
     }).unwrap()
