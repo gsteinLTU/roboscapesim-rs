@@ -26,5 +26,26 @@
         "host": "remote",
         "path": "gstein/Treasure%20Hunt",
         "creator": "Gordon Stein"
+    },
+    "lidarroadeasy": {
+        "name": "LidarRoadEasy",
+        "description": "Lidar Road (Easy)",
+        "host": "remote",
+        "path": "gstein/LIDAR%20Road",
+        "creator": "Gordon Stein"
+    },
+    "lidarroadhard": {
+        "name": "LidarRoadHard",
+        "description": "Lidar Road (Hard)",
+        "host": "remote",
+        "path": "gstein/LIDAR%20Road%20Hard",
+        "creator": "Gordon Stein"
+    },
+    "lidarroadveryhard": {
+        "name": "LidarRoadVeryHard",
+        "description": "Lidar Road (Very Hard)",
+        "host": "remote",
+        "path": "gstein/LIDAR%20Road%20Very%20Hard",
+        "creator": "Gordon Stein"
     }
 }
