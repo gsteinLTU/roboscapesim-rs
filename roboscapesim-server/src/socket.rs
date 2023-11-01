@@ -193,7 +193,7 @@ pub async fn ws_accept() {
             info!("Error accepting connection: {:?}", e);
         }
 
-        sleep(Duration::from_millis(1)).await;
+        sleep(Duration::from_millis(2)).await;
     }
 }
 
