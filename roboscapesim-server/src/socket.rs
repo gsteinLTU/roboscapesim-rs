@@ -162,7 +162,7 @@ pub async fn ws_tx() {
             }
 
             if msg_count > 0 {
-                trace!("Sending {} messages to {}", msg_count, client.key());
+                //trace!("Sending {} messages to {}", msg_count, client.key());
             }
 
             let sink = &mut client.sink.lock().unwrap();

@@ -476,7 +476,6 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
             let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
-            info!("{:?}", visualinfo);
 
             let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
             response = vec![id.into()];            
@@ -572,10 +571,15 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 "lidar" => {
                     let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
                     let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
-                    let config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
+                    let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
                         info!("Unrecognized LIDAR config {}, using default", config);
                         &default
                     }).clone();
+
+                    if is_robot {
+                        config.offset_pos = vector![0.17,0.04,0.0];
+                    }
+
                     room.lidar_configs.insert(result.clone(), config);
                     result.into()
                 },

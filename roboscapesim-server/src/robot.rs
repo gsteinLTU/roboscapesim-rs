@@ -99,7 +99,7 @@ impl RobotData {
 
         // Size of robot
         const HW: f32 = 0.07 * SCALE;
-        const HH: f32 = 0.027 * SCALE;
+        const HH: f32 = 0.03 * SCALE;
         const HD: f32 = 0.03 * SCALE;
 
         let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + HH * 2.0, 0.0);

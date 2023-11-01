@@ -168,7 +168,7 @@ impl RoomData {
                                                 "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
                                                     // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
-                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string(), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
+                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
                                                 },
                                                 /*"RoboScape" => {
                                                     // TODO: RoboScape service but in Rust?
@@ -413,7 +413,7 @@ impl RoomData {
             return;
         }
 
-        trace!("Updating {}", self.name);
+        //trace!("Updating {}", self.name);
 
         //let max_delta_time = 1.0 / 30.0;
         let now = Instant::now();
