@@ -1,5 +1,4 @@
 use std::collections::{HashMap, BTreeMap};
-use std::f32::consts::FRAC_PI_2;
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -16,7 +15,7 @@ use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
 use roboscapesim_common::*;
 use roboscapesim_common::api::RoomInfo;
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 

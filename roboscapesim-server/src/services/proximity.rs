@@ -8,7 +8,7 @@ use nalgebra::Vector3;
 use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::{RigidBodyHandle, Real};
 
-use crate::{room::RoomData};
+use crate::room::RoomData;
 
 use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
