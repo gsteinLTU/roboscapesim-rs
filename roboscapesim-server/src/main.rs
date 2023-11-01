@@ -12,7 +12,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-use crate::api::{create_api, get_external_ip, EXTERNAL_IP};
+use crate::api::create_api;
 use crate::socket::{ws_accept, ws_rx, ws_tx};
 
 mod api;
@@ -48,10 +48,6 @@ async fn main() {
         .init()
         .unwrap();
     info!("Starting RoboScape Online Server...");
-
-    if let Ok(ip) = get_external_ip().await {
-        let _ = EXTERNAL_IP.lock().unwrap().insert(ip.trim().into());
-    }
 
     // Loop listening for new WS connections
     let _ws_loop = task::spawn(ws_accept());
