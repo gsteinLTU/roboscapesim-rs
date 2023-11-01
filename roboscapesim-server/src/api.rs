@@ -1,20 +1,15 @@
 use axum::{Json, response::IntoResponse, extract::Query};
-use futures::executor::block_on;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, ServerStatus, RoomInfo, EnvironmentInfo};
-use std::{net::SocketAddr, collections::HashMap};
+use std::{net::SocketAddr, collections::HashMap, sync::Mutex};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::{DEFAULT_SCENARIOS_FILE, LOCAL_SCENARIOS}};
 
-pub(crate) static EXTERNAL_IP: Lazy<String> = Lazy::new(|| {
-    block_on(async {
-        get_external_ip().await.expect("failed to get IP address").trim().to_owned()
-    })
-});
+pub static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
 pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
     .unwrap_or_else(|_| "3000".to_string())
@@ -125,15 +120,17 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
         return (axum::http::StatusCode::NOT_FOUND,Json(None));    
     }
 
+    let server = get_server().to_owned();
     let room = room.unwrap().clone();
     let room_data = room.lock().unwrap();
 
     let visitors = room_data.visitors.clone().into_iter().collect();
     
+    
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
         id: room_data.name.clone(),
         environment: room_data.environment.clone(),
-        server: get_server(),
+        server,
         creator: "TODO".to_owned(),
         has_password: room_data.password.is_some(),
         is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
@@ -212,12 +209,12 @@ pub(crate) fn get_main_api_server() -> String {
 }
 
 pub(crate) fn get_server() -> String {
-    let ip = EXTERNAL_IP.clone().replace(".", "-");
+    let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
     if ip == "127-0-0-1" {"ws"} else {"wss"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org" + if ip == "127-0-0-1" {":5000"} else {""}
 }
 
 pub(crate) fn get_local_api_server() -> String {
-    let ip = EXTERNAL_IP.clone().replace(".", "-");
+    let ip = EXTERNAL_IP.lock().unwrap().clone().unwrap().replace(".", "-");
     // Port 3000 is what's exposed on deployed servers, even if locally running on a different port
     if ip == "127-0-0-1" {"http"} else {"https"}.to_owned() + "://" + &ip + ".roboscapeonlineservers.netsblox.org:3000"
 }

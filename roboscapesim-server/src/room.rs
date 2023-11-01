@@ -927,7 +927,7 @@ impl RoomData {
         RoomInfo{
             id: self.name.clone(),
             environment: self.environment.clone(),
-            server: get_server(),
+            server: get_server().to_owned(),
             creator: "TODO".to_owned(),
             has_password: self.password.is_some(),
             is_hibernating: self.hibernating.load(std::sync::atomic::Ordering::Relaxed),
