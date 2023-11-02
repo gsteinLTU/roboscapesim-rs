@@ -26,7 +26,7 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.3.3"
 dotenvy = "0.15"
-netsblox-vm = { version = "0.2.15", default-features = false, features = ["std", "native-tls"] }
+netsblox-vm = { version = "0.2.16", default-features = false, features = ["std", "native-tls"] }
 axum-macros = "0.3.8"
 reqwest = "0.11"
 futures = "0.3.28"

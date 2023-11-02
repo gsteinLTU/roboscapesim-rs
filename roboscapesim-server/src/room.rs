@@ -228,7 +228,7 @@ impl RoomData {
 
                             if let Ok((_service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
                                 // TODO: check for listen
-                                system.inject_message(msg_type, values.iter().map(|(k, v)| (k.clone(), Value::from(v.clone()))).collect());
+                                system.inject_message(msg_type, values.iter().map(|(k, v)| (k.clone(), SimpleValue::String(v.clone()))).collect());
                             }
 
                             env.mutate(|mc, env| {
