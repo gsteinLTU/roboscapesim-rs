@@ -14,8 +14,9 @@ use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
-const ENTITY_LIMIT: usize = 50;
-const ROBOT_LIMIT: usize = 10;
+// TODO: Separate kinematic limit from dynamic entity limit
+const ENTITY_LIMIT: usize = 35;
+const ROBOT_LIMIT: usize = 4;
 
 pub fn create_world_service(id: &str) -> Service {
     // Create definition struct
@@ -465,33 +466,45 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             if msg.params.len() < 7 {
                 return (Ok(SimpleValue::Bool(false)), None);
             }
-            let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
-            let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
-            let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
-            let heading = num_val(&msg.params[3]);
-            let name = "block".to_string() + &room.objects.len().to_string();
-            let width = num_val(&msg.params[4]);
-            let height = num_val(&msg.params[5]);
-            let depth = num_val(&msg.params[6]);
-            let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
-            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
+            if room.count_non_robots() >= ENTITY_LIMIT {
+                info!("Entity limit already reached");
+                response = vec![false.into()];
+            } else {
+                let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
+                let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
+                let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
+                let heading = num_val(&msg.params[3]);
+                let name = "block".to_string() + &room.objects.len().to_string();
+                let width = num_val(&msg.params[4]);
+                let height = num_val(&msg.params[5]);
+                let depth = num_val(&msg.params[6]);
+                let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
+                let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
-            response = vec![id.into()];            
+                let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
+
+                let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
+                response = vec![id.into()];            
+            }
         },
         "addRobot" => {
             if msg.params.len() < 3 {
                 return (Ok(SimpleValue::Bool(false)), None);
             }
-            let x = num_val(&msg.params[0]);
-            let y = num_val(&msg.params[1]);
-            let z = num_val(&msg.params[2]);
-            let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
             
-            let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
-            response = vec![id.into()];
+            if room.robots.len() >= ROBOT_LIMIT {
+                info!("Robot limit already reached");
+                response = vec![false.into()];
+            } else {
+                let x = num_val(&msg.params[0]);
+                let y = num_val(&msg.params[1]);
+                let z = num_val(&msg.params[2]);
+                let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
+                
+                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
+                response = vec![id.into()];
+            }
         },
         "addSensor" => {
             if msg.params.len() < 2 {
@@ -503,95 +516,94 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
 
             // Check if object exists
             if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
-                return (Ok(SimpleValue::Bool(false)), None);
-            }
+                response = vec![false.into()];
+            } else {
+                let is_robot = room.robots.contains_key(&object);
+                let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
+                let override_name = None;
+        
+                // Options for proximity sensor
+                let mut targetpos = None;
+                let mut multiplier = 1.0;
+                let mut offset = 0.0;
+                
+                // Options for lidar
+                let mut config = "default".to_owned();
 
-
-            let is_robot = room.robots.contains_key(&object);
-            let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
-            let mut override_name = None;
-      
-            // Options for proximity sensor
-            let mut targetpos = None;
-            let mut multiplier = 1.0;
-            let mut offset = 0.0;
-            
-            // Options for lidar
-            let mut config = "default".to_owned();
-
-            if options.is_array() {
-                for option in options.as_array().unwrap() {
-                    if option.is_array() {
-                        let option = option.as_array().unwrap();
-                        if option.len() >= 2 && option[0].is_string() {
-                            let key = str_val(&option[0]).to_lowercase();
-                            let value = &option[1];
-                            match key.as_str() {
-                                // "name" => {
-                                //     if value.is_string() {
-                                //         override_name = Some(str_val(value));
-                                //     }
-                                // },
-                                "targetpos" => {
-                                    if value.is_array() {
-                                        let value = value.as_array().unwrap();
-                                        if value.len() >= 3 {
-                                            targetpos = Some(vector![num_val(&value[0]), num_val(&value[1]), num_val(&value[2])]);
+                if options.is_array() {
+                    for option in options.as_array().unwrap() {
+                        if option.is_array() {
+                            let option = option.as_array().unwrap();
+                            if option.len() >= 2 && option[0].is_string() {
+                                let key = str_val(&option[0]).to_lowercase();
+                                let value = &option[1];
+                                match key.as_str() {
+                                    // "name" => {
+                                    //     if value.is_string() {
+                                    //         override_name = Some(str_val(value));
+                                    //     }
+                                    // },
+                                    "targetpos" => {
+                                        if value.is_array() {
+                                            let value = value.as_array().unwrap();
+                                            if value.len() >= 3 {
+                                                targetpos = Some(vector![num_val(&value[0]), num_val(&value[1]), num_val(&value[2])]);
+                                            }
                                         }
-                                    }
-                                },
-                                "multiplier" => {
-                                    multiplier = num_val(&value);
-                                },
-                                "offset" => {
-                                    offset = num_val(&value);
-                                },
-                                "config" => {
-                                    if value.is_string() {
-                                        config = str_val(&value);
-                                    }
-                                },
-                                _ => {}
+                                    },
+                                    "multiplier" => {
+                                        multiplier = num_val(&value);
+                                    },
+                                    "offset" => {
+                                        offset = num_val(&value);
+                                    },
+                                    "config" => {
+                                        if value.is_string() {
+                                            config = str_val(&value);
+                                        }
+                                    },
+                                    _ => {}
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
+                let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
 
-            response = vec![match service_type.as_str() {
-                "position" => {
-                    RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
-                },
-                "proximity" => {
-                    let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
-                    room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
-                    result.into()
-                },
-                "lidar" => {
-                    let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
-                    let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
-                    let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
-                        info!("Unrecognized LIDAR config {}, using default", config);
-                        &default
-                    }).clone();
+                response = vec![match service_type.as_str() {
+                    "position" => {
+                        RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
+                    },
+                    "proximity" => {
+                        let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
+                        room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
+                        result.into()
+                    },
+                    "lidar" => {
+                        let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
+                        let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
+                        let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
+                            info!("Unrecognized LIDAR config {}, using default", config);
+                            &default
+                        }).clone();
 
-                    if is_robot {
-                        config.offset_pos = vector![0.17,0.04,0.0];
+                        if is_robot {
+                            config.offset_pos = vector![0.17,0.04,0.0];
+                        }
+
+                        room.lidar_configs.insert(result.clone(), config);
+                        result.into()
+                    },
+                    "entity" => {
+                        RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
+                    },
+                    _ => {
+                        info!("Unrecognized service type {}", service_type);
+                        false.into()
                     }
-
-                    room.lidar_configs.insert(result.clone(), config);
-                    result.into()
-                },
-                "entity" => {
-                    RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
-                },
-                _ => {
-                    info!("Unrecognized service type {}", service_type);
-                    false.into()
-                }
-            }];
+                }];
+            }
         },
         f => {
             info!("Unrecognized function {}", f);
@@ -624,8 +636,10 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
 
     // Check limits
     if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
+        info!("Robot limit already reached");
         return Some(Value::Bool(false));
     } else if entity_type != "robot" && room.count_non_robots() >= ENTITY_LIMIT {
+        info!("Entity limit already reached");
         return Some(Value::Bool(false));
     }
 
