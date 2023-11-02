@@ -25,6 +25,7 @@
 				'New simulation...': window.RoboScapeOnline_fns.new_sim_menu,
 				'Join room...': window.RoboScapeOnline_fns.join_sim_menu,
 				'Show 3D View': window.RoboScapeOnline_fns.show_3d_view,
+				'Reset Camera': window.RoboScapeOnline_fns.reset_camera,
 
             };
         }
@@ -193,7 +194,7 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {join_sim_menu, new_sim_menu, robots_in_room, room_id, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {join_sim_menu, new_sim_menu, reset_camera, robots_in_room, room_id, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
@@ -201,6 +202,7 @@
 		        window.RoboScapeOnline_fns = {};
 				window.RoboScapeOnline_fns.join_sim_menu = join_sim_menu;
 				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
+				window.RoboScapeOnline_fns.reset_camera = reset_camera;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.room_id = room_id;
 				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
