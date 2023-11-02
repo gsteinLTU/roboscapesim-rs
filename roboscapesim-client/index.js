@@ -96,7 +96,7 @@
     var element = document.createElement('link');
     element.setAttribute('rel', 'stylesheet');
     element.setAttribute('type', 'text/css');
-    element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
+    element.setAttribute('href', 'https://pseudomorphic.netsblox.org/style.css');
     document.head.appendChild(element);
 
     var extraStyle = document.createElement('style');
@@ -181,7 +181,7 @@
         }
     };
 
-    scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
+    scriptElement.setAttribute('src', 'https://pseudomorphic.netsblox.org/script.js');
     document.head.appendChild(scriptElement);
  
     var scriptElement = document.createElement('script');
@@ -193,17 +193,17 @@
 		loaderScriptElement.onload = () => {
 		    var s = document.createElement('script');
 		    s.type = "module";
-		    s.innerHTML = `import init, {show_3d_view, robots_in_room, room_id, join_sim_menu, new_sim_menu} from '${path}/pkg/roboscapesim_client.js';
+		    s.innerHTML = `import init, {robots_in_room, room_id, join_sim_menu, new_sim_menu, show_3d_view} from '${path}/pkg/roboscapesim_client.js';
 		    
 		    
 		        await init();
 		
 		        window.RoboScapeOnline_fns = {};
-				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 				window.RoboScapeOnline_fns.robots_in_room = robots_in_room;
 				window.RoboScapeOnline_fns.room_id = room_id;
 				window.RoboScapeOnline_fns.join_sim_menu = join_sim_menu;
 				window.RoboScapeOnline_fns.new_sim_menu = new_sim_menu;
+				window.RoboScapeOnline_fns.show_3d_view = show_3d_view;
 		        `;
 		    document.body.appendChild(s);
 		};

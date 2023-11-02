@@ -459,8 +459,12 @@ pub async fn new_room(environment: Option<String>, password: Option<String>, edi
             game.borrow().in_room.replace(true);
         });
         show_3d_view();
+    } else if let Err(e) = response {
+        show_message("Error", "Error creating room");
+        console_log!("Error creating room: {:?}", e);
+        // Reopen new dialog
+        new_sim_menu().await;
     }
-    
 }
 
 pub async fn join_room(id: String, password: Option<String>) {

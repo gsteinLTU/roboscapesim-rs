@@ -3,7 +3,7 @@
     var element = document.createElement('link');
     element.setAttribute('rel', 'stylesheet');
     element.setAttribute('type', 'text/css');
-    element.setAttribute('href', 'https://gsteinltu.github.io/PseudoMorphic/style.css');
+    element.setAttribute('href', 'https://pseudomorphic.netsblox.org/style.css');
     document.head.appendChild(element);
 
     var extraStyle = document.createElement('style');
@@ -88,7 +88,7 @@
         }
     };
 
-    scriptElement.setAttribute('src', 'https://gsteinltu.github.io/PseudoMorphic/script.js');
+    scriptElement.setAttribute('src', 'https://pseudomorphic.netsblox.org/script.js');
     document.head.appendChild(scriptElement);
  
     var scriptElement = document.createElement('script');
