@@ -10,12 +10,13 @@ use derivative::Derivative;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::runtime::{SimpleValue, ErrorCause};
+use netsblox_vm::std_system::Clock;
 use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, Key, System}, std_system::StdSystem};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
 use roboscapesim_common::*;
 use roboscapesim_common::api::RoomInfo;
-use serde_json::Value;
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -71,6 +72,10 @@ pub struct RoomData {
     /// Thread with VM if not in edit mode
     pub vm_thread: Option<JoinHandle<()>>,
 }
+
+pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
+    Arc::new(Clock::new(UtcOffset::UTC, Some(netsblox_vm::runtime::Precision::Medium)))
+});
 
 impl RoomData {
     pub fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
@@ -200,7 +205,7 @@ impl RoomData {
                             }
                         })),
                         command: None,
-                    }, UtcOffset::UTC).await);
+                    }, SHARED_CLOCK.clone()).await);
 
                     println!(">>> public id: {}\n", system.get_public_id());
                 

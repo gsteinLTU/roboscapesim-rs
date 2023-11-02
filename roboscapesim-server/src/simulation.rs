@@ -36,7 +36,7 @@ impl Simulation {
             rigid_body_set: Arc::new(Mutex::new(RigidBodySet::new())),
             collider_set: ColliderSet::new(),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
-            integration_parameters: IntegrationParameters { max_ccd_substeps: 4, max_stabilization_iterations: 8, max_velocity_friction_iterations: 12, max_velocity_iterations: 9, ..Default::default() },
+            integration_parameters: IntegrationParameters { max_ccd_substeps: 4, max_stabilization_iterations: 8, max_velocity_friction_iterations: 14, max_velocity_iterations: 8, ..Default::default() },
             physics_pipeline: PhysicsPipeline::new(),
             island_manager: IslandManager::new(),
             broad_phase: BroadPhase::new(),

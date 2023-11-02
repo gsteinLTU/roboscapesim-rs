@@ -3,6 +3,7 @@ use dashmap::DashMap;
 use log::info;
 use once_cell::sync::Lazy;
 use room::RoomData;
+use room::SHARED_CLOCK;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
 use std::sync::Arc;
@@ -81,6 +82,7 @@ async fn update_fn() {
         interval.tick().await;
 
         let update_time = Utc::now();
+        SHARED_CLOCK.update();
         // Perform updates
         for kvp in ROOMS.iter() {
             let m = kvp.value().clone();

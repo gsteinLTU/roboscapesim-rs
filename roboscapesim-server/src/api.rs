@@ -49,7 +49,7 @@ pub async fn announce_api() {
         tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         let data = (server.clone(), ServerStatus {
             active_rooms: ROOMS.len(),
-            hibernating_rooms: 0,
+            hibernating_rooms: ROOMS.iter().filter(|r| r.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
             max_rooms,
         });
         let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
