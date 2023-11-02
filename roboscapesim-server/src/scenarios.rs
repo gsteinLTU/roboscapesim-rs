@@ -47,6 +47,10 @@ pub static LOCAL_SCENARIOS: Lazy<BTreeMap<String, LocalScenarioDef>> = Lazy::new
 /// The default project to load if no project is specified
 pub const DEFAULT_PROJECT: &str = include_str!("../assets/scenarios/Default.xml");
 
+/// The base URL for the NetsBlox cloud server
+// TODO: make cloud URL configurable
+const CLOUD_BASE: &str = "https://cloud.netsblox.org";
+
 /// Load a project from a given environment name, or default to sample project if None
 pub async fn load_environment(environment: Option<String>) -> String {
     let environment = environment.and_then(|env| if env.trim().is_empty() { None } else { Some(env) });
@@ -83,13 +87,31 @@ pub async fn load_environment(environment: Option<String>) -> String {
         ProjectType::ProjectXML(DEFAULT_PROJECT.to_owned())
     };
 
-    let mut project = match environment {
+    let mut project = get_project(&environment).await;
+
+    if let Err(err) = project {
+        error!("Failed to load project: {:?}", err);
+
+        info!("Retrying");
+        project = get_project(&environment).await;
+
+        if let Err(err) = project {
+            error!("Failed to load project: {:?}", err);
+            info!("Loading default project");
+            project = Ok(DEFAULT_PROJECT.to_owned());
+        }
+    }
+ 
+    project.unwrap()
+}
+
+pub async fn get_project(project: &ProjectType) -> Result<String, String> {
+    match project {
         ProjectType::RemoteProject(project_name) => {
             info!("Loading remote project {}", project_name);
-            // TODO: make cloud URL configurable
-            let request = REQWEST_CLIENT.get(format!("https://cloud.netsblox.org/projects/user/{}", project_name)).send().await;
+            let request = REQWEST_CLIENT.get(format!("{}/projects/user/{}", CLOUD_BASE, project_name)).send().await;
             if request.is_err() {
-                Err(format!("failed to read file: {:?}", request.unwrap_err()))
+                Err(format!("failed to load project: {:?}", request.unwrap_err()))
             } else {
                 request.unwrap().json::<Project>().await.and_then(|proj| Ok(proj.to_xml())).map_err(|e| format!("failed to read file: {:?}", e))
             }
@@ -102,13 +124,5 @@ pub async fn load_environment(environment: Option<String>) -> String {
             info!("Loading project from XML");
             Ok(xml.clone())
         },
-    };
-
-    if let Err(err) = project {
-        error!("Failed to load project: {:?}", err);
-        project = Ok(DEFAULT_PROJECT.to_owned());
     }
-
-    let project = project.unwrap();
-    project
 }
