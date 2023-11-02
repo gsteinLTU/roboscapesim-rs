@@ -262,7 +262,9 @@ impl RoomData {
                         if !hibernating.load(Ordering::Relaxed) {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
-                                service.value().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values);
+                                if let Err(e) = service.value().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
+                                    error!("Error sending event to NetsBlox server: {:?}", e);
+                                }
                                 event_id += 1;
                             } else {
                                 info!("Service {} not found", service_id);

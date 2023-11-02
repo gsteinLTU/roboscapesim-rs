@@ -4,6 +4,7 @@ use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition, Request};
+use log::error;
 use rapier3d::prelude::RigidBodyHandle;
 use serde_json::Value;
 
@@ -39,7 +40,9 @@ impl PartialEq for Service {
 
 impl Service {
     pub fn enqueue_response_to(&self, request: Request, params: Result<Vec<Value>, String>) {
-        self.service.lock().unwrap().enqueue_response_to(request, params);
+        if let Err(e) = self.service.lock().unwrap().enqueue_response_to(request, params) {
+            error!("Could not enqueue response: {}", e);
+        }
     }
     
     pub fn update(&self) -> usize {
