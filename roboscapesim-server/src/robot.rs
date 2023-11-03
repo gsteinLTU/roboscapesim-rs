@@ -2,7 +2,6 @@ use std::net::UdpSocket;
 use std::time::{SystemTime, Duration};
 use std::f32::consts::FRAC_PI_2;
 
-use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{info, error, trace};
@@ -14,7 +13,7 @@ use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
 use crate::util::traits::resettable::Resettable;
-use crate::util::util::bytes_to_hex_string;
+use crate::util::util::{bytes_to_hex_string, get_timestamp};
 
 /// Represents a robot in the simulation
 #[derive(Derivative)]
@@ -247,7 +246,7 @@ impl RobotData {
         socket.set_read_timeout(Some(Duration::from_millis(1))).expect("Failed to set timeout");
         socket.set_write_timeout(Some(Duration::from_millis(1))).expect("Failed to set timeout");
 
-        robot.last_heartbeat = Utc::now().timestamp();
+        robot.last_heartbeat = get_timestamp();
         robot.socket = Some(socket);
         
         // Send initial message
@@ -263,7 +262,7 @@ impl RobotData {
 
         let mut had_messages = false;
 
-        if Utc::now().timestamp() - robot.last_heartbeat > 50 {
+        if get_timestamp() - robot.last_heartbeat > 50 {
             if let Err(e) = robot.send_roboscape_message(b"I") {
                 error!("{}", e);
             }
@@ -500,7 +499,7 @@ impl Resettable for RobotData {
         self.ticks = [0.0, 0.0];
         self.start_time = SystemTime::now();
 
-        self.last_heartbeat = Utc::now().timestamp();
+        self.last_heartbeat = get_timestamp();
         
         // Send initial message
         if let Err(e) = self.send_roboscape_message(b"I") {

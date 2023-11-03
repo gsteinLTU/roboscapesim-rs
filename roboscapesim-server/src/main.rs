@@ -1,4 +1,3 @@
-use chrono::Utc;
 use dashmap::DashMap;
 use log::info;
 use once_cell::sync::Lazy;
@@ -6,6 +5,7 @@ use room::RoomData;
 use room::SHARED_CLOCK;
 use simple_logger::SimpleLogger;
 use socket::SocketInfo;
+use util::util::get_timestamp;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::{
@@ -81,7 +81,7 @@ async fn update_fn() {
     loop {
         interval.tick().await;
 
-        let update_time = Utc::now();
+        let update_time = get_timestamp();
         SHARED_CLOCK.update();
         // Perform updates
         for kvp in ROOMS.iter() {
@@ -89,7 +89,7 @@ async fn update_fn() {
             if !m.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed) {
                 let lock = &mut m.lock().unwrap();
                 // Check timeout
-                if update_time.timestamp() - lock.last_interaction_time > lock.timeout {
+                if update_time - lock.last_interaction_time > lock.timeout {
                     lock.hibernating.store(true, std::sync::atomic::Ordering::Relaxed);
                     // Kick all users out
                     lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);

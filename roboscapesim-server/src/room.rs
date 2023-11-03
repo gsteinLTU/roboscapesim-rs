@@ -4,7 +4,6 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chrono::Utc;
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace, warn};
@@ -21,6 +20,7 @@ use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
 use crate::services::proximity::ProximityConfig;
+use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
@@ -91,7 +91,7 @@ impl RoomData {
             environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
             timeout: 60 * 15,
-            last_interaction_time: Utc::now().timestamp(),
+            last_interaction_time: get_timestamp(),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
             visitors: DashSet::new(),
@@ -511,13 +511,13 @@ impl RoomData {
             }
         }
 
-        let time = Utc::now().timestamp();
+        let time = get_timestamp();
 
         for mut robot in self.robots.iter_mut() {
             let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
             
             if updated {
-                self.last_interaction_time = Utc::now().timestamp();
+                self.last_interaction_time = get_timestamp();
             }
 
             // Check if claimed by user not in room
@@ -547,7 +547,7 @@ impl RoomData {
         while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
             if msg.0.function != "heartbeat" {
                 // TODO: figure out which interactions should keep room alive
-                //self.last_interaction_time = Utc::now().timestamp();
+                //self.last_interaction_time = get_timestamp();
                 msgs.push(msg);
             }
         }
@@ -668,7 +668,7 @@ impl RoomData {
             self.netsblox_msg_tx.send(((world_service.id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
-        self.last_interaction_time = Utc::now().timestamp();
+        self.last_interaction_time = get_timestamp();
     }
     
     /// Reset single robot
@@ -679,7 +679,7 @@ impl RoomData {
             info!("Request to reset non-existing robot {}", id);
         }
 
-        self.last_interaction_time = Utc::now().timestamp();
+        self.last_interaction_time = get_timestamp();
     }
 
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
@@ -976,7 +976,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     room.sockets.get_mut(username).unwrap().insert(peer_id);
-    room.last_interaction_time = Utc::now().timestamp();
+    room.last_interaction_time = get_timestamp();
 
     // Give client initial update
     room.send_info_to_client(peer_id);
@@ -1008,7 +1008,7 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
     let room = Arc::new(Mutex::new(RoomData::new(None, environment, password, edit_mode)));
     
     // Set last interaction to creation time
-    room.lock().unwrap().last_interaction_time = Utc::now().timestamp();
+    room.lock().unwrap().last_interaction_time = get_timestamp();
 
     let room_id = room.lock().unwrap().name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());

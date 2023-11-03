@@ -20,7 +20,6 @@ tower-http = { version = "0.4", features = ["cors"] }
 dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
 once_cell = { version = "1.18", features = ["parking_lot"] }
 nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
-chrono = { version = "0.4", features = ["serde"] }
 simple_logger = "4.2"
 log = "0.4"
 derivative = "2.2"
@@ -37,7 +36,6 @@ gc-arena = "0.3"
 crossbeam-channel = "0.5.8"
 async-tungstenite = { version = "0.23" }
 async-std = "1.12.0"
-postcard = { version = "1.0.8", features = ["use-std"] }
 rmp-serde = "1.1.2"
 atomic-instant = "0.1.1"
 
