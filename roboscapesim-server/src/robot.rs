@@ -3,7 +3,7 @@ use std::time::{SystemTime, Duration};
 use std::f32::consts::FRAC_PI_2;
 
 use chrono::Utc;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{info, error, trace};
 use nalgebra::{Point3,UnitQuaternion, Vector3};
@@ -256,7 +256,7 @@ impl RobotData {
         }
     }
 
-    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, u128>, dt: f64) -> (bool, Option<UpdateMessage>) {
+    pub fn robot_update(robot: &mut RobotData, sim: &mut Simulation, clients: &DashMap<String, DashSet<u128>>, dt: f64) -> (bool, Option<UpdateMessage>) {
         if robot.socket.is_none() {
             return (false, None);
         }
@@ -348,7 +348,7 @@ impl RobotData {
                             let duration = u16::from_le_bytes([buf[3], buf[4]]);
 
                             // Beep is only on client-side
-                            RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|kvp| *kvp.value()));
+                            RoomData::send_to_clients(&UpdateMessage::Beep(robot.id.clone(), freq, duration), clients.iter().map(|c| c.value().clone().into_iter()).flatten());
                         }
                     },
                     b'L' => { 

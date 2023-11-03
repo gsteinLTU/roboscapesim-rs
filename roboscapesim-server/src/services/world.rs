@@ -397,7 +397,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let id = str_val(&msg.params[0]);
             let text = str_val(&msg.params[1]);
             let timeout = msg.params[2].as_f64();
-            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| *p.value()));
+            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
         },
         "removeEntity" => {
             let id = str_val(&msg.params[0]).to_owned();
@@ -409,7 +409,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             room.remove_all();
         },
         "clearText" => {
-            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| *p.value()));
+            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
         },
         "addEntity" => {
             response = vec![add_entity(None, &msg.params, room).into()];

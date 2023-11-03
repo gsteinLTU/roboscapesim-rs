@@ -43,7 +43,7 @@ pub struct RoomData {
     pub timeout: i64,
     pub last_interaction_time: i64,
     pub hibernating: Arc<AtomicBool>,
-    pub sockets: DashMap<String, u128>,
+    pub sockets: DashMap<String, DashSet<u128>>,
     /// List of usernames of users who have visited the room
     pub visitors: DashSet<String>,
     pub last_update: Instant,
@@ -343,10 +343,12 @@ impl RoomData {
     /// Send an UpdateMessage to all clients in the room
     pub fn send_to_all_clients(&self, msg: &UpdateMessage) {
         for client in &self.sockets {
-            Self::send_to_client(
-                msg,
-                client.value().to_owned(),
-            );
+            for client_id in client.iter() {
+                Self::send_to_client(
+                    msg,
+                    client_id.to_owned(),
+                );
+            }
         }
     }
 
@@ -393,15 +395,18 @@ impl RoomData {
     pub fn update(&mut self) {
         // Check for disconnected clients
         let mut disconnected = vec![];
-        for client_id in &self.sockets {
-            if !CLIENTS.contains_key(client_id.value()) {
-                disconnected.push(client_id.key().to_owned());
+        for client_ids in self.sockets.iter() {
+            for client_id in client_ids.value().iter() {
+                if !CLIENTS.contains_key(&client_id) {
+                    disconnected.push((client_ids.key().clone(), client_id.to_owned()));
+                }
             }
         }
-        for client_id in disconnected {
-            let username = self.sockets.remove(&client_id).unwrap().0.to_owned();
+        for (username, client_id) in disconnected {
+            self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
 
             // Send leave message to clients
+            // TODO: handle multiple clients from one username better?
             let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
             self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
         }
@@ -434,61 +439,64 @@ impl RoomData {
         let mut robot_resets = vec![];
         for client in self.sockets.iter() {
             let client_username = client.key().to_owned();
-            let client = CLIENTS.get(client.value());
 
-            if let Some(client) = client {
-                while let Ok(msg) = client.rx.recv_timeout(Duration::default()) {
-                    match msg {
-                        ClientMessage::ResetAll => { needs_reset = true; },
-                        ClientMessage::ResetRobot(robot_id) => {
-                            if self.is_authorized(*client.key(), &robot_id) {
-                                robot_resets.push(robot_id);
-                            }
-                        },
-                        ClientMessage::ClaimRobot(robot_id) => {
-                            // Check if robot is free
-                            if self.is_authorized(*client.key(), &robot_id) {
-                                // Claim robot
-                                if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                    if robot.claimed_by.is_none() {
-                                        robot.claimed_by = Some(client_username.clone());
+            for client in client.value().iter() {
+                let client = CLIENTS.get(&client);
 
-                                        // Send claim message to clients
-                                        self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
-                                    } else {
-                                        info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
-                                    }
+                if let Some(client) = client {
+                    while let Ok(msg) = client.rx.recv_timeout(Duration::default()) {
+                        match msg {
+                            ClientMessage::ResetAll => { needs_reset = true; },
+                            ClientMessage::ResetRobot(robot_id) => {
+                                if self.is_authorized(*client.key(), &robot_id) {
+                                    robot_resets.push(robot_id);
                                 }
-                            } else {
-                                info!("Client {} not authorized to claim robot {}", client_username, robot_id);
-                            }
-                        },
-                        ClientMessage::UnclaimRobot(robot_id) => {
-                            // Check if robot is free
-                            if self.is_authorized(*client.key(), &robot_id) {
-                                // Claim robot
-                                if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                    if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == &client_username) {
-                                        robot.claimed_by = None;
+                            },
+                            ClientMessage::ClaimRobot(robot_id) => {
+                                // Check if robot is free
+                                if self.is_authorized(*client.key(), &robot_id) {
+                                    // Claim robot
+                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                                        if robot.claimed_by.is_none() {
+                                            robot.claimed_by = Some(client_username.clone());
 
-                                        // Send Unclaim message to clients
-                                        self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
-                                    } else {
-                                        info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
+                                            // Send claim message to clients
+                                            self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
+                                        } else {
+                                            info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
+                                        }
                                     }
+                                } else {
+                                    info!("Client {} not authorized to claim robot {}", client_username, robot_id);
                                 }
-                            } else {
-                                info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
+                            },
+                            ClientMessage::UnclaimRobot(robot_id) => {
+                                // Check if robot is free
+                                if self.is_authorized(*client.key(), &robot_id) {
+                                    // Claim robot
+                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                                        if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == &client_username) {
+                                            robot.claimed_by = None;
+
+                                            // Send Unclaim message to clients
+                                            self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
+                                        } else {
+                                            info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
+                                        }
+                                    }
+                                } else {
+                                    info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
+                                }
+                            },
+                            ClientMessage::EncryptRobot(robot_id) => {
+                                if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                                    robot.send_roboscape_message(&[b'P', 0]).unwrap();
+                                    robot.send_roboscape_message(&[b'P', 1]).unwrap();
+                                }
+                            },
+                            _ => {
+                                warn!("Unhandled client message: {:?}", msg);
                             }
-                        },
-                        ClientMessage::EncryptRobot(robot_id) => {
-                            if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                robot.send_roboscape_message(&[b'P', 0]).unwrap();
-                                robot.send_roboscape_message(&[b'P', 1]).unwrap();
-                            }
-                        },
-                        _ => {
-                            warn!("Unhandled client message: {:?}", msg);
                         }
                     }
                 }
@@ -517,7 +525,7 @@ impl RoomData {
                 if !self.sockets.contains_key(claimant) {
                     info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
                     robot.value_mut().claimed_by = None;
-                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().to_owned()));
+                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             }
 
@@ -526,10 +534,10 @@ impl RoomData {
                 if let Some(claimant) = &robot.value().claimed_by {
                     if let Some(client) = self.sockets.get(claimant) {
                         // Only send to owner
-                        RoomData::send_to_client(&msg, client.value().to_owned());
+                        RoomData::send_to_clients(&msg, client.value().clone().into_iter());
                     }
                 } else {
-                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().to_owned()));
+                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             }
         }
@@ -689,7 +697,7 @@ impl RoomData {
             if let Some(claimant) = &robot.claimed_by {
                 // Make sure not only claim matches but also that claimant is still in-room
                 // Get client username
-                let client = self.sockets.iter().find(|c| c.value() == &client);
+                let client = self.sockets.iter().find(|c| c.value().contains(&client));
 
                 // Only test if client is still in room
                 if let Some(client) = client {
@@ -962,7 +970,12 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     if !room.visitors.contains(&username.to_owned()) {
         room.visitors.insert(username.to_owned());
     }
-    room.sockets.insert(username.to_string(), peer_id);
+
+    if !room.sockets.contains_key(username) {
+        room.sockets.insert(username.to_string(), DashSet::new());
+    }
+
+    room.sockets.get_mut(username).unwrap().insert(peer_id);
     room.last_interaction_time = Utc::now().timestamp();
 
     // Give client initial update
