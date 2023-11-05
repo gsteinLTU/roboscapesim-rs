@@ -938,6 +938,14 @@ impl RoomData {
         (self.objects.len() - self.robots.len()).clamp(0, self.objects.len())
     }
 
+    pub(crate) fn count_kinematic(&self) -> usize {
+        self.objects.iter().filter(|o| o.value().is_kinematic).count()
+    }
+
+    pub(crate) fn count_dynamic(&self) -> usize {
+        self.objects.iter().filter(|o| !o.value().is_kinematic).count() - self.robots.len()
+    }
+
     pub(crate) fn get_room_info(&self) -> RoomInfo {
         RoomInfo{
             id: self.name.clone(),

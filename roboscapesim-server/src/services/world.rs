@@ -15,7 +15,8 @@ use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
 // TODO: Separate kinematic limit from dynamic entity limit
-const ENTITY_LIMIT: usize = 35;
+const DYNAMIC_ENTITY_LIMIT: usize = 25;
+const KINEMATIC_ENTITY_LIMIT: usize = 75;
 const ROBOT_LIMIT: usize = 4;
 
 pub fn create_world_service(id: &str) -> Service {
@@ -467,23 +468,23 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 return (Ok(SimpleValue::Bool(false)), None);
             }
 
-            if room.count_non_robots() >= ENTITY_LIMIT {
+            let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
+            let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
+            let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
+            let heading = num_val(&msg.params[3]);
+            let name = "block".to_string() + &room.objects.len().to_string();
+            let width = num_val(&msg.params[4]);
+            let height = num_val(&msg.params[5]);
+            let depth = num_val(&msg.params[6]);
+            let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
+            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
+
+            let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
+
+            if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || (kinematic && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT){
                 info!("Entity limit already reached");
                 response = vec![false.into()];
             } else {
-                let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
-                let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
-                let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
-                let heading = num_val(&msg.params[3]);
-                let name = "block".to_string() + &room.objects.len().to_string();
-                let width = num_val(&msg.params[4]);
-                let height = num_val(&msg.params[5]);
-                let depth = num_val(&msg.params[6]);
-                let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
-                let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
-
-                let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
-
                 let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
                 response = vec![id.into()];            
             }
@@ -638,9 +639,6 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
         info!("Robot limit already reached");
         return Some(Value::Bool(false));
-    } else if entity_type != "robot" && room.count_non_robots() >= ENTITY_LIMIT {
-        info!("Entity limit already reached");
-        return Some(Value::Bool(false));
     }
 
     let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
@@ -729,6 +727,13 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
 
         let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
     
+        if entity_type != "robot" {
+            if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
+                info!("Entity limit already reached");
+                return Some(Value::Bool(false));
+            }
+        }        
+
         let id = match entity_type.as_str() {
             "robot" => {
                 Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
