@@ -405,6 +405,10 @@ impl RoomData {
         for (username, client_id) in disconnected {
             self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
 
+            if self.sockets.get(&username).unwrap().value().is_empty() {
+                self.sockets.remove(&username);
+            }
+
             // Send leave message to clients
             // TODO: handle multiple clients from one username better?
             let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
