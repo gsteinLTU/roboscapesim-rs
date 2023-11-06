@@ -32,7 +32,7 @@ futures = "0.3"
 rayon = "1.8"
 color-name = "1.1.0"
 colorsys = "0.6.7"
-gc-arena = "0.3"
+gc-arena = "0.4"
 crossbeam-channel = "0.5.8"
 async-tungstenite = { version = "0.23" }
 async-std = "1.12.0"
