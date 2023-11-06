@@ -1,0 +1,10 @@
+FROM caddy:2-alpine
+
+RUN apk add --no-cache curl
+
+COPY update_caddyfile.sh .
+COPY Caddyfile.template .
+
+RUN chmod +x update_caddyfile.sh
+
+CMD [ "sh", "-c", "./update_caddyfile.sh && caddy run --config Caddyfile" ]

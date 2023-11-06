@@ -1,0 +1,35 @@
+version: "3.7"
+
+services:
+  caddy:
+    image: gstein17/roboscapesim-rs-caddy:latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    # ports:
+    #   - "5000:5000"
+    #   - "3000:3000"
+    #   - "443/443"
+    #   - "443:443/udp"
+    network_mode: "host"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+  roboscape:
+    image: gstein17/roboscapesim-rs-server:latest
+    restart: unless-stopped
+    # ports:
+    #   - "15000:15000"
+    #   - "13000:13000"
+    network_mode: "host"
+    environment:
+      - LOCAL_API_PORT=13000
+      - LOCAL_WS_PORT=15000
+      - IOTSCAPE_PORT=1978
+      - ROBOSCAPE_PORT=1973
+
+
+volumes:
+  caddy_data:
+    external: true
+  caddy_config:
