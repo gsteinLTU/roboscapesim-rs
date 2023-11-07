@@ -538,7 +538,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 let z = num_val(&msg.params[2]);
                 let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
                 
-                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false, None);
+                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false, None, None);
                 response = vec![id.into()];
             }
         },
@@ -736,12 +736,17 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     if options.contains_key("size") {
         match &options.get("size").unwrap() {
             serde_json::Value::Number(n) => {
-                size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32].repeat(3);
+                size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 1000.0) as f32].repeat(3);
+            },
+            serde_json::Value::String(s) => {
+                size = vec![s.parse::<f32>().unwrap_or(1.0).clamp(0.05, 1000.0)].repeat(3);
             },
             serde_json::Value::Array(a) =>  {
-                size = a.iter().map(|n| num_val(n).clamp(0.05, 100000.0)).collect();
+                size = a.iter().map(|n| num_val(n).clamp(0.05, 1000.0)).collect();
             },
-            _ => {}
+            other => {
+                info!("Invalid size option: {:?}", other);
+            }
         }
     } else {
         size = vec![1.0, 1.0, 1.0];
@@ -763,7 +768,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     let id = match entity_type.as_str() {
         "robot" => {
             let speed_mult = options.get("speed").clone().map(num_val);
-            Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult))
+            Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult, Some(size[0])))
         },
         "box" | "block" | "cube" | "cuboid" => {
             let name = "block".to_string() + &room.objects.len().to_string();

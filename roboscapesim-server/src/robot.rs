@@ -92,21 +92,23 @@ impl RobotData {
     }
 
     /// Create physics body for robot, returns RobotData for the robot
-    pub fn create_robot_body(sim: &mut Simulation, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>) -> RobotData {
+    pub fn create_robot_body(sim: &mut Simulation, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>, scale: Option<Real>) -> RobotData {
         let mac = mac.unwrap_or_else(generate_random_mac_address);
         let id = bytes_to_hex_string(&mac).to_owned();
         info!("Creating robot {}", id);
 
-        // Size of robot
-        const HW: f32 = 0.07 * SCALE;
-        const HH: f32 = 0.03 * SCALE;
-        const HD: f32 = 0.03 * SCALE;
+        let scale = scale.unwrap_or(1.0) * SCALE;
 
-        let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + HH * 2.0, 0.0);
+        // Size of robot
+        let hw: f32 = 0.07 * scale;
+        let hh: f32 = 0.03 * scale;
+        let hd: f32 = 0.03 * scale;
+
+        let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
         let mut box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
 
         let rigid_body = RigidBodyBuilder::dynamic()
-            .translation(vector![box_center.x * SCALE, box_center.y * SCALE, box_center.z * SCALE])
+            .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
             .angular_damping(5.0)
             .linear_damping(5.0)
             .ccd_enabled(true)
@@ -114,19 +116,19 @@ impl RobotData {
         
         let vehicle_handle = sim.rigid_body_set.lock().unwrap().insert(rigid_body);
         
-        let collider = ColliderBuilder::cuboid(HW, HH, HD).density(25.0);
+        let collider = ColliderBuilder::cuboid(hw, hh, hd).density(25.0);
         sim.collider_set.insert_with_parent(collider, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
         let wheel_half_width = 0.01;
         let wheel_positions = [
-            point![HW * 0.5, -HH + 0.015 * SCALE, HD + wheel_half_width * SCALE],
-            point![HW * 0.5, -HH + 0.015 * SCALE, -HD - wheel_half_width * SCALE],
+            point![hw * 0.5, -hh + 0.015 * scale, hd + wheel_half_width * scale],
+            point![hw * 0.5, -hh + 0.015 * scale, -hd - wheel_half_width * scale],
         ];
 
-        const BALL_WHEEL_RADIUS: f32 = 0.015 * SCALE;
+        let ball_wheel_radius: f32 = 0.015 * scale;
         let ball_wheel_positions = [
-            point![-HW * 0.75, -HH, 0.0]
+            point![-hw * 0.75, -hh, 0.0]
         ];
 
 
@@ -150,15 +152,15 @@ impl RobotData {
                     .enabled_translations(false, false, false)
             );
 
-            let collider = ColliderBuilder::cylinder(wheel_half_width * SCALE, 0.03  * SCALE).friction(0.8).density(10.0);
+            let collider = ColliderBuilder::cylinder(wheel_half_width * scale, 0.03  * scale).friction(0.8).density(10.0);
             //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
             sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
                 .local_anchor1(pos)
-                .local_anchor2(point![0.0, 0.01 * SCALE * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
+                .local_anchor2(point![0.0, 0.01 * scale * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
                 .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
-                .motor_max_force(JointAxis::AngZ, 1000.0)
+                .motor_max_force(JointAxis::AngZ, 300.0 * scale * scale)
                 .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
                 .motor_velocity(JointAxis::AngZ, 0.0, 0.0)
                 .build();
@@ -182,7 +184,7 @@ impl RobotData {
                     .enabled_translations(false, false, false)
             );
 
-            let collider = ColliderBuilder::ball(BALL_WHEEL_RADIUS).density(5.0).friction(0.25);
+            let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.25);
             sim.collider_set.insert_with_parent(collider, wheel_rb, &mut sim.rigid_body_set.lock().unwrap());
 
             let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
@@ -196,9 +198,9 @@ impl RobotData {
         }
 
         // Create whiskers
-        let whisker_l = ColliderBuilder::cuboid(HW * 0.4, 0.025, HD * 0.8).sensor(true).translation(vector![HW * 1.25, 0.05, HD * -0.4]);
+        let whisker_l = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * -0.4]);
         let whisker_l = sim.collider_set.insert_with_parent(whisker_l, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
-        let whisker_r = ColliderBuilder::cuboid(HW * 0.4, 0.025, HD * 0.8).sensor(true).translation(vector![HW * 1.25, 0.05, HD * 0.4]);
+        let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
         let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         // Apply position and orientation

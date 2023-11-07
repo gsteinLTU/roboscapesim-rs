@@ -25,7 +25,7 @@ use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
 use crate::services::{proximity::{create_proximity_service, handle_proximity_sensor_message}, trigger::{handle_trigger_message, create_trigger_service}, entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
@@ -738,17 +738,18 @@ impl RoomData {
     }
 
     /// Add a robot to a room
-    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool, speed_mult: Option<f32>) -> String {
+    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool, speed_mult: Option<f32>, scale: Option<f32>) -> String {
         let speed_mult = speed_mult.unwrap_or(1.0).clamp(-10.0, 10.0);
+        let scale: f32 = scale.unwrap_or(1.0).clamp(1.0, 5.0);
 
         let simulation = &mut room.sim.lock().unwrap();
-        let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation));
+        let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation), Some(scale));
         robot.speed_scale = speed_mult;
         let robot_id: String = "robot_".to_string() + robot.id.as_str();
         simulation.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {
             name: robot_id.clone(),
-            transform: Transform {scaling: vector![3.0,3.0,3.0], ..Default::default() },
+            transform: Transform {scaling: vector![scale * SCALE, scale * SCALE, scale * SCALE], ..Default::default() },
             visual_info: Some(VisualInfo::Mesh("parallax_robot.glb".into())),
             is_kinematic: false,
             updated: true,
