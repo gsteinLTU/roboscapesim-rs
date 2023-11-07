@@ -16,12 +16,16 @@ use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
 
+/// Known servers
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
 
+/// Known environments, should be available on all servers (being NetsBlox projects)
 static ENVIRONMENTS: Lazy<DashMap<String, EnvironmentInfo>> = Lazy::new(|| DashMap::new());
 
+/// Known rooms
 static ROOMS: Lazy<DashMap<String, RoomInfo>> = Lazy::new(|| DashMap::new());
 
+/// External IP address
 static EXTERNAL_IP: OnceCell<String> = OnceCell::new();
 
 #[tokio::main]
