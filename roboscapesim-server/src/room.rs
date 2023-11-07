@@ -90,7 +90,7 @@ impl RoomData {
             name: name.unwrap_or(Self::generate_room_id(None)),
             environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
-            timeout: 60 * 15,
+            timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
             last_interaction_time: get_timestamp(),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
