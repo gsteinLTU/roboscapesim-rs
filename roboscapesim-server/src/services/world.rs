@@ -172,7 +172,7 @@ pub fn create_world_service(id: &str) -> Service {
                 MethodParam {
                     name: "rotation".to_owned(),
                     documentation: Some("Yaw or list of pitch, yaw, roll".to_owned()),
-                    r#type: "number".to_owned(),
+                    r#type: "string".to_owned(),
                     optional: false,
                 },
                 MethodParam {
@@ -511,7 +511,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                     None
                 }));
 
-                parse_visual_info(options, Shape::Box).unwrap_or_default() 
+                parse_visual_info(&options, Shape::Box).unwrap_or_default() 
             } else { 
                 parse_visual_info_color(visualinfo, Shape::Box)
             };
@@ -538,7 +538,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 let z = num_val(&msg.params[2]);
                 let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
                 
-                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false);
+                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false, None);
                 response = vec![id.into()];
             }
         },
@@ -698,10 +698,111 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
     let y = num_val(&params[2]).clamp(-MAX_COORD, MAX_COORD);
     let z = num_val(&params[3]).clamp(-MAX_COORD, MAX_COORD);
-    let rotation = &params[4];
-    let options = &params[5];
+    let mut options = params[5].clone();
 
     // Parse rotation
+    let rotation = parse_rotation(&params[4]);
+
+    if !options.is_array() {
+        options = serde_json::Value::Array(vec![]);
+    }
+
+    // Parse options
+    let options = options.as_array().unwrap();
+
+    let shape = match entity_type.as_str() {
+        "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
+        "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
+        _ => Shape::Box
+    };
+
+    // Transform into dict
+    let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
+        if option.is_array() {
+            let option = option.as_array().unwrap();
+
+            if option.len() >= 2 && option[0].is_string() {
+                return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+            }
+        }
+
+        None
+    }));
+
+    // Check for each option
+    let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
+    let mut size = vec![];
+
+    if options.contains_key("size") {
+        match &options.get("size").unwrap() {
+            serde_json::Value::Number(n) => {
+                size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32].repeat(3);
+            },
+            serde_json::Value::Array(a) =>  {
+                size = a.iter().map(|n| num_val(n).clamp(0.05, 100000.0)).collect();
+            },
+            _ => {}
+        }
+    } else {
+        size = vec![1.0, 1.0, 1.0];
+    }
+
+    while size.len() < 3 {
+        size.push(1.0);
+    }
+
+    let parsed_visualinfo = parse_visual_info(&options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+
+    if entity_type != "robot" {
+        if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
+            info!("Entity limit already reached");
+            return Some(Value::Bool(false));
+        }
+    }        
+
+    let id = match entity_type.as_str() {
+        "robot" => {
+            let speed_mult = options.get("speed").clone().map(num_val);
+            Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult))
+        },
+        "box" | "block" | "cube" | "cuboid" => {
+            let name = "block".to_string() + &room.objects.len().to_string();
+        
+            if size.len() == 1 {
+                size = vec![size[0], size[0], size[0]];
+            } else if size.is_empty() {
+                size = vec![1.0, 1.0, 1.0];
+            }
+
+            Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
+        },
+        "ball" | "sphere" | "orb" | "spheroid" => {
+            let name = "ball".to_string() + &room.objects.len().to_string();
+
+            if size.is_empty() {
+                size = vec![1.0];
+            }
+
+            Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+        },
+        "trigger" => {
+            let name = "trigger".to_string() + &room.objects.len().to_string();
+            Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
+        },
+        _ => {
+            info!("Unknown entity type requested: {entity_type}");
+            None
+        }
+    };
+
+    if let Some(id) = id {
+        return Some(id.into());
+    }
+    
+    None
+}
+
+fn parse_rotation(rotation: &Value) -> nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>> {
     let rotation = match rotation {
         serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32  * PI / 180.0, 0.0),
         serde_json::Value::String(s) => AngVector::new(0.0, s.parse::<f32>().unwrap_or_default()  * PI / 180.0, 0.0),
@@ -716,99 +817,10 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         },
         _ => AngVector::new(0.0, 0.0, 0.0)
     };
-
-    if options.is_array() {
-        // Parse options
-        let options = options.as_array().unwrap();
-
-        let shape = match entity_type.as_str() {
-            "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
-            "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
-            _ => Shape::Box
-        };
-
-        // Transform into dict
-        let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
-            if option.is_array() {
-                let option = option.as_array().unwrap();
-
-                if option.len() >= 2 && option[0].is_string() {
-                    return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
-                }
-            }
-
-            None
-        }));
-
-        // Check for each option
-        let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
-        let mut size = vec![];
-    
-        if options.contains_key("size") {
-            match &options.get("size").unwrap() {
-                serde_json::Value::Number(n) => {
-                    size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 100000.0) as f32];
-                },
-                serde_json::Value::Array(a) =>  {
-                    size = a.iter().map(|n| num_val(n).clamp(0.05, 100000.0)).collect();
-                },
-                _ => {}
-            }
-        }
-    
-        let parsed_visualinfo = parse_visual_info(options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
-    
-        if entity_type != "robot" {
-            if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
-                info!("Entity limit already reached");
-                return Some(Value::Bool(false));
-            }
-        }        
-
-        let id = match entity_type.as_str() {
-            "robot" => {
-                Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false))
-            },
-            "box" | "block" | "cube" | "cuboid" => {
-                let name = "block".to_string() + &room.objects.len().to_string();
-            
-                if size.len() == 1 {
-                    size = vec![size[0], size[0], size[0]];
-                } else if size.is_empty() {
-                    size = vec![1.0, 1.0, 1.0];
-                }
-
-                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
-            },
-            "ball" | "sphere" | "orb" | "spheroid" => {
-                let name = "ball".to_string() + &room.objects.len().to_string();
-
-                if size.is_empty() {
-                    size = vec![1.0];
-                }
-
-                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
-            },
-            "trigger" => {
-                let name = "trigger".to_string() + &room.objects.len().to_string();
-                Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
-            },
-            _ => {
-                info!("Unknown entity type requested: {entity_type}");
-                None
-            }
-        };
-        if let Some(id) = id {
-            return Some(id.into());
-        }
-    } else {
-        // TODO: IoTScape error
-        info!("Invalid options provided");
-    }
-    None
+    rotation
 }
 
-fn parse_visual_info(options: BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
+fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
     let mut parsed_visualinfo: Option<VisualInfo> = None;
 
     if options.len() == 0 {

@@ -210,6 +210,9 @@ pub enum UpdateMessage {
     /// Robot claimed and by whom
     #[serde(rename="rc")]
     RobotClaimed(String, String),
+    /// Error in VM
+    #[serde(rename="e")]
+    VMError(String, usize),
 }
 
 /// Struct containing possible message types sent to the server

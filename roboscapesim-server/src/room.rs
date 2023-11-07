@@ -112,7 +112,7 @@ impl RoomData {
             vm_thread: None,
         };
 
-        info!("Room {} created", obj.name);
+        info!("Creating Room {}", obj.name);
 
         // Setup test room
         // Create IoTScape service
@@ -250,6 +250,9 @@ impl RoomData {
                                     let res = proj.step(mc);
                                     if let ProjectStep::Error { error, proc } = &res {
                                         error!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error);
+                                        
+                                        // TODO: Send error to clients
+                                        let msg = UpdateMessage::VMError(format!("{:?}", error.cause).to_string(), error.pos);
                                     }
                                     idle_sleeper.consume(&res);
                                 }
@@ -283,6 +286,7 @@ impl RoomData {
             });
         }
 
+        info!("Room {} created", obj.name);
         obj
     }
 
@@ -734,9 +738,12 @@ impl RoomData {
     }
 
     /// Add a robot to a room
-    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool) -> String {
+    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool, speed_mult: Option<f32>) -> String {
+        let speed_mult = speed_mult.unwrap_or(1.0).clamp(-10.0, 10.0);
+
         let simulation = &mut room.sim.lock().unwrap();
         let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation));
+        robot.speed_scale = speed_mult;
         let robot_id: String = "robot_".to_string() + robot.id.as_str();
         simulation.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {

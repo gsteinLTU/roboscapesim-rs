@@ -222,6 +222,9 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
             update_claim_text();
             update_robot_buttons_visibility();
         },
+        Ok(update) => {
+            console_log!("Unhandled update: {:?}", update);
+        }
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
 }

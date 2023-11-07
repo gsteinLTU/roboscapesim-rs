@@ -158,9 +158,9 @@ impl RobotData {
                 .local_anchor1(pos)
                 .local_anchor2(point![0.0, 0.01 * SCALE * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
                 .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
-                .motor_max_force(JointAxis::AngZ, 750.0)
+                .motor_max_force(JointAxis::AngZ, 1000.0)
                 .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
-                .motor_velocity(JointAxis::AngZ, 0.0, 4.0)
+                .motor_velocity(JointAxis::AngZ, 0.0, 0.0)
                 .build();
 
             wheel_joints.push(sim.multibody_joint_set.insert(vehicle_handle, wheel_rb, joint, true).unwrap());
