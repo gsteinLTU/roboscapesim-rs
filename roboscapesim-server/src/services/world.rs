@@ -479,7 +479,30 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
             let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let parsed_visualinfo = parse_visual_info(visualinfo, Shape::Box);
+            let parsed_visualinfo = if visualinfo.is_array() {
+                let mut options = visualinfo.as_array().unwrap().clone();
+
+                // Check for 1x2 array
+                if options.len() == 2 && options[0].is_string() {
+                    options.push(serde_json::Value::Array(vec![options[0].clone(), options[1].clone()]));
+                }
+
+                let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
+                    if option.is_array() {
+                        let option = option.as_array().unwrap();
+        
+                        if option.len() >= 2 && option[0].is_string() {
+                            return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+                        }
+                    }
+        
+                    None
+                }));
+
+                parse_visual_info(options, Shape::Box).unwrap_or_default() 
+            } else { 
+                parse_visual_info_color(visualinfo, Shape::Box)
+            };
 
             if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || (kinematic && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT){
                 info!("Entity limit already reached");
@@ -702,30 +725,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
             }
         }
     
-        let mut parsed_visualinfo: Option<VisualInfo> = None;
-    
-        if options.contains_key("texture") {
-            let mut uscale = 1.0;
-            let mut vscale = 1.0;
-
-            if options.contains_key("uscale") {
-                uscale = num_val(options.get("uscale").unwrap());
-            }
-
-            if options.contains_key("vscale") {
-                vscale = num_val(options.get("vscale").unwrap());
-            }
-
-            parsed_visualinfo = Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
-        } else if options.contains_key("color") {
-            // Parse color data
-            parsed_visualinfo = Some(parse_visual_info(options.get("color").unwrap(), shape));
-        } else if options.contains_key("mesh") {
-            // Use mesh
-            parsed_visualinfo = Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
-        }
-
-        let parsed_visualinfo = parsed_visualinfo.unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+        let parsed_visualinfo = parse_visual_info(options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
     
         if entity_type != "robot" {
             if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
@@ -777,7 +777,37 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     None
 }
 
-fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
+fn parse_visual_info(options: BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
+    let mut parsed_visualinfo: Option<VisualInfo> = None;
+
+    if options.len() == 0 {
+        return None;
+    }
+    
+    if options.contains_key("texture") {
+        let mut uscale = 1.0;
+        let mut vscale = 1.0;
+
+        if options.contains_key("uscale") {
+            uscale = num_val(options.get("uscale").unwrap());
+        }
+
+        if options.contains_key("vscale") {
+            vscale = num_val(options.get("vscale").unwrap());
+        }
+
+        parsed_visualinfo = Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
+    } else if options.contains_key("color") {
+        // Parse color data
+        parsed_visualinfo = Some(parse_visual_info_color(options.get("color").unwrap(), shape));
+    } else if options.contains_key("mesh") {
+        // Use mesh
+        parsed_visualinfo = Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
+    }
+    parsed_visualinfo
+}
+
+fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
     let mut parsed_visualinfo = VisualInfo::default();
 
     if !visualinfo.is_null() {
@@ -809,11 +839,14 @@ fn parse_visual_info(visualinfo: &serde_json::Value, shape: roboscapesim_common:
                 }
             },
             serde_json::Value::Array(a) =>  { 
-                // Color as array
                 if a.len() == 3 {
+                    // Color as array
                     parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
-                } else {
-                    // Complex visual info, allows setting texture, shape, etc?
+                } else if a.len() == 4 {
+                    // Color as array with alpha
+                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
+                } else if a.len() == 1 {
+                    parsed_visualinfo = parse_visual_info_color(&a[0], shape);
                 }
             },
             _ => {

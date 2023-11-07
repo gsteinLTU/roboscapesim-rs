@@ -3,9 +3,9 @@ use js_sys::{Reflect, Function};
 use neo_babylon::prelude::*;
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
-use web_sys::{HtmlElement, window};
+use web_sys::{HtmlElement, window, Node};
 
-use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, console_log};
+use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, console_log, util::get_nb_externalvar};
 
 /// Stores information relevant to the current state
 pub(crate) struct Game {
@@ -112,6 +112,48 @@ impl Game {
         self.models.borrow_mut().insert(name.to_owned(), model.clone());
 
         Ok(model)
+    }
+
+    /// Remove a model from the scene
+    pub fn remove_object(&mut self, obj: String) {
+        let removed = self.models.borrow_mut().remove(&obj);
+    
+        if let None = removed {
+            console_log!("Object {} not found", &obj);
+        }
+    
+        // Robot-specific behavior
+        if obj.starts_with("robot_") {
+            let robotmenu: Node = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
+        
+            // Don't create duplicates in the menu
+            let mut search_node = robotmenu.first_child();
+    
+            while search_node.is_some() {
+                let node = search_node.unwrap();
+    
+                if let Some(txt) = node.text_content() {
+                    if txt == &obj[6..]{
+                        search_node = Some(node);
+                        break;
+                    }
+                }
+    
+                search_node = node.next_sibling();
+            }
+        
+            if let Some(search_node) = search_node {
+                robotmenu.remove_child(&search_node).unwrap();
+            }
+        }
+    }
+
+    /// Remove all models from the scene
+    pub fn remove_all_objects(&mut self) {
+        let names = self.models.borrow().keys().cloned().collect::<Vec<_>>();
+        for name in names {
+            self.remove_object(name.to_owned());
+        }
     }
 
     // After disconnect, cleanup will remove all models from the scene and perform other cleanup tasks

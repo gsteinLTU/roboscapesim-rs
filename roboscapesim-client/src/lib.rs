@@ -205,32 +205,11 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
         },
         Ok(UpdateMessage::RemoveObject(obj)) => {
             console_log!("Removing object {}", &obj);
-            game.borrow().models.borrow_mut().remove(&obj);
-
-                // Robot-specific behavior
-                if obj.starts_with("robot_") {
-                    let robotmenu: Node = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
-                    
-                    // Don't create duplicates in the menu
-                    let mut search_node = robotmenu.first_child();
-
-                    while search_node.is_some() {
-                        let node = search_node.unwrap();
-
-                        if let Some(txt) = node.text_content() {
-                            if txt == &obj[6..]{
-                                search_node = Some(node);
-                                break;
-                            }
-                        }
-
-                        search_node = node.next_sibling();
-                    }
-                    
-                    if let Some(search_node) = search_node {
-                        robotmenu.remove_child(&search_node).unwrap();
-                    }
-                }
+            game.borrow_mut().remove_object(obj);
+        },
+        Ok(UpdateMessage::RemoveAll()) => {
+            console_log!("Removing all objects");
+            game.borrow_mut().remove_all_objects();
         },
         Ok(UpdateMessage::RobotClaimed(robot, user)) => {
             console_log!("Robot {} claimed by {}", &robot, &user);

@@ -204,6 +204,9 @@ pub enum UpdateMessage {
     /// Client should remove an object with a given id
     #[serde(rename="ro")]
     RemoveObject(String),
+    /// Client should remove all objects in room
+    #[serde(rename="ra")]
+    RemoveAll(),
     /// Robot claimed and by whom
     #[serde(rename="rc")]
     RobotClaimed(String, String),

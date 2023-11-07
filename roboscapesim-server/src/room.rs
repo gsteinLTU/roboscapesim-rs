@@ -911,9 +911,6 @@ impl RoomData {
 
     pub(crate) fn remove_all(&mut self) {
         info!("Removing all entities from {}", self.name);
-        for obj in self.objects.iter() {
-            self.send_to_all_clients(&UpdateMessage::RemoveObject(obj.key().to_string()));
-        }
         self.objects.clear();
 
         // Remove non-world services
@@ -931,10 +928,9 @@ impl RoomData {
 
         for r in self.robots.iter() {
             simulation.cleanup_robot(r.value());
-
-            self.send_to_all_clients(&UpdateMessage::RemoveObject(r.key().to_string()));
         }
         self.robots.clear();
+        self.send_to_all_clients(&UpdateMessage::RemoveAll());
         info!("All entities removed from {}", self.name);
     }
 
