@@ -24,6 +24,7 @@ pub struct ServerStatus {
     pub hibernating_rooms: usize,
     #[serde(rename = "maxRooms")]
     pub max_rooms: usize,
+    pub address: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

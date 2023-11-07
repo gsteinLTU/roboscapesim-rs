@@ -31,6 +31,7 @@ pub async fn announce_api() {
         active_rooms: 0,
         hibernating_rooms: 0,
         max_rooms,
+        address: get_server(),
     });
     let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
     if let Err(err) = res {
@@ -51,6 +52,7 @@ pub async fn announce_api() {
             active_rooms: ROOMS.len(),
             hibernating_rooms: ROOMS.iter().filter(|r| r.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
             max_rooms,
+            address: get_server(),
         });
         let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
         if let Err(err) = res {
@@ -100,6 +102,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
         active_rooms: ROOMS.len(),
         hibernating_rooms,
         max_rooms: MAX_ROOMS,
+        address: get_server(),
     })
 }
 

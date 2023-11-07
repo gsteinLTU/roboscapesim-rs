@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
@@ -198,6 +198,22 @@ async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl 
         max_rooms: data.max_rooms,
         last_update: SystemTime::now(),
     };
+
+    // Check if server has been reset
+    if data.active_rooms + data.hibernating_rooms == 0 && SERVERS.contains_key(&server.address){
+        info!("Server {} reset", ip);
+        // Remove rooms that no longer exist on server
+        let mut rooms_to_remove = Vec::new();
+        for room in ROOMS.iter() {
+            if room.value().server == data.address.clone() {
+                rooms_to_remove.push(room.key().clone());
+            }
+        }
+        for room in rooms_to_remove {
+            ROOMS.remove(&room);
+        }
+    }
+
     SERVERS.insert(server.address.clone(), server);
     info!("Server {} announced", ip);
 }
@@ -211,7 +227,7 @@ async fn put_server_rooms(Json(data): Json<Vec<RoomInfo>>) -> impl IntoResponse 
 
 /// Update list of environments on server
 async fn put_server_environments(Json(data): Json<Vec<EnvironmentInfo>>) -> impl IntoResponse {
-    info!("{:?}", data);
+    trace!("Environments: {:?}", data);
     for environment in data {
         ENVIRONMENTS.insert(environment.id.clone(), environment);
     }
