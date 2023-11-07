@@ -273,6 +273,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
             };
             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
             material.set_diffuse_color((r.to_owned(), g.to_owned(), b.to_owned()).into());
+            material.set_specular_color((0.5, 0.5, 0.5).into());
             m.set_material(&material);
             m.set_receive_shadows(true);
             game.borrow().shadow_generator.add_shadow_caster(&m, true);
@@ -291,13 +292,14 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 _ => { todo!() }
             };
             let material = StandardMaterial::new(&obj.name, &game.borrow().scene.borrow());
-
+            
             let tex = Texture::new(&(ASSETS_DIR.to_owned() + (&("textures/".to_owned() + tex + ".png")).as_str()));
             tex.set_u_scale(uscale.to_owned().into());
             tex.set_v_scale(vscale.to_owned().into());
             material.set_diffuse_texture(tex);
-
+            
             material.set_diffuse_color((0.5, 0.5, 0.5).into());
+            material.set_specular_color((0.5, 0.5, 0.5).into());
             m.set_material(&material);
             m.set_receive_shadows(true);
             game.borrow().shadow_generator.add_shadow_caster(&m, true);

@@ -343,6 +343,18 @@ pub fn create_world_service(id: &str) -> Service {
         },
     );
 
+    definition.methods.insert(
+        "listTextures".to_owned(),
+        MethodDescription {
+            documentation: Some("List available textures".to_owned()),
+            params: vec![],
+            returns: MethodReturns {
+                documentation: None,
+                r#type: vec!["string".to_owned(), "string".to_owned()],
+            },
+        },
+    );
+
     definition.events.insert(
         "reset".to_owned(),
         EventDescription { params: vec![] },
@@ -628,6 +640,25 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                     }
                 }];
             }
+        },
+        "listTextures" => {
+            response = vec![
+                "brick".into(),
+                "bricks".into(),
+                "cobble".into(),
+                "crate".into(),
+                "dirt".into(),
+                "grass".into(),
+                "gravel".into(),
+                "grid".into(),
+                "lava".into(),
+                "sand".into(),
+                "sandstone".into(),
+                "stone".into(),
+                "stone_brick".into(),
+                "tree".into(),
+                "wood".into(),
+            ];
         },
         f => {
             info!("Unrecognized function {}", f);

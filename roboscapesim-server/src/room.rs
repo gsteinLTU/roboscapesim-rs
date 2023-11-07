@@ -8,7 +8,7 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::runtime::{SimpleValue, ErrorCause};
+use netsblox_vm::runtime::{SimpleValue, ErrorCause, CommandStatus, Command};
 use netsblox_vm::std_system::Clock;
 use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, Key, System}, std_system::StdSystem};
 use once_cell::sync::Lazy;
@@ -204,7 +204,14 @@ impl RoomData {
                                 _ => RequestStatus::UseDefault { key, request },
                             }
                         })),
-                        command: None,
+                        command: Some(Rc::new(move |_, _, key, command, entity| match command {
+                            Command::Print { style: _, value } => {
+                                if let Some(value) = value { info!("{entity:?} > {value:?}") }
+                                key.complete(Ok(()));
+                                CommandStatus::Handled
+                            },
+                            _ => CommandStatus::UseDefault { key, command },
+                        })),
                     }, SHARED_CLOCK.clone()).await);
 
                     println!(">>> public id: {}\n", system.get_public_id());
@@ -242,7 +249,7 @@ impl RoomData {
                                 for _ in 0..STEPS_PER_IO_ITER {
                                     let res = proj.step(mc);
                                     if let ProjectStep::Error { error, proc } = &res {
-                                        error!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error.cause);
+                                        error!("\n>>> runtime error in entity {:?}: {:?}\n", proc.get_call_stack().last().unwrap().entity.borrow().name, error);
                                     }
                                     idle_sleeper.consume(&res);
                                 }
