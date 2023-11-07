@@ -53,6 +53,7 @@ pub struct RobotData {
     /// Whether this robot can be claimed, non-claimable robots are intended for scenario controlled robots
     pub claimable: bool,
     pub start_time: SystemTime,
+    pub speed_scale: f32,
 }
 
 /// Possible drive modes
@@ -232,6 +233,7 @@ impl RobotData {
             claimed_by: None,
             claimable: true,
             start_time: SystemTime::now(),
+            speed_scale: 1.0,
         }
     }
 
@@ -291,8 +293,8 @@ impl RobotData {
         }
 
         // Update ticks
-        robot.ticks[0] += (robot.speed_l * -32.0) as f64 * dt;
-        robot.ticks[1] += (robot.speed_r * -32.0) as f64 * dt;
+        robot.ticks[0] += (robot.speed_l * robot.speed_scale * -32.0) as f64 * dt;
+        robot.ticks[1] += (robot.speed_r * robot.speed_scale * -32.0) as f64 * dt;
 
         let mut msg = None;
         
@@ -319,11 +321,11 @@ impl RobotData {
 
                             // Check prevents robots from inching forwards from "drive 0 0"
                             if f64::abs(robot.distance_l) > f64::EPSILON {
-                                robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                                robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
                             }
 
                             if f64::abs(robot.distance_r) > f64::EPSILON {
-                                robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED;
+                                robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
                             }                    
                         }
                     },
@@ -335,8 +337,8 @@ impl RobotData {
                             let s1 = i16::from_le_bytes([buf[1], buf[2]]);
                             let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-                            robot.speed_l = -s2 as f32 / 32.0;
-                            robot.speed_r = -s1 as f32 / 32.0;
+                            robot.speed_l = -s2 as f32 * robot.speed_scale / 32.0;
+                            robot.speed_r = -s1 as f32 * robot.speed_scale / 32.0;
                         }
                     },
                     b'B' => { 
