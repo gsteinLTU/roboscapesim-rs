@@ -1,11 +1,12 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, f32::consts::PI};
 
 use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
+use nalgebra::Vector3;
 use netsblox_vm::runtime::SimpleValue;
-use rapier3d::prelude::RigidBodyHandle;
+use rapier3d::prelude::{RigidBodyHandle, Real};
 
 use crate::room::RoomData;
 
@@ -142,7 +143,20 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
                             response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];
                     },
                     "getHeading" => {
-                            response = vec![o.rotation().euler_angles().1.into()];
+                            let q = o.position().rotation;
+                            let v1 = q.transform_vector(&Vector3::<Real>::x_axis());
+                            let mut angle = v1.dot(&Vector3::<Real>::x_axis()).acos();
+                            let cross = v1.cross(&Vector3::<Real>::x_axis());
+                            if Vector3::<Real>::y_axis().dot(&cross) < 0.0 {
+                                angle = -angle;
+                            }
+                            angle = angle * 180.0 / PI;
+
+                            if angle < -180.0 {
+                                angle = angle + 360.0;
+                            }
+
+                            response = vec![angle.into()];
                     },
                     f => {
                         info!("Unrecognized function {}", f);

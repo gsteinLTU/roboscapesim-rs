@@ -54,5 +54,12 @@
         "host": "remote",
         "path": "gstein/Box%20Pushing",
         "creator": "Gordon Stein"
+    },
+    "waypointnavigation": {
+        "name": "WaypointNavigation",
+        "description": "Waypoint Navigation scenario",
+        "host": "remote",
+        "path": "gstein/Waypoint%20Navigation",
+        "creator": "Gordon Stein"
     }
 }

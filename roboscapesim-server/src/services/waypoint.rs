@@ -85,7 +85,7 @@ pub fn handle_waypoint_message(room: &mut RoomData, msg: Request) -> HandleMessa
     let s = room.services.get(&(msg.device.clone(), ServiceType::WaypointList));
     if let Some(s) = s {
         let service = s.value();            
-        if let Some(t) = room.proximity_configs.get(&msg.device) {
+        if let Some(t) = room.waypoint_configs.get(&msg.device) {
             match msg.function.as_str() {
                 "getNextWaypoint" => {
                     // TODO: apply some function definable through some config setting
