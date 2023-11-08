@@ -91,7 +91,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Servi
 
     Service {
         id: id.to_string(),
-        service_type: ServiceType::PositionSensor,
+        service_type: ServiceType::ProximitySensor,
         service,
         last_announce,
         announce_period,
