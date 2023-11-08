@@ -145,8 +145,6 @@ impl Game {
             if let Some(search_node) = search_node {
                 robotmenu.remove_child(&search_node).unwrap();
             }
-            
-            update_robot_buttons_visibility();
         }
     }
 
@@ -156,9 +154,6 @@ impl Game {
         for name in names {
             self.remove_object(name.to_owned());
         }
-        
-        clear_robots_menu();
-        update_robot_buttons_visibility();
     }
 
     // After disconnect, cleanup will remove all models from the scene and perform other cleanup tasks

@@ -206,10 +206,15 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
         Ok(UpdateMessage::RemoveObject(obj)) => {
             console_log!("Removing object {}", &obj);
             game.borrow_mut().remove_object(obj);
+
+            update_robot_buttons_visibility();
         },
         Ok(UpdateMessage::RemoveAll()) => {
             console_log!("Removing all objects");
             game.borrow_mut().remove_all_objects();
+        
+            clear_robots_menu();
+            update_robot_buttons_visibility();
         },
         Ok(UpdateMessage::RobotClaimed(robot, user)) => {
             console_log!("Robot {} claimed by {}", &robot, &user);
