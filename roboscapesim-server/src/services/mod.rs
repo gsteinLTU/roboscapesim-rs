@@ -11,6 +11,7 @@ pub(crate) mod position;
 pub(crate) mod lidar;
 pub(crate) mod proximity;
 pub(crate) mod trigger;
+pub(crate) mod waypoint;
 
 /// The result of a message handler, combines the intermediate result and a possible IoTScape event message
 type HandleMessageResult = (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>);

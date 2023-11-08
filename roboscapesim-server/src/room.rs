@@ -20,6 +20,7 @@ use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
 use crate::services::proximity::ProximityConfig;
+use crate::services::waypoint::{create_waypoint_service, WaypointConfig, handle_waypoint_message};
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
@@ -62,6 +63,8 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub proximity_configs: HashMap<String, ProximityConfig>,
     #[derivative(Debug = "ignore")]
+    pub waypoint_configs: HashMap<String, WaypointConfig>,
+    #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
     pub netsblox_msg_tx: mpsc::Sender<((String, ServiceType), String, BTreeMap<String, String>)>,
@@ -70,6 +73,7 @@ pub struct RoomData {
     /// Whether the room is in edit mode, if so, IoTScape messages are sent to NetsBlox server instead of being handled locally by VM
     pub edit_mode: bool,
     /// Thread with VM if not in edit mode
+    #[derivative(Debug = "ignore")]
     pub vm_thread: Option<JoinHandle<()>>,
 }
 
@@ -104,6 +108,7 @@ impl RoomData {
             services: Arc::new(DashMap::new()),
             lidar_configs: HashMap::new(),
             proximity_configs: HashMap::new(),
+            waypoint_configs: HashMap::new(),
             last_sim_update: Instant::now(),
             iotscape_rx,
             netsblox_msg_tx,
@@ -585,6 +590,7 @@ impl RoomData {
                 "LIDARSensor" => handle_lidar_message(self, msg),
                 "ProximitySensor" => handle_proximity_sensor_message(self, msg),
                 "RoboScapeTrigger" => handle_trigger_message(self, msg),
+                "WaypointList" => handle_waypoint_message(self, msg),
                 t => {
                     info!("Service type {:?} not yet implemented.", t);
                     (Err(format!("Service type {:?} not yet implemented.", t)), None)
@@ -840,7 +846,7 @@ impl RoomData {
     }
 
     /// Add a service to the room
-    pub(crate) fn add_sensor(room: &mut RoomData, service_type: ServiceType, id: &str, service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<String, String> {
+    pub(crate) fn add_sensor(room: &mut RoomData, service_type: ServiceType, id: &str, _service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<String, String> {
         
         #[allow(unreachable_patterns)]
         let service = match service_type {
@@ -848,7 +854,8 @@ impl RoomData {
             ServiceType::Entity => Ok(create_entity_service(id, &target_rigid_body)),
             ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
             ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
-            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body, service_name_override)),
+            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body)),
+            ServiceType::WaypointList => Ok(create_waypoint_service(id, &target_rigid_body)),
             ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
             _ => Err(format!("Service type {:?} not yet implemented.", service_type))
         };

@@ -29,7 +29,7 @@ impl Default for ProximityConfig {
     }
 }
 
-pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, override_name: Option<String>) -> Service {
+pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -75,7 +75,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle, override
         params: vec![],
     });
     
-    let service = setup_service(definition, ServiceType::ProximitySensor, override_name.as_deref());
+    let service = setup_service(definition, ServiceType::ProximitySensor, None);
 
     service
         .lock()

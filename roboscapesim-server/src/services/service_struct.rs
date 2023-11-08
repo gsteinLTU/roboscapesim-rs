@@ -10,7 +10,7 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
-    World, Entity, PositionSensor, LIDAR, ProximitySensor, Trigger
+    World, Entity, PositionSensor, LIDAR, ProximitySensor, Trigger, WaypointList
 }
 
 #[derive(Derivative)]
@@ -73,6 +73,7 @@ pub(crate) fn setup_service(definition: ServiceDefinition, service_type: Service
                 ServiceType::PositionSensor => "PositionSensor",
                 ServiceType::ProximitySensor => "ProximitySensor",
                 ServiceType::Trigger => "RoboScapeTrigger",
+                ServiceType::WaypointList => "WaypointList",
             }
         ),
         definition,

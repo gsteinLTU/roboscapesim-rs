@@ -10,7 +10,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS}};
+use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
 
 use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
 
@@ -614,6 +614,11 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                     "proximity" => {
                         let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
                         room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
+                        result.into()
+                    },
+                    "waypoint" => {
+                        let result = RoomData::add_sensor(room, ServiceType::WaypointList, &object, override_name, body).unwrap();
+                        room.waypoint_configs.insert(result.clone(), WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() });
                         result.into()
                     },
                     "lidar" => {
