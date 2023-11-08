@@ -70,7 +70,7 @@ pub fn create_waypoint_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
 
     Service {
         id: id.to_string(),
-        service_type: ServiceType::PositionSensor,
+        service_type: ServiceType::WaypointList,
         service,
         last_announce,
         announce_period,
