@@ -20,7 +20,6 @@ use self::util::*;
 use self::game::*;
 use self::ui::*;
 
-
 extern crate console_error_panic_hook;
 
 thread_local! {
@@ -594,13 +593,8 @@ pub fn show_3d_view() {
 
 #[netsblox_extension_menu_item("Reset Camera")]
 #[wasm_bindgen]
-pub async fn reset_camera() {
-    GAME.with(|game| {
-        let game = game.borrow();
-        game.main_camera.set_position(&Vector3::new(0.0, 1.0, -5.0));
-        game.main_camera.set_rotation(&Vector3::new(0.0, 0.0, 0.0));
-        game.scene.borrow().set_active_camera(&game.main_camera);
-    });
+pub async fn reset_camera_menu() {
+    reset_camera();
 }
 
 #[netsblox_extension_block(name = "robotsInRoom", category = "network", spec = "robots in room", target = netsblox_extension_util::TargetObject::Both)]

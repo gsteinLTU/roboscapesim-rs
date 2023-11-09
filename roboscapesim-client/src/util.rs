@@ -4,6 +4,8 @@ use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{window, Document};
 
+use crate::GAME;
+
 /// Try to get a value from window.externalVariables
 pub(crate) fn get_nb_externalvar(name: &str) -> Result<JsValue, JsValue>
 {
@@ -95,6 +97,13 @@ pub(crate) fn get_selected_robot() -> Option<String> {
         "" => None,
         v => Some(v.to_owned()),
     }
+}
+
+/// Reset the camera to the default position and type
+pub(crate) fn reset_camera() {
+    GAME.with(|game| {
+        game.borrow().reset_camera();
+    });
 }
 
 /// Show a message box

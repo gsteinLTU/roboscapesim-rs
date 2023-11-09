@@ -189,5 +189,12 @@ impl Game {
         });
         clear_robots_menu();
         update_robot_buttons_visibility();
+        self.reset_camera();
+    }
+
+    pub fn reset_camera(&self) {
+        self.main_camera.set_position(&Vector3::new(0.0, 1.0, -5.0));
+        self.main_camera.set_rotation(&Vector3::new(0.0, 0.0, 0.0));
+        self.scene.borrow().set_active_camera(&self.main_camera);
     }
 }
