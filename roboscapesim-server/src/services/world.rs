@@ -767,8 +767,6 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
 
     let parsed_visualinfo = parse_visual_info(&options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
 
-    info!("{:?}", parsed_visualinfo);
-
     if entity_type != "robot" {
         if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
             info!("Entity limit already reached");
@@ -859,7 +857,14 @@ fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<
         return Some(parse_visual_info_color(options.get("color").unwrap(), shape));
     } else if options.contains_key("mesh") {
         // Use mesh
-        return Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
+        let mut mesh_name = str_val(options.get("mesh").unwrap());
+
+        // Assume non-specified extension is glb
+        if !mesh_name.contains('.') {
+            mesh_name += ".glb";
+        }
+
+        return Some(VisualInfo::Mesh(mesh_name));
     }
 
     None
