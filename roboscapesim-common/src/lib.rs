@@ -4,15 +4,19 @@ use serde::{Deserialize, Serialize};
 
 pub mod api;
 
+/// Trait for interpolating between two values
 pub trait Interpolatable<T> 
 where Self: Sized {
+    /// Interpolate between two values, assuming the interpolation is valid
     fn interpolate(&self, other: &T, t: f32) -> Self {
         self.try_interpolate(other, t).unwrap()
     }
     
+    /// Interpolate between two values, returning an Err if the interpolation is invalid
     fn try_interpolate(&self, other: &T, t: f32) -> Result<Self, &'static str>;
 }
 
+/// 3D Transform data for an object
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Transform {
     #[serde(rename="p")]
@@ -24,6 +28,7 @@ pub struct Transform {
 }
 
 impl Default for Transform {
+    /// Create a default Transform at (0,0,0) with no rotation or scaling
     fn default() -> Self {
         Self {
             position: Default::default(),
@@ -121,6 +126,7 @@ impl Into<Vector3<f32>> for Orientation {
     }
 }
 
+/// Possible shapes for an object
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Shape {
     Box, Sphere, Cylinder, Capsule
@@ -137,6 +143,7 @@ impl Display for Shape {
     }
 }
 
+/// Information about how to display an object, if at all
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VisualInfo {
     None,
@@ -148,6 +155,13 @@ pub enum VisualInfo {
 impl Default for VisualInfo {
     fn default() -> Self {
         Self::Color(1.0, 1.0, 1.0, Shape::Box)
+    }
+}
+
+impl VisualInfo {
+    /// Create a default VisualInfo with a given shape
+    pub fn default_with_shape(shape: Shape) -> Self {
+        Self::Color(1.0, 1.0, 1.0, shape)
     }
 }
 

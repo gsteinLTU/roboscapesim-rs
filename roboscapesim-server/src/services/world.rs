@@ -692,7 +692,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
 
     // TODO: use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
 
-    let entity_type = str_val(&params[0]).to_lowercase();
+    let mut entity_type = str_val(&params[0]).to_lowercase();
 
     // Check limits
     if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
@@ -718,7 +718,11 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     let shape = match entity_type.as_str() {
         "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
         "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
-        _ => Shape::Box
+        _ => {
+            info!("Unknown entity type requested: {entity_type}");
+            entity_type = "box".to_owned();
+            Shape::Box
+        }
     };
 
     // Transform into dict
@@ -762,6 +766,8 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     }
 
     let parsed_visualinfo = parse_visual_info(&options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+
+    info!("{:?}", parsed_visualinfo);
 
     if entity_type != "robot" {
         if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
@@ -831,8 +837,6 @@ fn parse_rotation(rotation: &Value) -> nalgebra::Matrix<f32, nalgebra::Const<3>,
 }
 
 fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
-    let mut parsed_visualinfo: Option<VisualInfo> = None;
-
     if options.len() == 0 {
         return None;
     }
@@ -849,19 +853,20 @@ fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<
             vscale = num_val(options.get("vscale").unwrap());
         }
 
-        parsed_visualinfo = Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
+        return Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
     } else if options.contains_key("color") {
         // Parse color data
-        parsed_visualinfo = Some(parse_visual_info_color(options.get("color").unwrap(), shape));
+        return Some(parse_visual_info_color(options.get("color").unwrap(), shape));
     } else if options.contains_key("mesh") {
         // Use mesh
-        parsed_visualinfo = Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
+        return Some(VisualInfo::Mesh(str_val(options.get("mesh").unwrap())));
     }
-    parsed_visualinfo
+
+    None
 }
 
 fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
-    let mut parsed_visualinfo = VisualInfo::default();
+    let mut parsed_visualinfo = VisualInfo::default_with_shape(shape);
 
     if !visualinfo.is_null() {
         match visualinfo {
@@ -885,6 +890,7 @@ fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_c
                         // attempt to parse as color name
                         let color = color_name::Color::val().by_string(s.to_owned());
 
+                        info!("{:?}", color);
                         if let Ok(color) = color {
                             parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0, shape);
                         }
