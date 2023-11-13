@@ -787,6 +787,17 @@ impl RoomData {
     /// Add a physics object to the room
     pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
         let body_name = room.name.to_owned() + "_" + name;
+        let mut position = position;
+
+        // Apply jitter with extra objects to prevent lag from overlap
+        let count_non_robots = room.count_non_robots();
+        if count_non_robots > 5 {
+            let mut rng = rand::thread_rng();
+            let mult = if count_non_robots > 40 { 2.0 } else if count_non_robots > 20 { 1.5 } else { 1.0 };
+            let jitter = vector![rng.gen_range(-0.0015..0.0015) * mult, rng.gen_range(-0.0025..0.0025) * mult, rng.gen_range(-0.0015..0.0015) * mult];
+            position += jitter;
+        }
+        
         let rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
             .ccd_enabled(true)
             .translation(position)

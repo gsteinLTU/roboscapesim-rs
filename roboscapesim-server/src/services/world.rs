@@ -718,6 +718,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     let shape = match entity_type.as_str() {
         "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
         "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
+        "robot" => { Shape::Box },
         _ => {
             info!("Unknown entity type requested: {entity_type}");
             entity_type = "box".to_owned();
