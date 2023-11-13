@@ -82,4 +82,4 @@ pub(crate) fn setup_service(definition: ServiceDefinition, service_type: Service
     service
 }
 
-pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(240);
+pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(100);
