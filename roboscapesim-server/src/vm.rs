@@ -1,6 +1,6 @@
 use std::{fmt, rc::Rc};
 use std::time::Duration;
-use netsblox_vm::runtime::{GetType, SimpleValue};
+use netsblox_vm::runtime::{GetType, SimpleValue, Entity};
 use netsblox_vm::{ast, runtime::{CustomTypes, Value, EntityKind, ErrorCause, FromAstError, Settings}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
 
 pub const DEFAULT_BASE_URL: &str = "https://cloud.netsblox.org";
@@ -16,9 +16,16 @@ pub struct Env<'gc, C: CustomTypes<StdSystem<C>>> {
 }
 pub type EnvArena<S> = Arena<Rootable![Env<'_, S>]>;
 
+pub struct ProcessState;
+impl From<&Entity<'_, C, StdSystem<C>>> for ProcessState {
+    fn from(_: &Entity<'_, C, StdSystem<C>>) -> Self {
+        ProcessState
+    }
+}
+
 pub fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: Rc<StdSystem<C>>) -> Result<EnvArena<C>, FromAstError> {
     let (bytecode, init_info, locs, _) = ByteCode::compile(role)?;
-    Ok(EnvArena::new(Default::default(), |mc| {
+    Ok(EnvArena::new(|mc| {
         let proj = Project::from_init(mc, &init_info, Rc::new(bytecode), Settings::default(), system);
         Env { proj: Gc::new(mc, RefLock::new(proj)), locs }
     }))
@@ -51,6 +58,7 @@ impl CustomTypes<StdSystem<C>> for C {
     type Intermediate = SimpleValue;
 
     type EntityState = EntityState;
+    type ProcessState = ProcessState;
 
     fn from_intermediate<'gc>(mc: &Mutation<'gc>, value: Self::Intermediate) -> Result<Value<'gc, C, StdSystem<C>>, ErrorCause<C, StdSystem<C>>> {
         Ok(Value::from_simple(mc, value))
