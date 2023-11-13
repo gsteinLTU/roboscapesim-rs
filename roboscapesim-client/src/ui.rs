@@ -115,7 +115,7 @@ pub(crate) fn init_ui() {
             var textStackPanel = new BABYLON.GUI.StackPanel();
             textStackPanel.setPadding(20, 20, 20, 20);
             textStackPanel.spacing = 20;
-            textStackPanel.width = '0%';
+            textStackPanel.width = '100%';
             textStackPanel.verticalAlignment = 'top';
             advancedTexture.addControl(textStackPanel);
 
