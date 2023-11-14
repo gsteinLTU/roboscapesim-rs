@@ -420,6 +420,7 @@ impl RoomData {
             }
         }
         for (username, client_id) in disconnected {
+            info!("Removing client {} from room {}", client_id, &self.name);
             self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
 
             if self.sockets.get(&username).unwrap().value().is_empty() {
@@ -1047,7 +1048,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
 
     // Send user join event
     let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
-    room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
+    room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userJoined".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
 
     Ok(())
 }
