@@ -305,10 +305,10 @@ impl RobotData {
 
         if let Ok(size) = size {
             if size > 0 {
-                had_messages = true;
                 match &buf[0] {
                     b'D' => { 
                         trace!("OnDrive");
+                        had_messages = true;
 
                         if buf.len() > 4 {
                             robot.drive_state = DriveState::SetDistance;
@@ -334,6 +334,7 @@ impl RobotData {
                     b'S' => { 
                         trace!("OnSetSpeed");
                         robot.drive_state = DriveState::SetSpeed;
+                        had_messages = true;
 
                         if buf.len() > 4 {
                             let s1 = i16::from_le_bytes([buf[1], buf[2]]);
@@ -345,6 +346,7 @@ impl RobotData {
                     },
                     b'B' => { 
                         trace!("OnBeep");
+                        had_messages = true;
                         
                         if buf.len() > 4 {
                             let freq = u16::from_le_bytes([buf[1], buf[2]]);
@@ -356,9 +358,11 @@ impl RobotData {
                     },
                     b'L' => { 
                         trace!("OnSetLED");
+                        had_messages = true;
                     },
                     b'R' => { 
                         trace!("OnGetRange");
+                        had_messages = true;
 
                         // Setup raycast
                         let rigid_body_set = &sim.rigid_body_set.lock().unwrap();
@@ -390,6 +394,7 @@ impl RobotData {
                     },
                     b'T' => { 
                         trace!("OnGetTicks");
+                        had_messages = true;
                         let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
                         let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
                         let mut message: [u8; 9] = [0; 9];
@@ -406,6 +411,7 @@ impl RobotData {
                     b'n' => { 
                         trace!("OnSetNumeric");
                         // TODO: Decide on supporting this better, for now show encrypt numbers
+                        had_messages = true;
                         msg = Some(UpdateMessage::DisplayText(robot.id.clone(), buf[1].to_string(), Some(1.0)));
                     },
                     b'P' => {
