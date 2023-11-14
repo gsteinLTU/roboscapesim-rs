@@ -410,27 +410,202 @@ impl RoomData {
     }
 
     pub fn update(&mut self) {
-        // Check for disconnected clients
-        let mut disconnected = vec![];
-        for client_ids in self.sockets.iter() {
-            for client_id in client_ids.value().iter() {
-                if !CLIENTS.contains_key(&client_id) {
-                    disconnected.push((client_ids.key().clone(), client_id.to_owned()));
+        let now = Instant::now();
+        let delta_time = 1.0 / 60.0;
+
+        if !self.hibernating.load(Ordering::Relaxed) {
+
+            // Check for disconnected clients
+            let mut disconnected = vec![];
+            for client_ids in self.sockets.iter() {
+                for client_id in client_ids.value().iter() {
+                    if !CLIENTS.contains_key(&client_id) {
+                        disconnected.push((client_ids.key().clone(), client_id.to_owned()));
+                    }
                 }
             }
-        }
-        for (username, client_id) in disconnected {
-            info!("Removing client {} from room {}", client_id, &self.name);
-            self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
+            for (username, client_id) in disconnected {
+                info!("Removing client {} from room {}", client_id, &self.name);
+                self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
 
-            if self.sockets.get(&username).unwrap().value().is_empty() {
-                self.sockets.remove(&username);
+                if self.sockets.get(&username).unwrap().value().is_empty() {
+                    self.sockets.remove(&username);
+                }
+
+                // Send leave message to clients
+                // TODO: handle multiple clients from one username better?
+                let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
+                self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
             }
 
-            // Send leave message to clients
-            // TODO: handle multiple clients from one username better?
-            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
-            self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
+            self.last_sim_update = now;
+
+            // Handle client messages
+            let mut needs_reset = false;
+            let mut robot_resets = vec![];
+            let mut msgs = vec![];
+            for client in self.sockets.iter() {
+                let client_username = client.key().to_owned();
+
+                for client in client.value().iter() {
+                    let client = CLIENTS.get(&client);
+
+                    if let Some(client) = client {
+                        while let Ok(msg) = client.rx.recv_timeout(Duration::default()) {
+                            msgs.push((msg, client_username.clone(), client.key().to_owned()));
+                        }
+                    }
+                }
+            }
+
+            for (msg, client_username, client_id) in msgs {
+                self.handle_client_message(msg, &mut needs_reset, &mut robot_resets, &client_username, client_id);
+            }
+
+            if needs_reset {
+                self.reset();
+            } else {
+                for robot in robot_resets {
+                    self.reset_robot(&robot);
+                }
+            }
+
+            let time = get_timestamp();
+
+            for mut robot in self.robots.iter_mut() {
+                let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+                
+                if updated {
+                    self.last_interaction_time = get_timestamp();
+                }
+
+                // Check if claimed by user not in room
+                if let Some(claimant) = &robot.value().claimed_by {
+                    if !self.sockets.contains_key(claimant) {
+                        info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
+                        robot.value_mut().claimed_by = None;
+                        RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                    }
+                }
+
+                // Check if message to send
+                if let Some(msg) = msg {
+                    if let Some(claimant) = &robot.value().claimed_by {
+                        if let Some(client) = self.sockets.get(claimant) {
+                            // Only send to owner
+                            RoomData::send_to_clients(&msg, client.value().clone().into_iter());
+                        }
+                    } else {
+                        RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                    }
+                }
+            }
+            
+            let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
+
+            while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
+                if msg.0.function != "heartbeat" {
+                    // TODO: figure out which interactions should keep room alive
+                    //self.last_interaction_time = get_timestamp();
+                    msgs.push(msg);
+                }
+            }
+            
+            for (msg, key) in msgs {
+                trace!("{:?}", msg);
+
+                let response = match msg.service.as_str() {
+                    "RoboScapeWorld" => handle_world_msg(self, msg),
+                    "RoboScapeEntity" => {
+                        if msg.function == "setPosition" || msg.function == "setRotation" {
+                            if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
+                                obj.value_mut().updated = true;
+                            }
+                        }
+
+                        handle_entity_message(self, msg)
+                    },
+                    "PositionSensor" => handle_position_sensor_message(self, msg),
+                    "LIDARSensor" => handle_lidar_message(self, msg),
+                    "ProximitySensor" => handle_proximity_sensor_message(self, msg),
+                    "RoboScapeTrigger" => handle_trigger_message(self, msg),
+                    "WaypointList" => handle_waypoint_message(self, msg),
+                    t => {
+                        info!("Service type {:?} not yet implemented.", t);
+                        (Err(format!("Service type {:?} not yet implemented.", t)), None)
+                    }
+                };
+
+                if let Some(key) = key {
+                    key.complete(response.0);
+                }
+
+                // If an IoTScape event was included in the response, send it to the NetsBlox server
+                if let Some(iotscape) = response.1 {
+                    self.netsblox_msg_tx.send(iotscape).unwrap();
+                }
+            }
+            
+            {
+                let simulation = &mut self.sim.lock().unwrap();
+                simulation.update(delta_time);
+
+                // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
+                for mut entry in simulation.sensors.iter_mut() {
+                    let ((name, sensor), in_sensor) = entry.pair_mut();
+                    for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
+                        if intersecting {
+                            if in_sensor.contains(&c2) {
+                                // Already in sensor
+                                continue;
+                            } else {
+                                trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                                in_sensor.insert(c2);
+                                // TODO: find other object name
+                                self.services.get(&(name.clone(), ServiceType::Trigger))
+                                    .and_then(|s| Some(
+                                        s.value().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                            }
+                        } else {
+                            if in_sensor.contains(&c2) {
+                                in_sensor.remove(&c2);
+                                trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                            }
+                        }
+                    }
+                }
+
+                // Update data before send
+                for mut o in self.objects.iter_mut()  {
+                    if simulation.rigid_body_labels.contains_key(o.key()) {
+                        let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
+                        let handle = get.value();
+                        let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
+                        let body = rigid_body_set.get(*handle).unwrap();
+                        let old_transform = o.value().transform;
+                        o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
+
+                        if old_transform != o.value().transform {
+                            o.value_mut().updated = true;
+                        }
+                    }
+                }
+            }
+
+            self.roomtime += delta_time;
+
+            if time - self.last_full_update < 60 {
+                if (now - self.last_update) > Duration::from_millis(120) {
+                    // Send incremental state to clients
+                    self.send_state_to_all_clients(false);
+                    self.last_update = now;
+                }
+            } else {
+                // Send full state to clients
+                self.send_state_to_all_clients(true);
+                self.last_full_update = time;
+                self.last_update = now;
+            }
         }
 
         // Check if room empty/not empty
@@ -446,235 +621,71 @@ impl RoomData {
         if self.hibernating.load(Ordering::Relaxed) {
             return;
         }
+    }
 
-        //trace!("Updating {}", self.name);
+    fn handle_client_message(&mut self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {
+        let client = CLIENTS.get(&client_id);
 
-        //let max_delta_time = 1.0 / 30.0;
-        let now = Instant::now();
-        /*let delta_time = (now - self.last_sim_update).as_secs_f64();
-        let delta_time = f64::min(max_delta_time, delta_time);*/
-        let delta_time = 1.0 / 60.0;
-        self.last_sim_update = now;
+        if let Some(client) = client {
+            match msg {
+                ClientMessage::ResetAll => { *needs_reset = true; },
+                ClientMessage::ResetRobot(robot_id) => {
+                    if self.is_authorized(*client.key(), &robot_id) {
+                        robot_resets.push(robot_id);
+                    } else {
+                        info!("Client {} not authorized to reset robot {}", client_username, robot_id);
+                    }
+                },
+                ClientMessage::ClaimRobot(robot_id) => {
+                    // Check if robot is free
+                    if self.is_authorized(*client.key(), &robot_id) {
+                        // Claim robot
+                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                            if robot.claimed_by.is_none() {
+                                robot.claimed_by = Some(client_username.clone());
 
-        // Handle client messages
-        let mut needs_reset = false;
-        let mut robot_resets = vec![];
-        for client in self.sockets.iter() {
-            let client_username = client.key().to_owned();
-
-            for client in client.value().iter() {
-                let client = CLIENTS.get(&client);
-
-                if let Some(client) = client {
-                    while let Ok(msg) = client.rx.recv_timeout(Duration::default()) {
-                        match msg {
-                            ClientMessage::ResetAll => { needs_reset = true; },
-                            ClientMessage::ResetRobot(robot_id) => {
-                                if self.is_authorized(*client.key(), &robot_id) {
-                                    robot_resets.push(robot_id);
-                                } else {
-                                    info!("Client {} not authorized to reset robot {}", client_username, robot_id);
-                                }
-                            },
-                            ClientMessage::ClaimRobot(robot_id) => {
-                                // Check if robot is free
-                                if self.is_authorized(*client.key(), &robot_id) {
-                                    // Claim robot
-                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                        if robot.claimed_by.is_none() {
-                                            robot.claimed_by = Some(client_username.clone());
-
-                                            // Send claim message to clients
-                                            self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
-                                        } else {
-                                            info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
-                                        }
-                                    }
-                                } else {
-                                    info!("Client {} not authorized to claim robot {}", client_username, robot_id);
-                                }
-                            },
-                            ClientMessage::UnclaimRobot(robot_id) => {
-                                // Check if robot is free
-                                if self.is_authorized(*client.key(), &robot_id) {
-                                    // Claim robot
-                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                        if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == &client_username) {
-                                            robot.claimed_by = None;
-
-                                            // Send Unclaim message to clients
-                                            self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
-                                        } else {
-                                            info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
-                                        }
-                                    }
-                                } else {
-                                    info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
-                                }
-                            },
-                            ClientMessage::EncryptRobot(robot_id) => {
-                                if self.is_authorized(*client.key(), &robot_id) {
-                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                        robot.send_roboscape_message(&[b'P', 0]).unwrap();
-                                        robot.send_roboscape_message(&[b'P', 1]).unwrap();
-                                    }
-                                } else {
-                                    info!("Client {} not authorized to encrypt robot {}", client_username, robot_id);
-                                }
-                            },
-                            _ => {
-                                warn!("Unhandled client message: {:?}", msg);
+                                // Send claim message to clients
+                                self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
+                            } else {
+                                info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
                             }
                         }
+                    } else {
+                        info!("Client {} not authorized to claim robot {}", client_username, robot_id);
                     }
-                }
-            }
-        }
-
-        if needs_reset {
-            self.reset();
-        } else {
-            for robot in robot_resets {
-                self.reset_robot(&robot);
-            }
-        }
-
-        let time = get_timestamp();
-
-        for mut robot in self.robots.iter_mut() {
-            let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
-            
-            if updated {
-                self.last_interaction_time = get_timestamp();
-            }
-
-            // Check if claimed by user not in room
-            if let Some(claimant) = &robot.value().claimed_by {
-                if !self.sockets.contains_key(claimant) {
-                    info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
-                    robot.value_mut().claimed_by = None;
-                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
-                }
-            }
-
-            // Check if message to send
-            if let Some(msg) = msg {
-                if let Some(claimant) = &robot.value().claimed_by {
-                    if let Some(client) = self.sockets.get(claimant) {
-                        // Only send to owner
-                        RoomData::send_to_clients(&msg, client.value().clone().into_iter());
-                    }
-                } else {
-                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
-                }
-            }
-        }
-        
-        let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
-
-        while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
-            if msg.0.function != "heartbeat" {
-                // TODO: figure out which interactions should keep room alive
-                //self.last_interaction_time = get_timestamp();
-                msgs.push(msg);
-            }
-        }
-        
-        for (msg, key) in msgs {
-            trace!("{:?}", msg);
-
-            let response = match msg.service.as_str() {
-                "RoboScapeWorld" => handle_world_msg(self, msg),
-                "RoboScapeEntity" => {
-                    if msg.function == "setPosition" || msg.function == "setRotation" {
-                        if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
-                            obj.value_mut().updated = true;
-                        }
-                    }
-
-                    handle_entity_message(self, msg)
                 },
-                "PositionSensor" => handle_position_sensor_message(self, msg),
-                "LIDARSensor" => handle_lidar_message(self, msg),
-                "ProximitySensor" => handle_proximity_sensor_message(self, msg),
-                "RoboScapeTrigger" => handle_trigger_message(self, msg),
-                "WaypointList" => handle_waypoint_message(self, msg),
-                t => {
-                    info!("Service type {:?} not yet implemented.", t);
-                    (Err(format!("Service type {:?} not yet implemented.", t)), None)
-                }
-            };
+                ClientMessage::UnclaimRobot(robot_id) => {
+                    // Check if robot is free
+                    if self.is_authorized(*client.key(), &robot_id) {
+                        // Claim robot
+                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                            if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == client_username) {
+                                robot.claimed_by = None;
 
-
-            if let Some(key) = key {
-                key.complete(response.0);
-            }
-
-            // If an IoTScape event was included in the response, send it to the NetsBlox server
-            if let Some(iotscape) = response.1 {
-                self.netsblox_msg_tx.send(iotscape).unwrap();
-            }
-        }
-        
-        {
-            let simulation = &mut self.sim.lock().unwrap();
-            simulation.update(delta_time);
-
-            // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
-            for mut entry in simulation.sensors.iter_mut() {
-                let ((name, sensor), in_sensor) = entry.pair_mut();
-                for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
-                    if intersecting {
-                        if in_sensor.contains(&c2) {
-                            // Already in sensor
-                            continue;
-                        } else {
-                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
-                            in_sensor.insert(c2);
-                            // TODO: find other object name
-                            self.services.get(&(name.clone(), ServiceType::Trigger))
-                                .and_then(|s| Some(
-                                    s.value().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                                // Send Unclaim message to clients
+                                self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
+                            } else {
+                                info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
+                            }
                         }
                     } else {
-                        if in_sensor.contains(&c2) {
-                            in_sensor.remove(&c2);
-                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                        info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
+                    }
+                },
+                ClientMessage::EncryptRobot(robot_id) => {
+                    if self.is_authorized(*client.key(), &robot_id) {
+                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                            robot.send_roboscape_message(&[b'P', 0]).unwrap();
+                            robot.send_roboscape_message(&[b'P', 1]).unwrap();
                         }
+                    } else {
+                        info!("Client {} not authorized to encrypt robot {}", client_username, robot_id);
                     }
+                },
+                _ => {
+                    warn!("Unhandled client message: {:?}", msg);
                 }
             }
-
-            // Update data before send
-            for mut o in self.objects.iter_mut()  {
-                if simulation.rigid_body_labels.contains_key(o.key()) {
-                    let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
-                    let handle = get.value();
-                    let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
-                    let body = rigid_body_set.get(*handle).unwrap();
-                    let old_transform = o.value().transform;
-                    o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
-
-                    if old_transform != o.value().transform {
-                        o.value_mut().updated = true;
-                    }
-                }
-            }
-        }
-
-        self.roomtime += delta_time;
-
-        if time - self.last_full_update < 60 {
-            if (now - self.last_update) > Duration::from_millis(120) {
-                // Send incremental state to clients
-                self.send_state_to_all_clients(false);
-                self.last_update = now;
-            }
-        } else {
-            // Send full state to clients
-            self.send_state_to_all_clients(true);
-            self.last_full_update = time;
-            self.last_update = now;
         }
     }
 
