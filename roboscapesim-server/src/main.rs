@@ -91,6 +91,8 @@ async fn update_fn() {
                 // Check timeout
                 if update_time - lock.last_interaction_time > lock.timeout {
                     lock.hibernating.store(true, std::sync::atomic::Ordering::Relaxed);
+                    lock.hibernating_since.lock().unwrap().replace(get_timestamp());
+
                     // Kick all users out
                     lock.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
                     lock.sockets.clear();

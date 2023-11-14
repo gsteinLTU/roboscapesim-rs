@@ -49,7 +49,7 @@ pub struct RoomData {
     pub visitors: DashSet<String>,
     pub last_update: Instant,
     pub last_full_update: i64,
-    pub last_sim_update: Instant,
+    pub hibernating_since: Arc<Mutex<Option<i64>>>,
     pub roomtime: f64,
     pub robots: Arc<DashMap<String, RobotData>>,
     #[derivative(Debug = "ignore")]
@@ -109,12 +109,12 @@ impl RoomData {
             lidar_configs: HashMap::new(),
             proximity_configs: HashMap::new(),
             waypoint_configs: HashMap::new(),
-            last_sim_update: Instant::now(),
             iotscape_rx,
             netsblox_msg_tx,
             netsblox_msg_rx,
             edit_mode,
             vm_thread: None,
+            hibernating_since: Arc::new(Mutex::new(None)),
         };
 
         info!("Creating Room {}", obj.name);
@@ -129,9 +129,10 @@ impl RoomData {
         let net_iotscape_tx = iotscape_tx.clone();
         let services = obj.services.clone();
         let hibernating = obj.hibernating.clone();
+        let hibernating_since = obj.hibernating_since.clone();
         spawn(async move {
             loop {
-                if hibernating.load(Ordering::Relaxed) {
+                if hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                     sleep(Duration::from_millis(50)).await;
                 } else {
                     for service in services.iter() {
@@ -154,6 +155,7 @@ impl RoomData {
         if !edit_mode {
             let vm_iotscape_tx = iotscape_tx.clone();
             let hibernating = obj.hibernating.clone();
+            let hibernating_since = obj.hibernating_since.clone();
             let id_clone = obj.name.clone();
             let robots = obj.robots.clone();
             obj.vm_thread = Some(thread::spawn(move || {
@@ -240,7 +242,7 @@ impl RoomData {
 
                     // Run program
                     loop {
-                        if hibernating.load(Ordering::Relaxed) {
+                        if hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             sleep(Duration::from_millis(50)).await;
                         } else {
 
@@ -272,10 +274,11 @@ impl RoomData {
             let services = obj.services.clone();
             let mut event_id: u32 = rand::random();
             let hibernating = obj.hibernating.clone();
+            let hibernating_since = obj.hibernating_since.clone();
             spawn(async move {
                 loop {
                     while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        if !hibernating.load(Ordering::Relaxed) {
+                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
                                 if let Err(e) = service.value().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
@@ -438,8 +441,6 @@ impl RoomData {
                 self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
             }
 
-            self.last_sim_update = now;
-
             // Handle client messages
             let mut needs_reset = false;
             let mut robot_resets = vec![];
@@ -472,79 +473,9 @@ impl RoomData {
 
             let time = get_timestamp();
 
-            for mut robot in self.robots.iter_mut() {
-                let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
-                
-                if updated {
-                    self.last_interaction_time = get_timestamp();
-                }
-
-                // Check if claimed by user not in room
-                if let Some(claimant) = &robot.value().claimed_by {
-                    if !self.sockets.contains_key(claimant) {
-                        info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
-                        robot.value_mut().claimed_by = None;
-                        RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
-                    }
-                }
-
-                // Check if message to send
-                if let Some(msg) = msg {
-                    if let Some(claimant) = &robot.value().claimed_by {
-                        if let Some(client) = self.sockets.get(claimant) {
-                            // Only send to owner
-                            RoomData::send_to_clients(&msg, client.value().clone().into_iter());
-                        }
-                    } else {
-                        RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
-                    }
-                }
-            }
+            self.update_robots(delta_time);
             
-            let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
-
-            while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
-                if msg.0.function != "heartbeat" {
-                    // TODO: figure out which interactions should keep room alive
-                    //self.last_interaction_time = get_timestamp();
-                    msgs.push(msg);
-                }
-            }
-            
-            for (msg, key) in msgs {
-                trace!("{:?}", msg);
-
-                let response = match msg.service.as_str() {
-                    "RoboScapeWorld" => handle_world_msg(self, msg),
-                    "RoboScapeEntity" => {
-                        if msg.function == "setPosition" || msg.function == "setRotation" {
-                            if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
-                                obj.value_mut().updated = true;
-                            }
-                        }
-
-                        handle_entity_message(self, msg)
-                    },
-                    "PositionSensor" => handle_position_sensor_message(self, msg),
-                    "LIDARSensor" => handle_lidar_message(self, msg),
-                    "ProximitySensor" => handle_proximity_sensor_message(self, msg),
-                    "RoboScapeTrigger" => handle_trigger_message(self, msg),
-                    "WaypointList" => handle_waypoint_message(self, msg),
-                    t => {
-                        info!("Service type {:?} not yet implemented.", t);
-                        (Err(format!("Service type {:?} not yet implemented.", t)), None)
-                    }
-                };
-
-                if let Some(key) = key {
-                    key.complete(response.0);
-                }
-
-                // If an IoTScape event was included in the response, send it to the NetsBlox server
-                if let Some(iotscape) = response.1 {
-                    self.netsblox_msg_tx.send(iotscape).unwrap();
-                }
-            }
+            self.get_iotscape_messages();
             
             {
                 let simulation = &mut self.sim.lock().unwrap();
@@ -581,12 +512,15 @@ impl RoomData {
                         let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
                         let handle = get.value();
                         let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
-                        let body = rigid_body_set.get(*handle).unwrap();
-                        let old_transform = o.value().transform;
-                        o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
+                        let body = rigid_body_set.get(*handle);
 
-                        if old_transform != o.value().transform {
-                            o.value_mut().updated = true;
+                        if let Some(body) = body {
+                            let old_transform = o.value().transform;
+                            o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
+
+                            if old_transform != o.value().transform {
+                                o.value_mut().updated = true;
+                            }
                         }
                     }
                 }
@@ -606,11 +540,15 @@ impl RoomData {
                 self.last_full_update = time;
                 self.last_update = now;
             }
+        } else {
+            // Still do IoTScape handling
+            self.get_iotscape_messages();
         }
 
         // Check if room empty/not empty
         if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
+            self.hibernating_since.lock().unwrap().replace(get_timestamp());
             info!("{} is now hibernating", self.name);
             return;
         } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
@@ -621,6 +559,89 @@ impl RoomData {
         if self.hibernating.load(Ordering::Relaxed) {
             return;
         }
+    }
+
+    fn update_robots(&mut self, delta_time: f64) {
+        for mut robot in self.robots.iter_mut() {
+            let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+    
+            if updated {
+                self.last_interaction_time = get_timestamp();
+            }
+
+            // Check if claimed by user not in room
+            if let Some(claimant) = &robot.value().claimed_by {
+                if !self.sockets.contains_key(claimant) {
+                    info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
+                    robot.value_mut().claimed_by = None;
+                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                }
+            }
+
+            // Check if message to send
+            if let Some(msg) = msg {
+                if let Some(claimant) = &robot.value().claimed_by {
+                    if let Some(client) = self.sockets.get(claimant) {
+                        // Only send to owner
+                        RoomData::send_to_clients(&msg, client.value().clone().into_iter());
+                    }
+                } else {
+                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                }
+            }
+        }
+    }
+
+    fn get_iotscape_messages(&mut self) {
+        let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
+
+        while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
+            if msg.0.function != "heartbeat" {
+                // TODO: figure out which interactions should keep room alive
+                //self.last_interaction_time = get_timestamp();
+                msgs.push(msg);
+            }
+        }
+            
+        for (msg, key) in msgs {
+            trace!("{:?}", msg);
+
+            let response = self.handle_iotscape_message(msg);
+
+            if let Some(key) = key {
+                key.complete(response.0);
+            }
+
+            // If an IoTScape event was included in the response, send it to the NetsBlox server
+            if let Some(iotscape) = response.1 {
+                self.netsblox_msg_tx.send(iotscape).unwrap();
+            }
+        }
+    }
+
+    fn handle_iotscape_message(&mut self, msg: iotscape::Request) -> (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>) {
+        let response = match msg.service.as_str() {
+            "RoboScapeWorld" => handle_world_msg(self, msg),
+            "RoboScapeEntity" => {
+                if msg.function == "setPosition" || msg.function == "setRotation" {
+                    if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
+                        obj.value_mut().updated = true;
+                    }
+                }
+
+                handle_entity_message(self, msg)
+            },
+            "PositionSensor" => handle_position_sensor_message(self, msg),
+            "LIDARSensor" => handle_lidar_message(self, msg),
+            "ProximitySensor" => handle_proximity_sensor_message(self, msg),
+            "RoboScapeTrigger" => handle_trigger_message(self, msg),
+            "WaypointList" => handle_waypoint_message(self, msg),
+            t => {
+                info!("Service type {:?} not yet implemented.", t);
+                (Err(format!("Service type {:?} not yet implemented.", t)), None)
+            }
+        };
+        response
     }
 
     fn handle_client_message(&mut self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {

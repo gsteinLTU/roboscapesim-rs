@@ -416,6 +416,9 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let id = str_val(&msg.params[0]).to_owned();
             if room.objects.contains_key(&id) {
                 room.remove(&id);
+            } else if room.robots.contains_key(&id) {
+                room.remove(&id);
+                room.remove(&format!("robot_{id}"));
             }
         },
         "removeAllEntities" => {
