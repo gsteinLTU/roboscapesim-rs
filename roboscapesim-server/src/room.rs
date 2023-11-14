@@ -213,7 +213,7 @@ impl RoomData {
                         })),
                         command: Some(Rc::new(move |_, _, key, command, proc| match command {
                             Command::Print { style: _, value } => {
-                                let entity = &*proc.current_entity().borrow();
+                                let entity = &*proc.get_call_stack().last().unwrap().entity.borrow();
                                 if let Some(value) = value { info!("{entity:?} > {value:?}") }
                                 key.complete(Ok(()));
                                 CommandStatus::Handled
@@ -257,10 +257,11 @@ impl RoomData {
                                 for _ in 0..STEPS_PER_IO_ITER {
                                     let res = proj.step(mc);
                                     if let ProjectStep::Error { error, proc } = &res {
-                                        error!("\n>>> runtime error in entity {:?}: {:?}\n", proc.current_entity().borrow().name, error);
+                                        let entity = &*proc.get_call_stack().last().unwrap().entity.borrow();
+                                        error!("\n>>> runtime error in entity {:?}: {:?}\n", entity.name, error);
                                         
                                         // TODO: Send error to clients
-                                        let msg = UpdateMessage::VMError(format!("{:?}", error.cause).to_string(), error.pos);
+                                        let _msg = UpdateMessage::VMError(format!("{:?}", error.cause).to_string(), error.pos);
                                     }
                                     idle_sleeper.consume(&res);
                                 }
