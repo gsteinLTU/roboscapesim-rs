@@ -832,7 +832,7 @@ impl RoomData {
 
         // Apply jitter with extra objects to prevent lag from overlap
         let count_non_robots = room.count_non_robots();
-        if count_non_robots > 5 {
+        if count_non_robots > 10 {
             let mut rng = rand::thread_rng();
             let mult = if count_non_robots > 40 { 2.0 } else if count_non_robots > 20 { 1.5 } else { 1.0 };
             let jitter = vector![rng.gen_range(-0.0015..0.0015) * mult, rng.gen_range(-0.0025..0.0025) * mult, rng.gen_range(-0.0015..0.0015) * mult];
