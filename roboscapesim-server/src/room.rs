@@ -471,6 +471,8 @@ impl RoomData {
                             ClientMessage::ResetRobot(robot_id) => {
                                 if self.is_authorized(*client.key(), &robot_id) {
                                     robot_resets.push(robot_id);
+                                } else {
+                                    info!("Client {} not authorized to reset robot {}", client_username, robot_id);
                                 }
                             },
                             ClientMessage::ClaimRobot(robot_id) => {
@@ -510,9 +512,13 @@ impl RoomData {
                                 }
                             },
                             ClientMessage::EncryptRobot(robot_id) => {
-                                if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                                    robot.send_roboscape_message(&[b'P', 0]).unwrap();
-                                    robot.send_roboscape_message(&[b'P', 1]).unwrap();
+                                if self.is_authorized(*client.key(), &robot_id) {
+                                    if let Some(mut robot) = self.robots.get_mut(&robot_id) {
+                                        robot.send_roboscape_message(&[b'P', 0]).unwrap();
+                                        robot.send_roboscape_message(&[b'P', 1]).unwrap();
+                                    }
+                                } else {
+                                    info!("Client {} not authorized to encrypt robot {}", client_username, robot_id);
                                 }
                             },
                             _ => {
