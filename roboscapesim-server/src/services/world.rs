@@ -16,7 +16,7 @@ use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUN
 
 // TODO: Separate kinematic limit from dynamic entity limit
 const DYNAMIC_ENTITY_LIMIT: usize = 25;
-const KINEMATIC_ENTITY_LIMIT: usize = 75;
+const KINEMATIC_ENTITY_LIMIT: usize = 100;
 const ROBOT_LIMIT: usize = 4;
 
 pub fn create_world_service(id: &str) -> Service {
