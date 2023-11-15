@@ -37,7 +37,7 @@ impl Game {
         // Add a camera to the scene and attach it to the canvas
         let main_camera = Rc::new(UniversalCamera::new(
             "Camera",
-            Vector3::new(0.0, 1.0, -5.0),
+            Vector3::new(0.0, 2.0, -5.0),
             Some(&scene.borrow())
         ));
         main_camera.attachControl(neo_babylon::api::get_element("#roboscape-canvas"), true);
