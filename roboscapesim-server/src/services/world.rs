@@ -795,7 +795,12 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     }
 
     // Parse options
-    let options = options.as_array().unwrap();
+    let mut options = options.as_array().unwrap().to_owned();
+
+    // Check for 2x1 array
+    if options.len() == 2 && options[0].is_string() {
+        options = vec![serde_json::Value::Array(vec![options[0].clone(), options[1].clone()])];
+    }
 
     let shape = match entity_type.as_str() {
         "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
@@ -969,7 +974,7 @@ fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_c
                         } else if r.is_err() {
                             let r = colorsys::Rgb::from_hex_str(s);
                             if let Ok(color) = r {
-                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
+                                parsed_visualinfo = VisualInfo::Color(color.red() as f32 / 255.0, color.green() as f32 / 255.0, color.blue() as f32 / 255.0, shape);
                             } else if r.is_err() {
                                 info!("Failed to parse {s} as color");
                             }
