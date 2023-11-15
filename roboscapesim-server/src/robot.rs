@@ -475,21 +475,29 @@ impl RobotData {
 
 impl Resettable for RobotData {
     fn reset(&mut self, sim: &mut Simulation) {
-        // Reset position
-        let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
-        for wheel in &self.wheel_bodies {
-            let body = rigid_body_set.get_mut(*wheel).unwrap();
-            body.set_linvel(vector![0.0, 0.0, 0.0], false);
-            body.set_angvel(vector![0.0, 0.0, 0.0], false);
+        {
+            // Reset position
+            let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+            for wheel in &self.wheel_bodies {
+                let body = rigid_body_set.get_mut(*wheel).unwrap();
+                body.set_linvel(vector![0.0, 0.0, 0.0], true);
+                body.set_angvel(vector![0.0, 0.0, 0.0], true);
+            }
+
+            // Reset position
+            let body = rigid_body_set.get_mut(self.body_handle).unwrap();
+            body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
+            body.set_locked_axes(LockedAxes::all(), true);
         }
 
-        // Reset position
-        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
-        body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
+        sim.update(1.0 / 600.0);
 
         // Reset velocity
-        body.set_linvel(vector![0.0, 0.0, 0.0], false);
-        body.set_angvel(vector![0.0, 0.0, 0.0], false);
+        let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
+        body.set_locked_axes(LockedAxes::empty(), true);
+        body.set_linvel(vector![0.0, -0.01, 0.0], true);
+        body.set_angvel(vector![0.0, 0.0, 0.0], true);
 
         // Reset rotation
         match self.initial_transform.rotation {
