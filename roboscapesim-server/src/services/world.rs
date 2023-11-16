@@ -686,6 +686,7 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
                 "cactus_tall".into(),
                 "chest".into(),
                 "chest_opt".into(),
+                "grass".into(),
                 "fence_simple".into(),
                 "house_type01".into(),
                 "house_type02".into(),
