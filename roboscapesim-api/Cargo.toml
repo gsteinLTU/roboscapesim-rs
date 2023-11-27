@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 async-once-cell = "0.5.3"
 axum = "0.6.20"
-axum-macros = "0.3.8"
+axum-macros = "0.4.0"
 dashmap = "5.5.3"
 futures-executor = "0.3.29"
 log = "0.4.20"
