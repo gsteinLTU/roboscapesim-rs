@@ -17,7 +17,7 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Build and push Server AMD64
-      uses: docker/build-push-action@v5.0.0
+      uses: docker/build-push-action@v5.1.0
       with:
         context: .
         platforms: linux/amd64
@@ -25,7 +25,7 @@ jobs:
         push: true
         tags: gstein17/roboscapesim-rs-server:latest
 #    - name: Build and push Server ARM
-#      uses: docker/build-push-action@v5.0.0
+#      uses: docker/build-push-action@v5.1.0
 #      with:
 #        context: .
 #        platforms: linux/arm64
