@@ -58,7 +58,8 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
     debug!("listening on {}", addr);
-    let server = axum::Server::bind(&addr).serve(app.into_make_service());
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let server = axum::serve(listener, app.into_make_service());
 
     // Clean up servers not updated in 5 minutes
     tokio::spawn(async move {

@@ -78,8 +78,8 @@ pub async fn create_api() {
         .allow_origin(Any)
 	    .allow_headers([header::CONTENT_TYPE]));
     
-    let server = axum::Server::bind(&addr)
-        .serve(app.into_make_service());
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let server = axum::serve(listener, app.into_make_service());
 
     info!("API server listening on {}", addr);
 

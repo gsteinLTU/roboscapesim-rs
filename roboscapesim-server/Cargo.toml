@@ -15,8 +15,8 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0" }
 serde_json = "1.0"
 rand = "0.8"
-axum = {version = "0.6", features = ["headers"]}
-tower-http = { version = "0.4", features = ["cors"] }
+axum = {version = "0.7.1"}
+tower-http = { version = "0.5.0", features = ["cors"] }
 dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
 once_cell = { version = "1.18", features = ["parking_lot"] }
 nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
@@ -25,8 +25,8 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.4.0"
 dotenvy = "0.15"
-netsblox-vm = { version = "=0.2.20", default-features = false, features = ["std", "native-tls"] }
-axum-macros = "0.3.8"
+netsblox-vm = { version = "=0.3.4", default-features = false, features = ["std", "native-tls", "std-system"] }
+axum-macros = "0.4.0"
 reqwest = "0.11"
 futures = "0.3"
 rayon = "1.8"

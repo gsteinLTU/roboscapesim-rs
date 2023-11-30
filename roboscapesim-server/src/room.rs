@@ -1,21 +1,19 @@
 use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
-use netsblox_vm::runtime::{SimpleValue, ErrorCause, CommandStatus, Command};
-use netsblox_vm::std_system::Clock;
-use netsblox_vm::{project::{ProjectStep, IdleAction}, real_time::UtcOffset, runtime::{RequestStatus, Config, Key, System}, std_system::StdSystem};
+use netsblox_vm::real_time::OffsetDateTime;
+use netsblox_vm::{runtime::{SimpleValue, ErrorCause, CommandStatus, Command, RequestStatus, Config, Key, System}, std_util::Clock, project::{ProjectStep, IdleAction}, real_time::UtcOffset, std_system::StdSystem};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
-use roboscapesim_common::*;
-use roboscapesim_common::api::RoomInfo;
+use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -33,6 +31,8 @@ use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, C, get_env};
 pub(crate) mod netsblox_api;
 
+const COLLECT_PERIOD: Duration = Duration::from_secs(60);
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 /// Holds the data for a single room
@@ -47,7 +47,7 @@ pub struct RoomData {
     pub sockets: DashMap<String, DashSet<u128>>,
     /// List of usernames of users who have visited the room
     pub visitors: DashSet<String>,
-    pub last_update: Instant,
+    pub last_update: OffsetDateTime,
     pub last_full_update: i64,
     pub hibernating_since: Arc<Mutex<Option<i64>>>,
     pub roomtime: f64,
@@ -102,7 +102,7 @@ impl RoomData {
             last_full_update: 0,
             roomtime: 0.0,
             sim: Arc::new(Mutex::new(Simulation::new())),
-            last_update: Instant::now(),
+            last_update: SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium),
             robots: Arc::new(DashMap::new()),
             reseters: HashMap::new(),
             services: Arc::new(DashMap::new()),
@@ -157,6 +157,7 @@ impl RoomData {
             let hibernating = obj.hibernating.clone();
             let hibernating_since = obj.hibernating_since.clone();
             let id_clone = obj.name.clone();
+            let id_clone2 = obj.name.clone();
             let robots = obj.robots.clone();
             obj.vm_thread = Some(thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
@@ -165,13 +166,13 @@ impl RoomData {
                 .unwrap()
                 .block_on(async {
                     let project = load_environment(environment).await;
-
+                    
                     // Setup VM
                     let (project_name, role) = open_project(&project).unwrap_or_else(|_| panic!("failed to read file"));
                     let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
                     info!("Loading project {}", project_name);
                     let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
-                        request: Some(Rc::new(move |_system: &StdSystem<C>, _, key, request, _| {
+                        request: Some(Rc::new(move |_mc, key, request: netsblox_vm::runtime::Request<'_, C, StdSystem<C>>,  _proc| {
                             match &request {
                                 netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
                                     match args.iter().map(|(_k, v)| Ok(v.to_simple()?.into_json()?)).collect::<Result<Vec<_>,ErrorCause<_,_>>>() {
@@ -211,7 +212,7 @@ impl RoomData {
                                 _ => RequestStatus::UseDefault { key, request },
                             }
                         })),
-                        command: Some(Rc::new(move |_, _, key, command, proc| match command {
+                        command: Some(Rc::new(move |_mc, key, command, proc| match command {
                             Command::Print { style: _, value } => {
                                 let entity = &*proc.get_call_stack().last().unwrap().entity.borrow();
                                 if let Some(value) = value { info!("{entity:?} > {value:?}") }
@@ -231,7 +232,7 @@ impl RoomData {
                         }
                     };
 
-                    let env = env.unwrap();
+                    let mut env = env.unwrap();
 
                     info!("Loaded");
                     // Start program
@@ -239,6 +240,8 @@ impl RoomData {
                         let mut proj = env.proj.borrow_mut(mc);
                         proj.input(mc, netsblox_vm::project::Input::Start);
                     });
+
+                    let mut last_collect_time = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
 
                     // Run program
                     loop {
@@ -266,6 +269,12 @@ impl RoomData {
                                     idle_sleeper.consume(&res);
                                 }
                             });
+
+                            if SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium) > last_collect_time + COLLECT_PERIOD {
+                                trace!("Collecting garbage for room {}", id_clone2);
+                                env.collect_all();
+                                last_collect_time = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
+                            }                            
                         }
                     }
                 });
@@ -414,7 +423,7 @@ impl RoomData {
     }
 
     pub fn update(&mut self) {
-        let now = Instant::now();
+        let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
         let delta_time = 1.0 / 60.0;
 
         if !self.hibernating.load(Ordering::Relaxed) {

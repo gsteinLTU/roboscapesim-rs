@@ -83,6 +83,7 @@ async fn update_fn() {
 
         let update_time = get_timestamp();
         SHARED_CLOCK.update();
+        
         // Perform updates
         for kvp in ROOMS.iter() {
             let m = kvp.value().clone();
