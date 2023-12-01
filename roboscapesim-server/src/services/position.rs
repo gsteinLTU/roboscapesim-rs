@@ -131,13 +131,13 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
             if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
                 match msg.function.as_str() {
                     "getX" => {
-                            response = vec![o.translation().x.into()];
+                            response.push(o.translation().x.into());
                     },
                     "getY" => {
-                            response = vec![o.translation().y.into()];
+                            response.push(o.translation().y.into());
                     },
                     "getZ" => {
-                            response = vec![o.translation().z.into()];
+                            response.push(o.translation().z.into());
                     },
                     "getPosition" => {
                             response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];
@@ -169,8 +169,7 @@ pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> Hand
             info!("No main rigid body found for {}", msg.device);
         }
         
-        s.enqueue_response_to(msg, Ok(response.clone()));      
-
+        s.enqueue_response_to(msg, Ok(response.clone()));
     } else {
         info!("No service found for {}", msg.device);
     }

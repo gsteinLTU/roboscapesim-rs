@@ -1,12 +1,12 @@
 FROM --platform=${BUILDPLATFORM:-linux/amd64} tonistiigi/xx AS xx
-FROM --platform=${BUILDPLATFORM:-linux/amd64} rust AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} rust:alpine AS builder
 
 COPY --from=xx / /
 
 
 ARG BUILDPLATFORM
 
-RUN apt-get update && apt-get install -y clang lld
+RUN apk add -y clang lld 
 RUN update-ca-certificates
 
 WORKDIR /roboscape_build
@@ -14,7 +14,7 @@ COPY . .
 RUN cargo fetch
 
 ARG TARGETPLATFORM
-RUN xx-apt-get install -y xx-c-essentials xx-cxx-essentials libssl-dev
+RUN xx-apk add -y xx-c-essentials xx-cxx-essentials libssl-dev openssl-dev musl-dev
 
 WORKDIR /roboscape_build/roboscapesim-server
 RUN xx-cargo build --release 
