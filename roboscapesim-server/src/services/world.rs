@@ -499,8 +499,10 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
             let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
             let heading = num_val(&msg.params[3]);
+
             let name = "block".to_string() + &room.next_object_id.to_string();
             room.next_object_id += 1;
+            
             let width = num_val(&msg.params[4]);
             let height = num_val(&msg.params[5]);
             let depth = num_val(&msg.params[6]);
@@ -864,13 +866,15 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         }
     }        
 
+    let name_num =  room.next_object_id.to_string();
+
     let id = match entity_type.as_str() {
         "robot" => {
             let speed_mult = options.get("speed").clone().map(num_val);
             Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult, Some(size[0])))
         },
         "box" | "block" | "cube" | "cuboid" => {
-            let name = "block".to_string() + &room.objects.len().to_string();
+            let name = "block".to_string() + &name_num;
         
             if size.len() == 1 {
                 size = vec![size[0], size[0], size[0]];
@@ -881,7 +885,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
             Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
         },
         "ball" | "sphere" | "orb" | "spheroid" => {
-            let name = "ball".to_string() + &room.objects.len().to_string();
+            let name = "ball".to_string() + &name_num;
 
             if size.is_empty() {
                 size = vec![1.0];
@@ -890,7 +894,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
             Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
         },
         "trigger" => {
-            let name = "trigger".to_string() + &room.objects.len().to_string();
+            let name = "trigger".to_string() + &name_num;
             Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
         },
         _ => {
@@ -900,6 +904,8 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
     };
 
     if let Some(id) = id {
+        // Increment only if successful
+        room.next_object_id += 1;
         return Some(id.into());
     }
     
