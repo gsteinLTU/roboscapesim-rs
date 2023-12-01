@@ -866,6 +866,7 @@ fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut Roo
         }
     }        
 
+    // Number part of name
     let name_num =  room.next_object_id.to_string();
 
     let id = match entity_type.as_str() {
