@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+/// Get number value from JSON value, with implicit conversion from other types (from string representation)
 pub(crate) fn num_val(val: &Value) -> f32 {
     (if val.is_number() { val.as_f64().unwrap_or_default() } else { val.as_str().unwrap_or_default().parse().unwrap_or_default() }) as f32
 }
