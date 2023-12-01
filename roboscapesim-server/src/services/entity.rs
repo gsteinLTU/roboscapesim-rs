@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use atomic_instant::AtomicInstant;
 use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
-use log::info;
+use log::{info, trace};
 use nalgebra::{vector, UnitQuaternion};
 use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::RigidBodyHandle;
@@ -155,7 +155,7 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
 pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
     let mut response = vec![];
 
-    info!("{:?}", msg);
+    trace!("{:?}", msg);
     
     // TODO: Determine why quotes are being added to device name in VM
     let s = room.services.get(&(msg.device.clone().replace("\"", ""), ServiceType::Entity));
