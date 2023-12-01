@@ -75,6 +75,7 @@ pub struct RoomData {
     /// Thread with VM if not in edit mode
     #[derivative(Debug = "ignore")]
     pub vm_thread: Option<JoinHandle<()>>,
+    pub next_object_id: usize,
 }
 
 pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
@@ -115,6 +116,7 @@ impl RoomData {
             edit_mode,
             vm_thread: None,
             hibernating_since: Arc::new(Mutex::new(None)),
+            next_object_id: 0,
         };
 
         info!("Creating Room {}", obj.name);

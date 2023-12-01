@@ -499,7 +499,8 @@ pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResul
             let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
             let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
             let heading = num_val(&msg.params[3]);
-            let name = "block".to_string() + &room.objects.len().to_string();
+            let name = "block".to_string() + &room.next_object_id.to_string();
+            room.next_object_id += 1;
             let width = num_val(&msg.params[4]);
             let height = num_val(&msg.params[5]);
             let depth = num_val(&msg.params[6]);
