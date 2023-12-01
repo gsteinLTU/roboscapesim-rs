@@ -6,7 +6,8 @@ COPY --from=xx / /
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
-RUN apt-get update && apt-get install -y clang lld libssl-dev
+RUN dpkg --add-architecture arm64
+RUN apt-get update && apt-get install -y clang lld libssl-dev libssl-dev:arm64
 RUN update-ca-certificates
 
 WORKDIR /roboscape_build
