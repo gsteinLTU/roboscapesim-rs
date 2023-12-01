@@ -70,6 +70,7 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Servi
         },
     );
 
+    // Define events
     definition.events.insert("dig".to_owned(),
     EventDescription {
         params: vec![],

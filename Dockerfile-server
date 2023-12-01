@@ -6,7 +6,7 @@ COPY --from=xx / /
 
 ARG BUILDPLATFORM
 
-RUN apk add clang lld 
+RUN apk add clang lld musl-dev
 RUN update-ca-certificates
 
 WORKDIR /roboscape_build
@@ -14,7 +14,7 @@ COPY . .
 RUN cargo fetch
 
 ARG TARGETPLATFORM
-RUN xx-apk add xx-c-essentials xx-cxx-essentials libssl-dev openssl-dev musl-dev
+RUN xx-apk add xx-c-essentials xx-cxx-essentials openssl-dev musl-dev
 
 WORKDIR /roboscape_build/roboscapesim-server
 RUN xx-cargo build --release 
