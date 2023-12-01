@@ -1,4 +1,7 @@
-FROM rust AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} rust AS builder
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 RUN update-ca-certificates
 

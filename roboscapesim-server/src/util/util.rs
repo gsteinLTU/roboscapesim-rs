@@ -35,6 +35,7 @@ pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
     result
 }
 
+/// Get current timestamp in seconds
 pub fn get_timestamp() -> i64 {
     let now = std::time::SystemTime::now();
     let unix_timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap();
