@@ -75,6 +75,7 @@ pub struct RoomData {
     /// Thread with VM if not in edit mode
     #[derivative(Debug = "ignore")]
     pub vm_thread: Option<JoinHandle<()>>,
+    /// Next object ID to use
     pub next_object_id: usize,
 }
 
