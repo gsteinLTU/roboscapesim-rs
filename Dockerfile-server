@@ -3,18 +3,21 @@ FROM --platform=${BUILDPLATFORM:-linux/amd64} rust AS builder
 
 COPY --from=xx / /
 
-ARG TARGETPLATFORM
+
 ARG BUILDPLATFORM
 
-RUN dpkg --add-architecture arm64
-RUN apt-get update && apt-get install -y clang lld libssl-dev libssl-dev:arm64
+RUN apt-get update && apt-get install -y clang lld
 RUN update-ca-certificates
 
 WORKDIR /roboscape_build
+RUN cargo fetch
+
+ARG TARGETPLATFORM
+RUN xx-apt-get install -y xx-c-essentials xx-cxx-essentials libssl-dev
 
 COPY . .
 WORKDIR /roboscape_build/roboscapesim-server
-RUN xx-cargo b -r
+RUN xx-cargo build --release 
 
 FROM debian:bookworm-slim
 
