@@ -91,7 +91,6 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
         },
     );
 
-
     definition.methods.insert(
         "reset".to_owned(),
         MethodDescription {
