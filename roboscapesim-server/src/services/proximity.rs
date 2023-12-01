@@ -113,9 +113,9 @@ pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> Han
                 if let Some(t) = room.proximity_configs.get(&msg.device) {
                     match msg.function.as_str() {
                         "getIntensity" => {
-                            // TODO: apply some function definable through some config setting
+                            // TODO: apply some more complex function definable through some config setting?
                             let dist = ((t.target.to_owned() - o.translation()).norm() * t.multiplier) + t.offset;
-                            response = vec![dist.into()];
+                            response.push(dist.into());
                         },
                         "dig" => {
                             // TODO: Something better than this?
