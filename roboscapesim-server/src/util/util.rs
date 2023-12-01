@@ -4,6 +4,7 @@ pub(crate) fn num_val(val: &Value) -> f32 {
     (if val.is_number() { val.as_f64().unwrap_or_default() } else { val.as_str().unwrap_or_default().parse().unwrap_or_default() }) as f32
 }
 
+/// Get boolean value from JSON value, with implicit conversion from other types
 pub(crate) fn bool_val(val: &Value) -> bool {
     match val {
         Value::Null => false,

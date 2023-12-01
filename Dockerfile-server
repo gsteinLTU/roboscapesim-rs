@@ -1,11 +1,12 @@
 FROM --platform=${BUILDPLATFORM:-linux/amd64} tonistiigi/xx AS xx
-FROM --platform=${BUILDPLATFORM:-linux/amd64} rust AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} rust:alpine AS builder
 
 COPY --from=xx / /
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
+RUN apk add clang lld ca-certificates
 RUN update-ca-certificates
 
 WORKDIR /roboscape_build
