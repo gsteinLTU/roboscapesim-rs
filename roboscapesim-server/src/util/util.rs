@@ -15,6 +15,7 @@ pub(crate) fn bool_val(val: &Value) -> bool {
     }
 }
 
+/// Get string value from JSON value, with implicit conversion from other types
 pub(crate) fn str_val(val: &Value) -> String {
     match val {
         Value::Bool(b) => if *b { "true".to_string() } else  { false.to_string() },
