@@ -27,6 +27,7 @@ pub(crate) fn str_val(val: &Value) -> String {
     }
 }
 
+/// Convert bytes to hex string
 pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
     let mut result = String::new();
 
