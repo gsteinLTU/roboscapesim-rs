@@ -119,7 +119,6 @@ impl RobotData {
         let collider = ColliderBuilder::cuboid(hw, hh, hd).density(25.0);
         sim.collider_set.insert_with_parent(collider, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
-        //let mut vehicle = DynamicRayCastVehicleController::new(vehicle_handle);
         let wheel_half_width = 0.01;
         let wheel_positions = [
             point![hw * 0.5, -hh + 0.015 * scale, hd + wheel_half_width * scale],
@@ -130,7 +129,6 @@ impl RobotData {
         let ball_wheel_positions = [
             point![-hw * 0.75, -hh, 0.0]
         ];
-
 
         let mut wheel_bodies: Vec<RigidBodyHandle> = Vec::with_capacity(2);
         let mut wheel_joints: Vec<MultibodyJointHandle> = Vec::with_capacity(2);
