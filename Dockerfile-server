@@ -19,6 +19,8 @@ RUN xx-clang --wrap
 
 WORKDIR /roboscape_build/roboscapesim-server
 RUN xx-cargo build --release 
+RUN mkdir /roboscape_release
+RUN cp -r ../target/$(xx-cargo --print-target-triple)/release/roboscape* /roboscape_release/
 
 FROM --platform=${TARGETPLATFORM:-linux/amd64} debian:bookworm-slim
 
@@ -28,7 +30,7 @@ RUN update-ca-certificates
 
 WORKDIR /roboscape
 #COPY --from=builder /roboscape_build/target/release/roboscapesim-server .
-COPY --from=builder /roboscape_build/target/aarch64-unknown-linux-musl/release .
+COPY --from=builder /roboscape_release .
 EXPOSE 3000
 #CMD [ "ls", "-al" ]
 CMD [ "./roboscapesim-server" ]
