@@ -25,16 +25,16 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.4.0"
 dotenvy = "0.15"
-netsblox-vm = { version = "=0.3.5", default-features = false, features = ["std", "native-tls", "std-system"] }
+netsblox-vm = { version = "=0.3.5", default-features = false, features = ["std", "rustls-tls-native-roots", "std-system"] }
 axum-macros = "0.4.0"
-reqwest = "0.11"
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
 rayon = "1.8"
 color-name = "1.1.0"
 colorsys = "0.6"
 gc-arena = "0.4"
 crossbeam-channel = "0.5"
-async-tungstenite = { version = "0.23" }
+async-tungstenite = { version = "0.23", features = ["tokio-rustls-native-certs"] }
 async-std = "1.12.0"
 rmp-serde = "1.1.2"
 atomic-instant = "0.1.1"
