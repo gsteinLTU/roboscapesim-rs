@@ -76,6 +76,7 @@ impl Simulation {
           self.query_pipeline.update(&self.rigid_body_set.lock().unwrap(), &self.collider_set);
     }
 
+    /// Remove all parts of a robot from the simulation
     pub fn cleanup_robot(&mut self, r: &RobotData) {
         // Clean up robot parts
         self.multibody_joint_set.remove_multibody_articulations(r.body_handle, false);
