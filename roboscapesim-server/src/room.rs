@@ -563,10 +563,12 @@ impl RoomData {
             self.hibernating.store(true, Ordering::Relaxed);
             self.hibernating_since.lock().unwrap().replace(get_timestamp());
             info!("{} is now hibernating", self.name);
+            self.announce();
             return;
         } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
             self.hibernating.store(false, Ordering::Relaxed);
             info!("{} is no longer hibernating", self.name);
+            self.announce();
         }
 
         if self.hibernating.load(Ordering::Relaxed) {
@@ -1043,6 +1045,19 @@ impl RoomData {
             visitors: self.visitors.clone().into_iter().collect(),
         }
     }
+
+    pub fn announce(&self) {
+        let room_info = self.get_room_info();
+        tokio::task::spawn(async move {
+            let response = REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
+            .json(&vec![room_info])
+            .send().await;
+            
+            if let Err(e) = response {
+                error!("Error sending room info to API: {e:?}");
+            }
+        });
+    }
 }
 
 pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
@@ -1077,12 +1092,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     room.send_state_to_client(true, peer_id);
 
     // Send room info to API
-    let room_info = room.get_room_info();
-    tokio::task::spawn(async move {
-        REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
-        .json(&vec![room_info])
-        .send().await.unwrap();
-    });
+    room.announce();
 
     // Initial robot claim data
     for robot in room.robots.iter() {

@@ -1,7 +1,7 @@
 use async_std::net::{TcpListener, TcpStream};
 use derivative::Derivative;
 use futures::{StreamExt, stream::{SplitSink, SplitStream}};
-use log::{info, trace, error};
+use log::{info, trace, error, warn};
 use once_cell::sync::Lazy;
 
 use async_tungstenite::{WebSocketStream, tungstenite::Message};
@@ -188,11 +188,19 @@ pub async fn ws_accept() {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", LOCAL_WS_PORT.clone())).await.expect("Failed to bind WS port");
 
     loop {
-        let (conn, _) = listener.accept().await.unwrap();
+        let conn = listener.accept().await;
+
+        if let Err(e) = conn {
+            error!("Error accepting connection: {:?}", e);
+            continue;
+        }
+
+        let (conn, _) = conn.unwrap();
+
         let conn = accept_connection(conn).await;
 
         if let Err(e) = conn {
-            info!("Error accepting connection: {:?}", e);
+            warn!("Error accepting connection: {:?}", e);
         }
 
         sleep(Duration::from_millis(2)).await;

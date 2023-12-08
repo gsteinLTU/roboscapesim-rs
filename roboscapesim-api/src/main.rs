@@ -102,9 +102,10 @@ async fn get_server_status() -> impl IntoResponse {
     }).unwrap()
 }
 
-/// Get list of rooms, optionally filtering to a specific user
+/// Get list of rooms, optionally filtering to a specific user and/or hibernating status
 async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
     let user = params.get("user");
+    let not_hibernating = params.get("notHibernating");
     let mut rooms = ROOMS.iter().map(|x| x.value().clone()).collect::<Vec<_>>();
     if let Some(user) = user {
         rooms = rooms
@@ -112,6 +113,18 @@ async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl I
             .filter(|x| x.visitors.contains(&user))
             .collect::<Vec<_>>();
     }
+
+    if let Some(not_hibernating) = not_hibernating {
+        let not_hibernating = not_hibernating.parse::<bool>().unwrap_or(false);
+
+        if not_hibernating {
+            rooms = rooms
+                .into_iter()
+                .filter(|x| x.is_hibernating == false)
+                .collect::<Vec<_>>();
+        }
+    }
+
     serde_json::to_string(&rooms).unwrap()
 }
 

@@ -17,9 +17,10 @@ pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
     .expect("PORT must be a number")
 );
 
-
+/// Shared reqwest client for making HTTP requests
 pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| reqwest::Client::new());
 
+/// Announce server to main API server
 pub async fn announce_api() {
     // Every 5 minutes, announce to main server
     let url = format!("{}/server/announce", get_main_api_server());
@@ -46,6 +47,7 @@ pub async fn announce_api() {
         error!("Error sending environments to main server: {}", err);
     }
 
+    // Loop sending announcement every 5 minutes
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         let data = (server.clone(), ServerStatus {
@@ -149,7 +151,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 
     for r in ROOMS.iter() {
         let room_data = r.lock().unwrap();
-        
+
         // Skip if user not in visitors
         if !user_filter.is_empty() && !room_data.visitors.contains(&user_filter) {
             continue;
@@ -169,10 +171,7 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
     // Send room info to API
-    let room_info = ROOMS.get(&room_id).unwrap().value().lock().unwrap().get_room_info().clone();
-    REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
-        .json(&vec![room_info])
-        .send().await.unwrap();
+    ROOMS.get(&room_id).unwrap().value().lock().unwrap().announce();
 
     Json(CreateRoomResponseData {
         server: get_server(),
