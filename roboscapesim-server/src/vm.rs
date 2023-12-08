@@ -94,6 +94,6 @@ pub fn open_project<'a>(content: &str) -> Result<(String, ast::Role), OpenProjec
         // Always use first role
         _ => parsed.roles.into_iter().next().unwrap(),
     };
-    Ok((parsed.name, role))
+    Ok((parsed.name.to_string(), role))
 } 
 

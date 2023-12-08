@@ -36,7 +36,7 @@ async fn main() {
         .with_module_level("roboscapesim_api", log::LevelFilter::Info)
         .env()
         .init()
-        .unwrap();
+        .expect("Failed to initialize logger");
     
     let app = Router::new()
         .route("/server/status", get(get_server_status))
@@ -57,9 +57,9 @@ async fn main() {
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
-    debug!("listening on {}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
     let server = axum::serve(listener, app.into_make_service());
+    debug!("listening on {}", addr);
 
     // Clean up servers not updated in 5 minutes
     tokio::spawn(async move {

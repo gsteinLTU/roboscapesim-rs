@@ -174,7 +174,7 @@ impl RoomData {
                     let (project_name, role) = open_project(&project).unwrap_or_else(|_| panic!("failed to read file"));
                     let mut idle_sleeper = IdleAction::new(YIELDS_BEFORE_IDLE_SLEEP, Box::new(|| thread::sleep(IDLE_SLEEP_TIME)));
                     info!("Loading project {}", project_name);
-                    let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned(), Some(&project_name), Config {
+                    let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned().into(), Some(&project_name), Config {
                         request: Some(Rc::new(move |_mc, key, request: netsblox_vm::runtime::Request<'_, C, StdSystem<C>>,  _proc| {
                             match &request {
                                 netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
@@ -184,7 +184,7 @@ impl RoomData {
                                                 "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
                                                     // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
-                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
+                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned().into(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned().into(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
                                                 },
                                                 /*"RoboScape" => {
                                                     // TODO: RoboScape service but in Rust?
@@ -193,14 +193,14 @@ impl RoomData {
                                                 _ => return RequestStatus::UseDefault { key, request },
                                             }
                                         },
-                                        Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}"))),
+                                        Err(err) => key.complete(Err(format!("failed to convert RPC args to string: {err:?}").into())),
                                     }
                                     RequestStatus::Handled
                                 },
                                 netsblox_vm::runtime::Request::UnknownBlock { name, args: _ } => {
                                     match name.as_str() {
                                         "roomID" => {
-                                            key.complete(Ok(SimpleValue::String(format!("{id_clone}"))));
+                                            key.complete(Ok(SimpleValue::String(format!("{id_clone}").into())));
                                             RequestStatus::Handled
                                         },
                                         "robotsInRoom" => {
@@ -254,7 +254,7 @@ impl RoomData {
 
                             if let Ok((_service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
                                 // TODO: check for listen
-                                system.inject_message(msg_type, values.iter().map(|(k, v)| (k.clone(), SimpleValue::String(v.clone()))).collect());
+                                system.inject_message(msg_type.into(), values.iter().map(|(k, v)| (k.clone().into(), SimpleValue::String(v.clone().into()))).collect());
                             }
 
                             env.mutate(|mc, env| {
@@ -622,7 +622,7 @@ impl RoomData {
             let response = self.handle_iotscape_message(msg);
 
             if let Some(key) = key {
-                key.complete(response.0);
+                key.complete(response.0.map_err(|e| e.into()));
             }
 
             // If an IoTScape event was included in the response, send it to the NetsBlox server

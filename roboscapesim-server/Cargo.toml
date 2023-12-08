@@ -15,7 +15,7 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0" }
 serde_json = "1.0"
 rand = "0.8"
-axum = {version = "0.7.1"}
+axum = {version = "0.7"}
 tower-http = { version = "0.5.0", features = ["cors"] }
 dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
 once_cell = { version = "1.18", features = ["parking_lot"] }
@@ -25,7 +25,7 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.4.0"
 dotenvy = "0.15"
-netsblox-vm = { version = "=0.3.5", default-features = false, features = ["std", "rustls-tls-native-roots", "std-system"] }
+netsblox-vm = { version = "=0.4.0", default-features = false, features = ["std", "rustls-tls-native-roots", "std-system"] }
 axum-macros = "0.4.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
@@ -34,7 +34,7 @@ color-name = "1.1.0"
 colorsys = "0.6"
 gc-arena = "0.4"
 crossbeam-channel = "0.5"
-async-tungstenite = { version = "0.23", features = ["tokio-rustls-native-certs"] }
+async-tungstenite = { version = "0.24", features = ["tokio-rustls-native-certs"] }
 async-std = "1.12.0"
 rmp-serde = "1.1.2"
 atomic-instant = "0.1.1"

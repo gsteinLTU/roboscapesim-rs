@@ -78,7 +78,7 @@ pub async fn create_api() {
         .allow_origin(Any)
 	    .allow_headers([header::CONTENT_TYPE]));
     
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
     let server = axum::serve(listener, app.into_make_service());
 
     info!("API server listening on {}", addr);
@@ -149,6 +149,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 
     for r in ROOMS.iter() {
         let room_data = r.lock().unwrap();
+        
         // Skip if user not in visitors
         if !user_filter.is_empty() && !room_data.visitors.contains(&user_filter) {
             continue;

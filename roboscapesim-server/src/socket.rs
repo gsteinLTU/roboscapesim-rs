@@ -183,8 +183,9 @@ pub async fn ws_tx() {
     }
 }
 
+/// Accept WebSocket connections
 pub async fn ws_accept() {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", LOCAL_WS_PORT.clone())).await.unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", LOCAL_WS_PORT.clone())).await.expect("Failed to bind WS port");
 
     loop {
         let (conn, _) = listener.accept().await.unwrap();

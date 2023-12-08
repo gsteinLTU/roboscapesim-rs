@@ -488,7 +488,8 @@ impl Resettable for RobotData {
             body.set_locked_axes(LockedAxes::all(), true);
         }
 
-        sim.update(1.0 / 600.0);
+        // Update simulation one frame
+        sim.update(1.0 / 60.0);
 
         // Reset velocity
         let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
