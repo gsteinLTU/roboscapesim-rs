@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-mod api;
-mod game;
-mod ui;
-mod util;
+pub mod api;
+pub mod game;
+pub mod ui;
+pub mod util;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
