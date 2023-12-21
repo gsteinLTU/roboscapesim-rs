@@ -1,7 +1,8 @@
 #![allow(dead_code)]
-mod util;
+mod api;
 mod game;
 mod ui;
+mod util;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
@@ -9,7 +10,7 @@ use js_sys::{Reflect, Array, eval, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use reqwest::Client;
-use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable, api::{CreateRoomRequestData, CreateRoomResponseData, RoomInfo, EnvironmentInfo}};
+use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDataListElement};
 use neo_babylon::prelude::*;
@@ -19,6 +20,7 @@ use wasm_bindgen_futures::spawn_local;
 use self::util::*;
 use self::game::*;
 use self::ui::*;
+use self::api::*;
 
 extern crate console_error_panic_hook;
 
@@ -40,11 +42,6 @@ const ASSETS_DIR: &str = "http://localhost:4000/assets/";
 #[cfg(not(debug_assertions))]
 const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOnline2/assets/";
 
-#[cfg(debug_assertions)]
-const API_SERVER: &str = "http://localhost:5001/";
-#[cfg(not(debug_assertions))]
-const API_SERVER: &str = "https://roboscapeonlineapi2.netsblox.org/";
-
 #[netsblox_extension_info]
 const INFO: ExtensionInfo = ExtensionInfo { 
     name: "RoboScape Online" 
@@ -57,27 +54,17 @@ async fn main() {
     console_log!("API server: {}", API_SERVER);
 
     // Get environments list
-    REQWEST_CLIENT.with(|r| {
-        let get = r.get(format!("{}environments/list", API_SERVER));
-        spawn_local(async move {
-            let results = get.send().await;
+    spawn_local(async move {
+        let environments = get_environments().await.unwrap_or_default();
+        let list = get_nb_externalvar("roboscapedialog-new-environments-list").unwrap().unchecked_into::<HtmlDataListElement>();
+        list.set_inner_html("");
+        for result in &environments {
+            let option = document().create_element("option").unwrap();
+            option.set_attribute("value", &result.id).unwrap();
+            list.append_child(&option).unwrap();
+        }
 
-            if let Ok(results) = results {
-                let results = results.json::<Vec<EnvironmentInfo>>().await;
-
-                if let Ok(results) = &results {
-                    let list = get_nb_externalvar("roboscapedialog-new-environments-list").unwrap().unchecked_into::<HtmlDataListElement>();
-                    list.set_inner_html("");
-                    for result in results {
-                        let option = document().create_element("option").unwrap();
-                        option.set_attribute("value", &result.id).unwrap();
-                        list.append_child(&option).unwrap();
-                    }
-                }
-
-                console_log!("{:?}", &results);
-            }
-        });
+        console_log!("{:?}", &environments);
     });
 
     GAME.with(|game| {
@@ -411,29 +398,18 @@ pub async fn new_sim_menu() {
 #[netsblox_extension_menu_item("Join room...")]
 #[wasm_bindgen]
 pub async fn join_sim_menu() {
-    REQWEST_CLIENT.with(|r| {
-        let get = r.get(format!("{}rooms/list?user={}", API_SERVER, get_username()));
-        spawn_local(async move {
-            let results = get.send().await;
+    spawn_local(async move {
+        let results = get_rooms_list(Some(get_username()), None).await.unwrap_or_default();
+        let list = get_nb_externalvar("roboscapedialog-join-rooms-list").unwrap().unchecked_into::<HtmlDataListElement>();
+        list.set_inner_html("");
+        for result in &results {
+            let option = document().create_element("option").unwrap();
+            option.set_attribute("value", &format!("{} ({})", result.id, result.environment)).unwrap();
+            list.append_child(&option).unwrap();
+        }
 
-            if let Ok(results) = results {
-                let results = results.json::<Vec<RoomInfo>>().await;
-
-                if let Ok(results) = &results {
-                    let list = get_nb_externalvar("roboscapedialog-join-rooms-list").unwrap().unchecked_into::<HtmlDataListElement>();
-                    list.set_inner_html("");
-                    for result in results {
-                        let option = document().create_element("option").unwrap();
-                        option.set_attribute("value", &format!("{} ({})", result.id, result.environment)).unwrap();
-                        list.append_child(&option).unwrap();
-                    }
-                }
-
-                console_log!("{:?}", &results);
-            }
-            
-            show_dialog("roboscapedialog-join");
-        });
+        console_log!("{:?}", &results);
+        show_dialog("roboscapedialog-join");
     });
 }
 
@@ -472,37 +448,7 @@ pub async fn join_room(id: String, password: Option<String>) {
     }
 }
 
-async fn request_room(username: String, password: Option<String>, edit_mode: bool, environment: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
-    set_title("Connecting...");
-
-    let mut client_clone = Default::default();
-    REQWEST_CLIENT.with(|client| {
-        client_clone = client.clone();
-    });
-
-    // TODO: get API URL through env var for deployed version
-    let response = client_clone.post(format!("{}rooms/create", API_SERVER)).json(&CreateRoomRequestData {
-        username,
-        password,
-        edit_mode,
-        environment
-    }).send().await?;
-
-    response.json().await
-}
-
-async fn request_room_info(id: &String) -> Result<RoomInfo, reqwest::Error> {
-    let mut client_clone = Default::default();
-    REQWEST_CLIENT.with(|client| {
-        client_clone = client.clone();
-    });
-
-    let response = client_clone.get(format!("{}rooms/info?id={}", API_SERVER, id)).send().await?;
-
-    response.json().await
-}
-
-async fn connect(server: &String) {
+pub async fn connect(server: &String) {
     GAME.with(|game| {
         let in_room = game.borrow().in_room.get();
         if in_room {
