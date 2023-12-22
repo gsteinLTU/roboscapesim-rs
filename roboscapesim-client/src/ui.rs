@@ -5,13 +5,14 @@ use roboscapesim_client_common::console_log;
 use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{window, HtmlElement, HtmlInputElement, Event};
+use roboscapesim_client_common::util::*;
+use js_sys::eval;
+use wasm_bindgen::{prelude::Closure, JsValue, JsCast};
 
 use crate::{util::*, GAME, new_room, join_room};
 
 use super::send_message;
 
-use js_sys::eval;
-use wasm_bindgen::{prelude::Closure, JsValue, JsCast};
 
 /// Set up UI elements for the 3D view window
 pub(crate) fn init_ui() {

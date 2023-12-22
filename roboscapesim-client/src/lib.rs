@@ -9,7 +9,7 @@ use js_sys::{Reflect, Array, eval, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
-use roboscapesim_client_common::{api::*, console_log, ASSETS_DIR};
+use roboscapesim_client_common::{api::*, console_log, ASSETS_DIR, util::*};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDataListElement};
 use neo_babylon::prelude::*;
