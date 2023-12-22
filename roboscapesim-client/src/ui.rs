@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
 use neo_babylon::prelude::{Color3, Vector3};
+use roboscapesim_client_common::console_log;
 use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{window, HtmlElement, HtmlInputElement, Event};
 
-use crate::{util::*, console_log, GAME, new_room, join_room};
+use crate::{util::*, GAME, new_room, join_room};
 
 use super::send_message;
 

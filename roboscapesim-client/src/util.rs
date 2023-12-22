@@ -110,11 +110,3 @@ pub(crate) fn reset_camera() {
 pub(crate) fn show_message(title: &str, body: &str) {
     get_window_fn("pmAlert").unwrap().call2(&JsValue::NULL, &title.into(), &format!("<strong>{}</strong>", body).into()).unwrap();
 }
-
-#[macro_export]
-/// Macro to make console.logging easier
-macro_rules! console_log {
-    ($($tokens: tt)*) => {
-        web_sys::console::log_1(&format!($($tokens)*).into())
-    }
-}

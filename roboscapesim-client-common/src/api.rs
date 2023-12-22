@@ -1,6 +1,12 @@
+use std::rc::Rc;
+
+use reqwest::Client;
 use roboscapesim_common::api::*;
 
-use crate::{REQWEST_CLIENT, ui::set_title};
+thread_local! {
+    /// Allows reuse of client
+    static REQWEST_CLIENT: Rc<Client> = Rc::new(Client::new());
+}
 
 #[cfg(debug_assertions)]
 pub const API_SERVER: &str = "http://localhost:5001/";
@@ -9,8 +15,6 @@ pub const API_SERVER: &str = "https://roboscapeonlineapi2.netsblox.org/";
 
 /// Request a new room from the main API server
 pub async fn request_room(username: String, password: Option<String>, edit_mode: bool, environment: Option<String>) -> Result<CreateRoomResponseData, reqwest::Error> {
-    set_title("Connecting...");
-
     let mut client_clone = Default::default();
     REQWEST_CLIENT.with(|client| {
         client_clone = client.clone();

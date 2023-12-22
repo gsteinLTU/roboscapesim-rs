@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-pub mod api;
 pub mod game;
 pub mod ui;
 pub mod util;
@@ -9,18 +8,18 @@ use instant::Duration;
 use js_sys::{Reflect, Array, eval, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
-use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
+use roboscapesim_client_common::{api::*, console_log, ASSETS_DIR};
 use wasm_bindgen::{prelude::{wasm_bindgen, Closure}, JsValue, JsCast};
 use web_sys::{window, WebSocket, Node, HtmlDataListElement};
 use neo_babylon::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use wasm_bindgen_futures::spawn_local;
 
-use self::util::*;
-use self::game::*;
-use self::ui::*;
-use self::api::*;
+use crate::ui::*;
+use crate::util::*;
+use crate::game::*;
+
 
 extern crate console_error_panic_hook;
 
@@ -31,16 +30,6 @@ thread_local! {
 thread_local! {
     static GAME: Rc<RefCell<Game>> = Rc::new(RefCell::new(Game::new()));
 }
-
-thread_local! {
-    /// Allows reuse of client
-    static REQWEST_CLIENT: Rc<Client> = Rc::new(Client::new());
-}
-
-#[cfg(debug_assertions)]
-const ASSETS_DIR: &str = "http://localhost:4000/assets/";
-#[cfg(not(debug_assertions))]
-const ASSETS_DIR: &str = "https://extensions.netsblox.org/extensions/RoboScapeOnline2/assets/";
 
 #[netsblox_extension_info]
 const INFO: ExtensionInfo = ExtensionInfo { 
@@ -414,6 +403,7 @@ pub async fn join_sim_menu() {
 }
 
 pub async fn new_room(environment: Option<String>, password: Option<String>, edit_mode: bool) {
+    set_title("Connecting...");
     let response = request_room(get_username(), password, edit_mode, environment).await;
 
     if let Ok(response) = response {
@@ -432,6 +422,7 @@ pub async fn new_room(environment: Option<String>, password: Option<String>, edi
 }
 
 pub async fn join_room(id: String, password: Option<String>) {
+    set_title("Connecting...");
     let response = request_room_info(&id).await;
 
     if let Ok(response) = response {

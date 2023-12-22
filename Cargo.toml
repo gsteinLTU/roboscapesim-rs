@@ -1,5 +1,4 @@
 [workspace]
 
-members = ["roboscapesim-server", "roboscapesim-client", 
-"roboscapesim-common", "roboscapesim-api", "roboscapesim-testclient", "roboscapesim-preflight"]
+members = ["roboscapesim-server", "roboscapesim-client", "roboscapesim-client-common", "roboscapesim-common", "roboscapesim-api", "roboscapesim-testclient", "roboscapesim-preflight"]
 

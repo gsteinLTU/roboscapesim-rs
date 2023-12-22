@@ -1,12 +1,9 @@
 [package]
-name = "roboscapesim-preflight"
+name = "roboscapesim-client-common"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
@@ -28,26 +25,10 @@ web-sys = { version = "0.3", features = [
     "HtmlInputElement",
     "HtmlDataListElement"] }
 roboscapesim-common = { path = "../roboscapesim-common" }
-roboscapesim-client-common = { path = "../roboscapesim-client-common" }
 neo-babylon = "0.2.0"
-netsblox-extension-macro = "0.1"
-console_error_panic_hook = "0.1.7"
 wasm-bindgen-futures = "0.4"
 serde_json = "1.0"
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 reqwest = { version = "0.11", features = ["serde_json", "json"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 rmp-serde = "1.1.2"
-netsblox-extension-util = "0.2.1"
-
-[build-dependencies]
-netsblox-extension-util = "^0.2.1"
-
-[profile.dev]
-lto = true
-
-[profile.release]
-lto = true
-debug = false
-opt-level = 's'
-strip = true

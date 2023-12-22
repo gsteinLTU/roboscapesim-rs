@@ -1,36 +1,37 @@
 use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
 use js_sys::{Reflect, Function};
 use neo_babylon::prelude::*;
+use roboscapesim_client_common::console_log;
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window, Node};
 
-use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, console_log, util::get_nb_externalvar};
+use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, util::get_nb_externalvar};
 
 /// Stores information relevant to the current state
-pub(crate) struct Game {
-    pub(crate) in_room: Rc<Cell<bool>>,
-    pub(crate) scene: Rc<RefCell<Scene>>,
-    pub(crate) models: Rc<RefCell<HashMap<String, Rc<BabylonMesh>>>>,
-    pub(crate) state: Rc<RefCell<HashMap<String, ObjectData>>>,
-    pub(crate) last_state: Rc<RefCell<HashMap<String, ObjectData>>>,
-    pub(crate) state_server_time: Rc<Cell<f64>>,
-    pub(crate) last_state_server_time: Rc<Cell<f64>>,
-    pub(crate) state_time: Rc<Cell<f64>>,
-    pub(crate) last_state_time: Rc<Cell<f64>>,
-    pub(crate) shadow_generator: Rc<CascadedShadowGenerator>,
-    pub(crate) beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
-    pub(crate) room_state: Rc<RefCell<Option<RoomState>>>,
-    pub(crate) name_tags: Rc<RefCell<HashMap<String, JsValue>>>,
-    pub(crate) ui_elements: Rc<RefCell<HashMap<String, HtmlElement>>>,
-    pub(crate) main_camera: Rc<UniversalCamera>,
-    pub(crate) follow_camera: Rc<FollowCamera>,
-    pub(crate) first_person_camera: Rc<UniversalCamera>,
-    pub(crate) robot_claims: Rc<RefCell<HashMap<String, String>>>,
+pub struct Game {
+    pub in_room: Rc<Cell<bool>>,
+    pub scene: Rc<RefCell<Scene>>,
+    pub models: Rc<RefCell<HashMap<String, Rc<BabylonMesh>>>>,
+    pub state: Rc<RefCell<HashMap<String, ObjectData>>>,
+    pub last_state: Rc<RefCell<HashMap<String, ObjectData>>>,
+    pub state_server_time: Rc<Cell<f64>>,
+    pub last_state_server_time: Rc<Cell<f64>>,
+    pub state_time: Rc<Cell<f64>>,
+    pub last_state_time: Rc<Cell<f64>>,
+    pub shadow_generator: Rc<CascadedShadowGenerator>,
+    pub beeps: Rc<RefCell<HashMap<String, Rc<JsValue>>>>,
+    pub room_state: Rc<RefCell<Option<RoomState>>>,
+    pub name_tags: Rc<RefCell<HashMap<String, JsValue>>>,
+    pub ui_elements: Rc<RefCell<HashMap<String, HtmlElement>>>,
+    pub main_camera: Rc<UniversalCamera>,
+    pub follow_camera: Rc<FollowCamera>,
+    pub first_person_camera: Rc<UniversalCamera>,
+    pub robot_claims: Rc<RefCell<HashMap<String, String>>>,
 }
 
 impl Game {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let scene = neo_babylon::api::create_scene("#roboscape-canvas");
         
         Reflect::set(&window().unwrap(), &JsValue::from_str("BABYLON.Engine.LastCreatedEngine.useReverseDepthBuffer"), &JsValue::from_bool(true)).unwrap();
@@ -101,7 +102,7 @@ impl Game {
         }
     }
 
-    pub(crate) async fn load_model(&self, name: &str, url: &str) -> Result<Rc<BabylonMesh>, JsValue> {
+    pub async fn load_model(&self, name: &str, url: &str) -> Result<Rc<BabylonMesh>, JsValue> {
         let model = BabylonMesh::create_gltf(&self.scene.borrow(), name, url).await;
         if let Err(e) =  model {
             console_log!("Failed to load mesh: {:?}", e);
@@ -157,7 +158,7 @@ impl Game {
     }
 
     // After disconnect, cleanup will remove all models from the scene and perform other cleanup tasks
-    pub(crate) fn cleanup(&self) {
+    pub fn cleanup(&self) {
         // Remove all models from the scene (BabylonMesh's drop will handle the rest)
         self.models.borrow_mut().clear();
 
