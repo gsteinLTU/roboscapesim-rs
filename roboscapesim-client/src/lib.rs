@@ -440,6 +440,7 @@ pub async fn join_room(id: String, password: Option<String>) {
 }
 
 pub async fn connect(server: &String) {
+    // Disconnect if already connected
     GAME.with(|game| {
         let in_room = game.borrow().in_room.get();
         if in_room {
@@ -452,15 +453,16 @@ pub async fn connect(server: &String) {
         }
     });
     
-    set_title("Connecting...");
-
+    // Connect to websocket
     WEBSOCKET.with(|socket| {
         let s = WebSocket::new(server);
         let s = Rc::new(RefCell::new(s.unwrap()));
         s.borrow().set_binary_type(web_sys::BinaryType::Arraybuffer);
-        GAME.with(|game| { 
-            let gc = game.clone();
-            let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
+
+        // Set callbacks
+        let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
+            GAME.with(|game| { 
+                let gc = game.clone();
                 let mut msg = None;
                 let data = js_get(&evt, "data").unwrap();
 
@@ -490,24 +492,26 @@ pub async fn connect(server: &String) {
                     handle_update_message(Ok(msg), &gc);
                 }
             });
-            s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
-            let gc = game.clone();
-            s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
+        });
+        s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
+        s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
+            GAME.with(|game| { 
+                let gc = game.clone();
                 set_title("Disconnected");
                 gc.borrow().cleanup();
-            }).into_js_value().unchecked_ref()));
-            s.borrow().set_onerror(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
-                console_log!("error");
-                show_message("Error", "Failed to connect to server");
-            }).into_js_value().unchecked_ref()));
-        });
-
+            }); 
+        }).into_js_value().unchecked_ref()));
+        s.borrow().set_onerror(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+            console_log!("error");
+            show_message("Error", "Failed to connect to server");
+        }).into_js_value().unchecked_ref()));
         s.borrow().set_onopen(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
             console_log!("open");
         }).into_js_value().unchecked_ref()));
         socket.replace(Some(s));  
     });
 
+    // Wait for connection
     loop {
         sleep(Duration::from_millis(25)).await;
 

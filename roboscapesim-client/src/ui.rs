@@ -200,6 +200,7 @@ pub(crate) fn init_ui() {
 
                 let id = id.split(" ").collect::<Vec<&str>>()[0].to_owned();
 
+                set_title("Connecting...");
                 join_room(id, password).await;
             });
 
