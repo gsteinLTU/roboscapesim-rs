@@ -18,12 +18,12 @@ use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
 use crate::services::proximity::ProximityConfig;
-use crate::services::waypoint::{create_waypoint_service, WaypointConfig, handle_waypoint_message};
+use crate::services::waypoint::{create_waypoint_service, WaypointConfig};
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
-use crate::services::{proximity::{create_proximity_service, handle_proximity_sensor_message}, trigger::{handle_trigger_message, create_trigger_service}, entity::{create_entity_service, handle_entity_message}, lidar::{handle_lidar_message, LIDARConfig, create_lidar_service}, position::{handle_position_sensor_message, create_position_service}, service_struct::{Service, ServiceType}, world::{self, handle_world_msg}};
+use crate::services::{proximity::create_proximity_service, trigger::create_trigger_service, entity::create_entity_service, lidar::{LIDARConfig, create_lidar_service}, position::create_position_service, service_struct::{Service, ServiceType}, world::{self}};
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
@@ -57,7 +57,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Arc<DashMap<(String, ServiceType), Arc<Service>>>,
+    pub services: Arc<DashMap<(String, ServiceType), Arc<Box<dyn Service + Send + Sync>>>>,
     #[derivative(Debug = "ignore")]
     pub lidar_configs: HashMap<String, LIDARConfig>,
     #[derivative(Debug = "ignore")]
@@ -125,7 +125,7 @@ impl RoomData {
         // Setup test room
         // Create IoTScape service
         let service = Arc::new(world::create_world_service(obj.name.as_str()));
-        let service_id = service.id.clone();
+        let service_id = service.get_service_info().id.clone();
         obj.services.insert((service_id, ServiceType::World), service);
         
         // Create IoTScape network I/O Task
@@ -141,7 +141,7 @@ impl RoomData {
                     for service in services.iter() {
                         // Handle messages
                         if service.value().update() > 0 {
-                            let rx = &mut service.service.lock().unwrap().rx_queue;
+                            let rx = &mut service.get_service_info().service.lock().unwrap().rx_queue;
                             while !rx.is_empty() {
                                 let msg = rx.pop_front().unwrap();
                                 net_iotscape_tx.send((msg, None)).unwrap();
@@ -294,7 +294,7 @@ impl RoomData {
                         if !hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
-                                if let Err(e) = service.value().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
+                                if let Err(e) = service.value().get_service_info().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
                                     error!("Error sending event to NetsBlox server: {:?}", e);
                                 }
                                 event_id += 1;
@@ -450,7 +450,7 @@ impl RoomData {
 
                 // Send leave message to clients
                 // TODO: handle multiple clients from one username better?
-                let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
+                let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
                 self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
             }
 
@@ -508,7 +508,7 @@ impl RoomData {
                                 // TODO: find other object name
                                 self.services.get(&(name.clone(), ServiceType::Trigger))
                                     .and_then(|s| Some(
-                                        s.value().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                                        s.value().get_service_info().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
                             }
                         } else {
                             if in_sensor.contains(&c2) {
@@ -635,28 +635,24 @@ impl RoomData {
     }
 
     fn handle_iotscape_message(&mut self, msg: iotscape::Request) -> (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>) {
-        let response = match msg.service.as_str() {
-            "RoboScapeWorld" => handle_world_msg(self, msg),
-            "RoboScapeEntity" => {
+        let mut response = None;
+
+        let service = self.services.get(&(msg.device.clone(), msg.service.clone().into())).map(|s| s.value().clone());
+
+        if let Some(service) = service {
+            response = Some(service.handle_message(self, &msg));
+
+            // Update entities if position or rotation changed
+            if ServiceType::Entity == msg.service.clone().into() {
                 if msg.function == "setPosition" || msg.function == "setRotation" {
                     if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
                         obj.value_mut().updated = true;
                     }
                 }
-
-                handle_entity_message(self, msg)
-            },
-            "PositionSensor" => handle_position_sensor_message(self, msg),
-            "LIDARSensor" => handle_lidar_message(self, msg),
-            "ProximitySensor" => handle_proximity_sensor_message(self, msg),
-            "RoboScapeTrigger" => handle_trigger_message(self, msg),
-            "WaypointList" => handle_waypoint_message(self, msg),
-            t => {
-                info!("Service type {:?} not yet implemented.", t);
-                (Err(format!("Service type {:?} not yet implemented.", t)), None)
             }
-        };
-        response
+        }
+        
+        response.unwrap_or((Err(format!("Service type {:?} not yet implemented.", &msg.service)), None))
     }
 
     fn handle_client_message(&mut self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {
@@ -741,7 +737,7 @@ impl RoomData {
         // Send
         let world_service = self.services.iter().find(|s| s.key().1 == ServiceType::World);
         if let Some(world_service) = world_service {
-            self.netsblox_msg_tx.send(((world_service.id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
+            self.netsblox_msg_tx.send(((world_service.get_service_info().id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
         self.last_interaction_time = get_timestamp();
@@ -921,17 +917,17 @@ impl RoomData {
             ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
             ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
             ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body)),
-            ServiceType::WaypointList => Ok(create_waypoint_service(id, &target_rigid_body)),
+            ServiceType::WaypointList => Ok(create_waypoint_service(id)),
             ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
             _ => Err(format!("Service type {:?} not yet implemented.", service_type))
         };
 
-        if service.is_err() {
-            return Err(service.unwrap_err());
+        if let Err(e) = service {
+            return Err(e);
         }
 
         let service = Arc::new(service.unwrap());
-        let service_id = service.id.clone();
+        let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), service_type), service);
 
         // // TODO: accept lidar config as input
@@ -972,7 +968,7 @@ impl RoomData {
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
 
         let service = Arc::new(create_trigger_service(&body_name, &cube_body_handle));
-        let service_id = service.id.clone();
+        let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         simulation.sensors.insert((service_id, collider_handle), DashSet::new());
         room.last_full_update = 0;
@@ -1102,7 +1098,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     // Send user join event
-    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().id.clone();
+    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
     room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userJoined".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
 
     Ok(())

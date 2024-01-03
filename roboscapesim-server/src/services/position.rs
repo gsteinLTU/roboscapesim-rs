@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, f32::consts::PI};
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
 use nalgebra::Vector3;
@@ -10,10 +8,14 @@ use rapier3d::prelude::{RigidBodyHandle, Real};
 
 use crate::room::RoomData;
 
-use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
 
+pub struct PositionService {
+    pub service_info: ServiceInfo,
+    pub rigid_body: RigidBodyHandle,
+}
 
-pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -92,90 +94,72 @@ pub fn create_position_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
             },
         },
     );
-    
-    let service = setup_service(definition, ServiceType::PositionSensor, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::PositionSensor,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(PositionService {
+        service_info: ServiceInfo::new(id, definition, ServiceType::PositionSensor),
+        rigid_body: *rigid_body,
+    }) as Box<dyn Service + Sync + Send>
 }
 
-pub fn handle_position_sensor_message(room: &mut RoomData, msg: Request) -> HandleMessageResult  {
-    let mut response = vec![];
-    
-    let mut msg = msg;
-    // TODO: figure out why this is necessary for VM requests to PositionSensor
-    msg.device = msg.device.replace("\"", "");
-    let s = room.services.get(&(msg.device.clone(), ServiceType::PositionSensor));
-    if let Some(s) = s {
-        if let Some(body) = s.value().attached_rigid_bodies.get("main") {
-            let simulation = &mut room.sim.lock().unwrap();
+impl Service for PositionService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                match msg.function.as_str() {
-                    "getX" => {
-                            response.push(o.translation().x.into());
-                    },
-                    "getY" => {
-                            response.push(o.translation().y.into());
-                    },
-                    "getZ" => {
-                            response.push(o.translation().z.into());
-                    },
-                    "getPosition" => {
-                            response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];
-                    },
-                    "getHeading" => {
-                            let q = o.position().rotation;
-                            let v1 = q.transform_vector(&Vector3::<Real>::x_axis());
-                            let mut angle = v1.dot(&Vector3::<Real>::x_axis()).acos();
-                            let cross = v1.cross(&Vector3::<Real>::x_axis());
-                            if Vector3::<Real>::y_axis().dot(&cross) < 0.0 {
-                                angle = -angle;
-                            }
-                            angle = angle * 180.0 / PI;
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
 
-                            if angle < -180.0 {
-                                angle = angle + 360.0;
-                            }
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        let mut response = vec![];
+        
+        let msg = msg;
+        // TODO: figure out why this is necessary for VM requests to PositionSensor
+            
+        let simulation = &mut room.sim.lock().unwrap();
 
-                            response = vec![angle.into()];
-                    },
-                    f => {
-                        info!("Unrecognized function {}", f);
-                    }
-                };
-            } else {
-                info!("Unrecognized object {}", msg.device);
+        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.rigid_body) {
+            match msg.function.as_str() {
+                "getX" => {
+                        response.push(o.translation().x.into());
+                },
+                "getY" => {
+                        response.push(o.translation().y.into());
+                },
+                "getZ" => {
+                        response.push(o.translation().z.into());
+                },
+                "getPosition" => {
+                        response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];
+                },
+                "getHeading" => {
+                        let q = o.position().rotation;
+                        let v1 = q.transform_vector(&Vector3::<Real>::x_axis());
+                        let mut angle = v1.dot(&Vector3::<Real>::x_axis()).acos();
+                        let cross = v1.cross(&Vector3::<Real>::x_axis());
+                        if Vector3::<Real>::y_axis().dot(&cross) < 0.0 {
+                            angle = -angle;
+                        }
+                        angle = angle * 180.0 / PI;
+
+                        if angle < -180.0 {
+                            angle = angle + 360.0;
+                        }
+
+                        response = vec![angle.into()];
+                },
+                f => {
+                    info!("Unrecognized function {}", f);
+                }
             };
         } else {
-            info!("No main rigid body found for {}", msg.device);
-        }
-        
-        s.enqueue_response_to(msg, Ok(response.clone()));
-    } else {
-        info!("No service found for {}", msg.device);
-    }
+            info!("Unrecognized object {}", msg.device);
+        };
 
-    if response.len() == 1 {
-        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
+        self.get_service_info().enqueue_response_to(&msg, Ok(response.clone()));
+
+        if response.len() == 1 {
+            return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
+        }
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
     }
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }

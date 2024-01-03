@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
 use log::{info, trace};
 use nalgebra::{vector, UnitQuaternion};
@@ -10,9 +8,14 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, util::util::num_val};
 
-use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
-pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub struct EntityService {
+    pub service_info: ServiceInfo,
+    pub rigid_body: RigidBodyHandle,
+}
+
+pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -127,82 +130,64 @@ pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service 
         },
     );
 
-    let service = setup_service(definition, ServiceType::Entity, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::Entity,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(EntityService {
+        service_info: ServiceInfo::new(id, definition, ServiceType::Entity),
+        rigid_body: *rigid_body,
+    }) as Box<dyn Service + Sync + Send>
 }
 
-pub fn handle_entity_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let mut response = vec![];
+impl Service for EntityService {
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        let mut response = vec![];
 
-    trace!("{:?}", msg);
-    
-    // TODO: Determine why quotes are being added to device name in VM
-    let s = room.services.get(&(msg.device.clone().replace("\"", ""), ServiceType::Entity));
-    if let Some(s) = s {
-        if let Some(body) = s.value().attached_rigid_bodies.get("main") {
-            if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(*body) {
-                match msg.function.as_str() {
-                    "reset" => {
-                        if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
-                            r.reset(&mut room.sim.lock().unwrap());
-                        } else {
-                            info!("Unrecognized device {}", msg.device);
-                        }
-                    },
-                    "setPosition" => {
-                        let x = num_val(&msg.params[0]);
-                        let y = num_val(&msg.params[1]);
-                        let z = num_val(&msg.params[2]);
-                        o.set_translation(vector![x, y, z], true);
-                    },
-                    "setRotation" => {
-                        let pitch = num_val(&msg.params[1]);
-                        let yaw = num_val(&msg.params[2]);
-                        let roll = num_val(&msg.params[0]);
-                        o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
-                    },
-                    "getPosition" => {
-                        response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
-                    },
-                    "getRotation" => {
-                        let r = o.rotation().euler_angles();
-                        response = vec![r.2.into(), r.0.into(), r.1.into()];              
-                    },
-                    f => {
-                        info!("Unrecognized function {}", f);
+        trace!("{:?}", msg);
+        
+        // TODO: Determine why quotes are being added to device name in VM
+        if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
+            match msg.function.as_str() {
+                "reset" => {
+                    if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
+                        r.reset(&mut room.sim.lock().unwrap());
+                    } else {
+                        info!("Unrecognized device {}", msg.device);
                     }
-                };
-            } else {
-                info!("Could not find rigid body for {}", msg.device);
-            }
+                },
+                "setPosition" => {
+                    let x = num_val(&msg.params[0]);
+                    let y = num_val(&msg.params[1]);
+                    let z = num_val(&msg.params[2]);
+                    o.set_translation(vector![x, y, z], true);
+                },
+                "setRotation" => {
+                    let pitch = num_val(&msg.params[1]);
+                    let yaw = num_val(&msg.params[2]);
+                    let roll = num_val(&msg.params[0]);
+                    o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
+                },
+                "getPosition" => {
+                    response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
+                },
+                "getRotation" => {
+                    let r = o.rotation().euler_angles();
+                    response = vec![r.2.into(), r.0.into(), r.1.into()];              
+                },
+                f => {
+                    info!("Unrecognized function {}", f);
+                }
+            };
         } else {
             info!("Could not find rigid body for {}", msg.device);
         }
 
-        s.enqueue_response_to(msg, Ok(response.clone()));      
-    } else {
-        info!("No service found for {}", msg.device);
+        self.get_service_info().enqueue_response_to(msg, Ok(response.clone()));
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
     }
 
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+    fn update(&self) -> usize {
+        self.get_service_info().update()
+    }
+
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
 }

@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, f32::consts::PI};
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::info;
 use nalgebra::{vector, UnitQuaternion, Vector3};
@@ -12,14 +10,18 @@ use serde_json::{Number, Value};
 
 use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
 
-use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
 // TODO: Separate kinematic limit from dynamic entity limit
 const DYNAMIC_ENTITY_LIMIT: usize = 25;
 const KINEMATIC_ENTITY_LIMIT: usize = 100;
 const ROBOT_LIMIT: usize = 4;
 
-pub fn create_world_service(id: &str) -> Service {
+pub struct WorldService {
+    pub service_info: ServiceInfo,
+}
+
+pub fn create_world_service(id: &str) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -382,392 +384,381 @@ pub fn create_world_service(id: &str) -> Service {
         EventDescription { params: vec!["username".into()] },
     );
 
-    let service = setup_service(definition, ServiceType::World, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::World,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies: DashMap::new(),
-    }
+    Box::new(WorldService {
+        service_info: ServiceInfo::new(id, definition, ServiceType::World),
+    }) as Box<dyn Service + Sync + Send>
 }
 
 const MAX_COORD: f32 = 10000.0;
 
-pub fn handle_world_msg(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let mut response: Vec<Value> = vec![];
+impl Service for WorldService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-    info!("{:?}", msg);
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
 
-    match msg.function.as_str() {
-        "reset" => {
-            room.reset();
-        },
-        "showText" => {
-            if msg.params.len() < 2 {
-                return (Ok(SimpleValue::Bool(false)), None);
-            }
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        let mut response: Vec<Value> = vec![];
 
-            let id = str_val(&msg.params[0]);
-            let text = str_val(&msg.params[1]);
-            let timeout = msg.params[2].as_f64();
-            RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
-        },
-        "removeEntity" => {
-            let id = str_val(&msg.params[0]).to_owned();
-            if room.objects.contains_key(&id) {
-                room.remove(&id);
-            } else if room.robots.contains_key(&id) {
-                room.remove(&id);
-                room.remove(&format!("robot_{id}"));
-            }
-        },
-        "removeAllEntities" => {
-            room.remove_all();
-        },
-        "clearText" => {
-            RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
-        },
-        "addEntity" => {
-            response = vec![add_entity(None, &msg.params, room).into()];
-        },
-        "instantiateEntities" => {
-            if msg.params[0].is_array() {
-                let objs = msg.params[0].as_array().unwrap();
-                response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().map(|s| s.to_owned()), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
-            }
-        },
-        "listEntities" => {
-            response = room.objects.iter().map(|e| { 
-                let mut kind = "box".to_owned();
-                let pos = e.value().transform.position;
-                let rot: (f32, f32, f32) = e.value().transform.rotation.into();
-                let rot = vec![rot.0, rot.1, rot.2];
-                let scale = e.value().transform.scaling;
-                let scale = vec![scale.x, scale.y, scale.z];
+        info!("{:?}", msg);
 
-                let mut options: Vec<Vec<Value>> = vec![
-                    vec!["kinematic".into(), e.is_kinematic.to_string().into()],
-                    vec!["size".into(), scale.into()],
-                ];
-
-                match &e.value().visual_info {
-                    Some(VisualInfo::Color(r, g, b, shape)) => {
-                        kind = shape.to_string();
-                        options.push(vec!["color".into(), vec![Value::from(r * 255.0), Value::from(g * 255.0), Value::from(b * 255.0)].into()]);
-                    },
-                    Some(VisualInfo::Texture(t, u, v, shape)) => {
-                        kind = shape.to_string();
-                        options.push(vec!["texture".into(), t.clone().into()]);
-                        options.push(vec!["uscale".into(), (*u).into()]);
-                        options.push(vec!["vscale".into(), (*v).into()]);
-                    },
-                    Some(VisualInfo::Mesh(m)) => {
-                        options.push(vec!["mesh".into(), m.clone().into()]);
-                    },
-                    Some(VisualInfo::None) => {},
-                    None => {},
-                }
-                vec![
-                    Value::from(e.key().clone()),
-                    kind.into(),
-                    pos.x.into(),
-                    pos.y.into(),
-                    pos.z.into(),
-                    rot.into(),
-                    options.into(),
-                ].into()
-            }).collect::<Vec<Value>>();
-        },
-        "addBlock" => {
-            if msg.params.len() < 7 {
-                return (Ok(SimpleValue::Bool(false)), None);
-            }
-
-            let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
-            let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
-            let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
-            let heading = num_val(&msg.params[3]);
-
-            let name = "block".to_string() + &room.next_object_id.to_string();
-            room.next_object_id += 1;
-            
-            let width = num_val(&msg.params[4]);
-            let height = num_val(&msg.params[5]);
-            let depth = num_val(&msg.params[6]);
-            let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
-            let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
-
-            let parsed_visualinfo = if visualinfo.is_array() {
-                let mut options = visualinfo.as_array().unwrap().clone();
-
-                // Check for 1x2 array
-                if options.len() == 2 && options[0].is_string() {
-                    options.push(serde_json::Value::Array(vec![options[0].clone(), options[1].clone()]));
+        match msg.function.as_str() {
+            "reset" => {
+                room.reset();
+            },
+            "showText" => {
+                if msg.params.len() < 2 {
+                    return (Ok(SimpleValue::Bool(false)), None);
                 }
 
-                let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
-                    if option.is_array() {
-                        let option = option.as_array().unwrap();
-        
-                        if option.len() >= 2 && option[0].is_string() {
-                            return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
-                        }
+                let id = str_val(&msg.params[0]);
+                let text = str_val(&msg.params[1]);
+                let timeout = msg.params[2].as_f64();
+                RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
+            },
+            "removeEntity" => {
+                let id = str_val(&msg.params[0]).to_owned();
+                if room.objects.contains_key(&id) {
+                    room.remove(&id);
+                } else if room.robots.contains_key(&id) {
+                    room.remove(&id);
+                    room.remove(&format!("robot_{id}"));
+                }
+            },
+            "removeAllEntities" => {
+                room.remove_all();
+            },
+            "clearText" => {
+                RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
+            },
+            "addEntity" => {
+                response = vec![add_entity(None, &msg.params, room).into()];
+            },
+            "instantiateEntities" => {
+                if msg.params[0].is_array() {
+                    let objs = msg.params[0].as_array().unwrap();
+                    response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().map(|s| s.to_owned()), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
+                }
+            },
+            "listEntities" => {
+                response = room.objects.iter().map(|e| { 
+                    let mut kind = "box".to_owned();
+                    let pos = e.value().transform.position;
+                    let rot: (f32, f32, f32) = e.value().transform.rotation.into();
+                    let rot = vec![rot.0, rot.1, rot.2];
+                    let scale = e.value().transform.scaling;
+                    let scale = vec![scale.x, scale.y, scale.z];
+
+                    let mut options: Vec<Vec<Value>> = vec![
+                        vec!["kinematic".into(), e.is_kinematic.to_string().into()],
+                        vec!["size".into(), scale.into()],
+                    ];
+
+                    match &e.value().visual_info {
+                        Some(VisualInfo::Color(r, g, b, shape)) => {
+                            kind = shape.to_string();
+                            options.push(vec!["color".into(), vec![Value::from(r * 255.0), Value::from(g * 255.0), Value::from(b * 255.0)].into()]);
+                        },
+                        Some(VisualInfo::Texture(t, u, v, shape)) => {
+                            kind = shape.to_string();
+                            options.push(vec!["texture".into(), t.clone().into()]);
+                            options.push(vec!["uscale".into(), (*u).into()]);
+                            options.push(vec!["vscale".into(), (*v).into()]);
+                        },
+                        Some(VisualInfo::Mesh(m)) => {
+                            options.push(vec!["mesh".into(), m.clone().into()]);
+                        },
+                        Some(VisualInfo::None) => {},
+                        None => {},
                     }
-        
-                    None
-                }));
+                    vec![
+                        Value::from(e.key().clone()),
+                        kind.into(),
+                        pos.x.into(),
+                        pos.y.into(),
+                        pos.z.into(),
+                        rot.into(),
+                        options.into(),
+                    ].into()
+                }).collect::<Vec<Value>>();
+            },
+            "addBlock" => {
+                if msg.params.len() < 7 {
+                    return (Ok(SimpleValue::Bool(false)), None);
+                }
 
-                parse_visual_info(&options, Shape::Box).unwrap_or_default() 
-            } else { 
-                parse_visual_info_color(visualinfo, Shape::Box)
-            };
+                let x = num_val(&msg.params[0]).clamp(-MAX_COORD, MAX_COORD);
+                let y = num_val(&msg.params[1]).clamp(-MAX_COORD, MAX_COORD);
+                let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
+                let heading = num_val(&msg.params[3]);
 
-            if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || (kinematic && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT){
-                info!("Entity limit already reached");
-                response = vec![false.into()];
-            } else {
-                let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
-                response = vec![id.into()];            
-            }
-        },
-        "addRobot" => {
-            if msg.params.len() < 3 {
-                return (Ok(SimpleValue::Bool(false)), None);
-            }
-            
-            if room.robots.len() >= ROBOT_LIMIT {
-                info!("Robot limit already reached");
-                response = vec![false.into()];
-            } else {
-                let x = num_val(&msg.params[0]);
-                let y = num_val(&msg.params[1]);
-                let z = num_val(&msg.params[2]);
-                let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
+                let name = "block".to_string() + &room.next_object_id.to_string();
+                room.next_object_id += 1;
                 
-                let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false, None, None);
-                response = vec![id.into()];
-            }
-        },
-        "addSensor" => {
-            if msg.params.len() < 2 {
-                return (Ok(SimpleValue::Bool(false)), None);
-            }
+                let width = num_val(&msg.params[4]);
+                let height = num_val(&msg.params[5]);
+                let depth = num_val(&msg.params[6]);
+                let kinematic = bool_val(msg.params.get(7).unwrap_or(&serde_json::Value::Bool(false)));
+                let visualinfo = msg.params.get(8).unwrap_or(&serde_json::Value::Null);
 
-            let service_type = str_val(&msg.params[0]).to_owned().to_lowercase();
-            let object = str_val(&msg.params[1]);
+                let parsed_visualinfo = if visualinfo.is_array() {
+                    let mut options = visualinfo.as_array().unwrap().clone();
 
-            // Check if object exists
-            if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
-                response = vec![false.into()];
-            } else {
-                let is_robot = room.robots.contains_key(&object);
-                let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
-                let override_name = None;
-        
-                // Options for proximity sensor
-                let mut targetpos = None;
-                let mut multiplier = 1.0;
-                let mut offset = 0.0;
-                
-                // Options for lidar
-                let mut config = "default".to_owned();
+                    // Check for 1x2 array
+                    if options.len() == 2 && options[0].is_string() {
+                        options.push(serde_json::Value::Array(vec![options[0].clone(), options[1].clone()]));
+                    }
 
-                if options.is_array() {
-                    for option in options.as_array().unwrap() {
+                    let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
                         if option.is_array() {
                             let option = option.as_array().unwrap();
+            
                             if option.len() >= 2 && option[0].is_string() {
-                                let key = str_val(&option[0]).to_lowercase();
-                                let value = &option[1];
-                                match key.as_str() {
-                                    // "name" => {
-                                    //     if value.is_string() {
-                                    //         override_name = Some(str_val(value));
-                                    //     }
-                                    // },
-                                    "targetpos" => {
-                                        if value.is_array() {
-                                            let value = value.as_array().unwrap();
-                                            if value.len() >= 3 {
-                                                targetpos = Some(vector![num_val(&value[0]), num_val(&value[1]), num_val(&value[2])]);
+                                return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+                            }
+                        }
+            
+                        None
+                    }));
+
+                    parse_visual_info(&options, Shape::Box).unwrap_or_default() 
+                } else { 
+                    parse_visual_info_color(visualinfo, Shape::Box)
+                };
+
+                if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || (kinematic && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT){
+                    info!("Entity limit already reached");
+                    response = vec![false.into()];
+                } else {
+                    let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
+                    response = vec![id.into()];            
+                }
+            },
+            "addRobot" => {
+                if msg.params.len() < 3 {
+                    return (Ok(SimpleValue::Bool(false)), None);
+                }
+                
+                if room.robots.len() >= ROBOT_LIMIT {
+                    info!("Robot limit already reached");
+                    response = vec![false.into()];
+                } else {
+                    let x = num_val(&msg.params[0]);
+                    let y = num_val(&msg.params[1]);
+                    let z = num_val(&msg.params[2]);
+                    let heading = num_val(msg.params.get(3).unwrap_or(&serde_json::Value::Number(Number::from(0)))) * PI / 180.0;
+                    
+                    let id = RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), heading), false, None, None);
+                    response = vec![id.into()];
+                }
+            },
+            "addSensor" => {
+                if msg.params.len() < 2 {
+                    return (Ok(SimpleValue::Bool(false)), None);
+                }
+
+                let service_type = str_val(&msg.params[0]).to_owned().to_lowercase();
+                let object = str_val(&msg.params[1]);
+
+                // Check if object exists
+                if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
+                    response = vec![false.into()];
+                } else {
+                    let is_robot = room.robots.contains_key(&object);
+                    let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
+                    let override_name = None;
+            
+                    // Options for proximity sensor
+                    let mut targetpos = None;
+                    let mut multiplier = 1.0;
+                    let mut offset = 0.0;
+                    
+                    // Options for lidar
+                    let mut config = "default".to_owned();
+
+                    if options.is_array() {
+                        for option in options.as_array().unwrap() {
+                            if option.is_array() {
+                                let option = option.as_array().unwrap();
+                                if option.len() >= 2 && option[0].is_string() {
+                                    let key = str_val(&option[0]).to_lowercase();
+                                    let value = &option[1];
+                                    match key.as_str() {
+                                        // "name" => {
+                                        //     if value.is_string() {
+                                        //         override_name = Some(str_val(value));
+                                        //     }
+                                        // },
+                                        "targetpos" => {
+                                            if value.is_array() {
+                                                let value = value.as_array().unwrap();
+                                                if value.len() >= 3 {
+                                                    targetpos = Some(vector![num_val(&value[0]), num_val(&value[1]), num_val(&value[2])]);
+                                                }
                                             }
-                                        }
-                                    },
-                                    "multiplier" => {
-                                        multiplier = num_val(&value);
-                                    },
-                                    "offset" => {
-                                        offset = num_val(&value);
-                                    },
-                                    "config" => {
-                                        if value.is_string() {
-                                            config = str_val(&value);
-                                        }
-                                    },
-                                    _ => {}
+                                        },
+                                        "multiplier" => {
+                                            multiplier = num_val(&value);
+                                        },
+                                        "offset" => {
+                                            offset = num_val(&value);
+                                        },
+                                        "config" => {
+                                            if value.is_string() {
+                                                config = str_val(&value);
+                                            }
+                                        },
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
+                    let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
 
-                response = vec![match service_type.as_str() {
-                    "position" => {
-                        RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
-                    },
-                    "proximity" => {
-                        let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
-                        room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
-                        result.into()
-                    },
-                    "waypoint" => {
-                        let result = RoomData::add_sensor(room, ServiceType::WaypointList, &object, override_name, body).unwrap();
-                        room.waypoint_configs.insert(result.clone(), WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() });
-                        result.into()
-                    },
-                    "lidar" => {
-                        let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
-                        let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
-                        let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
-                            info!("Unrecognized LIDAR config {}, using default", config);
-                            &default
-                        }).clone();
+                    response = vec![match service_type.as_str() {
+                        "position" => {
+                            RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
+                        },
+                        "proximity" => {
+                            let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
+                            room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
+                            result.into()
+                        },
+                        "waypoint" => {
+                            let result = RoomData::add_sensor(room, ServiceType::WaypointList, &object, override_name, body).unwrap();
+                            room.waypoint_configs.insert(result.clone(), WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() });
+                            result.into()
+                        },
+                        "lidar" => {
+                            let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
+                            let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
+                            let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
+                                info!("Unrecognized LIDAR config {}, using default", config);
+                                &default
+                            }).clone();
 
-                        if is_robot {
-                            config.offset_pos = vector![0.17,0.04,0.0];
+                            if is_robot {
+                                config.offset_pos = vector![0.17,0.04,0.0];
+                            }
+
+                            room.lidar_configs.insert(result.clone(), config);
+                            result.into()
+                        },
+                        "entity" => {
+                            RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
+                        },
+                        _ => {
+                            info!("Unrecognized service type {}", service_type);
+                            false.into()
                         }
-
-                        room.lidar_configs.insert(result.clone(), config);
-                        result.into()
-                    },
-                    "entity" => {
-                        RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
-                    },
-                    _ => {
-                        info!("Unrecognized service type {}", service_type);
-                        false.into()
-                    }
-                }];
+                    }];
+                }
+            },
+            "listTextures" => {
+                response = vec![
+                    "brick".into(),
+                    "bricks".into(),
+                    "cobble".into(),
+                    "crate".into(),
+                    "dirt".into(),
+                    "grass".into(),
+                    "gravel".into(),
+                    "grid".into(),
+                    "lava".into(),
+                    "sand".into(),
+                    "sandstone".into(),
+                    "stone".into(),
+                    "stone_brick".into(),
+                    "tree".into(),
+                    "wood".into(),
+                ];
+            },
+            "listMeshes" => {
+                response = vec![
+                    "cactus_short".into(),
+                    "cactus_tall".into(),
+                    "chest".into(),
+                    "chest_opt".into(),
+                    "grass".into(),
+                    "fence_simple".into(),
+                    "house_type01".into(),
+                    "house_type02".into(),
+                    "house_type03".into(),
+                    "house_type04".into(),
+                    "house_type05".into(),
+                    "house_type06".into(),
+                    "log".into(),
+                    "log_large".into(),
+                    "log_stack".into(),
+                    "log_stackLarge".into(),
+                    "mushroom_red".into(),
+                    "mushroom_redGroup".into(),
+                    "mushroom_redTall".into(),
+                    "mushroom_tan".into(),
+                    "mushroom_tanGroup".into(),
+                    "mushroom_tanTall".into(),
+                    "parallax_robot".into(),
+                    "sign".into(),
+                    "small_buildingA".into(),
+                    "small_buildingB".into(),
+                    "small_buildingC".into(),
+                    "small_buildingD".into(),
+                    "small_buildingE".into(),
+                    "small_buildingF".into(),
+                    "sphere".into(),
+                    "stump_round".into(),
+                    "stump_square".into(),
+                    "tree_blocks".into(),
+                    "tree_cone".into(),
+                    "tree_default".into(),
+                    "tree_detailed".into(),
+                    "tree_fat".into(),
+                    "tree_oak".into(),
+                    "tree_palmDetailedShort".into(),
+                    "tree_palmDetailedTall".into(),
+                    "tree_pineDefaultA".into(),
+                    "tree_pineDefaultB".into(),
+                    "tree_pineGroundA".into(),
+                    "tree_pineGroundB".into(),
+                    "tree_pineRoundA".into(),
+                    "tree_pineRoundB".into(),
+                    "tree_pineRoundC".into(),
+                    "tree_pineRoundD".into(),
+                    "tree_pineRoundE".into(),
+                    "tree_pineRoundF".into(),
+                    "tree_pineSmallA".into(),
+                    "tree_pineSmallB".into(),
+                    "tree_pineSmallC".into(),
+                    "tree_pineSmallD".into(),
+                    "tree_pineTallA".into(),
+                    "tree_pineTallB".into(),
+                    "tree_pineTallC".into(),
+                    "tree_pineTallD".into(),
+                    "tree_plateau".into(),
+                    "tree_simple".into(),
+                    "tree_small".into(),
+                    "tree_tall".into(),
+                    "tree_thin".into(),
+                ];
+            },
+            f => {
+                info!("Unrecognized function {}", f);
             }
-        },
-        "listTextures" => {
-            response = vec![
-                "brick".into(),
-                "bricks".into(),
-                "cobble".into(),
-                "crate".into(),
-                "dirt".into(),
-                "grass".into(),
-                "gravel".into(),
-                "grid".into(),
-                "lava".into(),
-                "sand".into(),
-                "sandstone".into(),
-                "stone".into(),
-                "stone_brick".into(),
-                "tree".into(),
-                "wood".into(),
-            ];
-        },
-        "listMeshes" => {
-            response = vec![
-                "cactus_short".into(),
-                "cactus_tall".into(),
-                "chest".into(),
-                "chest_opt".into(),
-                "grass".into(),
-                "fence_simple".into(),
-                "house_type01".into(),
-                "house_type02".into(),
-                "house_type03".into(),
-                "house_type04".into(),
-                "house_type05".into(),
-                "house_type06".into(),
-                "log".into(),
-                "log_large".into(),
-                "log_stack".into(),
-                "log_stackLarge".into(),
-                "mushroom_red".into(),
-                "mushroom_redGroup".into(),
-                "mushroom_redTall".into(),
-                "mushroom_tan".into(),
-                "mushroom_tanGroup".into(),
-                "mushroom_tanTall".into(),
-                "parallax_robot".into(),
-                "sign".into(),
-                "small_buildingA".into(),
-                "small_buildingB".into(),
-                "small_buildingC".into(),
-                "small_buildingD".into(),
-                "small_buildingE".into(),
-                "small_buildingF".into(),
-                "sphere".into(),
-                "stump_round".into(),
-                "stump_square".into(),
-                "tree_blocks".into(),
-                "tree_cone".into(),
-                "tree_default".into(),
-                "tree_detailed".into(),
-                "tree_fat".into(),
-                "tree_oak".into(),
-                "tree_palmDetailedShort".into(),
-                "tree_palmDetailedTall".into(),
-                "tree_pineDefaultA".into(),
-                "tree_pineDefaultB".into(),
-                "tree_pineGroundA".into(),
-                "tree_pineGroundB".into(),
-                "tree_pineRoundA".into(),
-                "tree_pineRoundB".into(),
-                "tree_pineRoundC".into(),
-                "tree_pineRoundD".into(),
-                "tree_pineRoundE".into(),
-                "tree_pineRoundF".into(),
-                "tree_pineSmallA".into(),
-                "tree_pineSmallB".into(),
-                "tree_pineSmallC".into(),
-                "tree_pineSmallD".into(),
-                "tree_pineTallA".into(),
-                "tree_pineTallB".into(),
-                "tree_pineTallC".into(),
-                "tree_pineTallD".into(),
-                "tree_plateau".into(),
-                "tree_simple".into(),
-                "tree_small".into(),
-                "tree_tall".into(),
-                "tree_thin".into(),
-            ];
-        },
-        f => {
-            info!("Unrecognized function {}", f);
+        };
+        
+        self.service_info.enqueue_response_to(msg, Ok(response.clone()));      
+
+        if response.len() == 1 {
+            return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
         }
-    };
-    
-    let s = room.services.get(&(msg.device.clone(), ServiceType::World));
-    if let Some(s) = s {
-        s.value().enqueue_response_to(msg, Ok(response.clone()));      
-    } else {
-        info!("No service found for {}", msg.device);
-    }
 
-    if response.len() == 1 {
-        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
     }
-
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
 }
 
 fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {

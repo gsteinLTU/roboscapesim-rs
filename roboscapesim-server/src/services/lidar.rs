@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}};
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::{trace, info};
 use nalgebra::{UnitQuaternion, Vector3, vector, Rotation3};
@@ -12,7 +10,7 @@ use serde_json::Value;
 
 use crate::{room::RoomData, simulation::SCALE};
 
-use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LIDARConfig {
@@ -40,7 +38,12 @@ pub const DEFAULT_LIDAR_CONFIGS: Lazy<BTreeMap<String, LIDARConfig>> = Lazy::new
         ].iter().cloned())
 });
 
-pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub struct LIDARService {
+    pub service_info: ServiceInfo,
+    pub rigid_body: RigidBodyHandle,
+}
+
+pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -69,28 +72,10 @@ pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
         },
     );
 
-    let service = setup_service(definition, ServiceType::LIDAR, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), rigid_body.to_owned());
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::LIDAR,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(LIDARService {
+        service_info: ServiceInfo::new(id, definition, ServiceType::LIDAR),
+        rigid_body: rigid_body.to_owned(),
+    }) as Box<dyn Service + Sync + Send>
 }
 
 pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, body_pos: &Vector3<Real>) -> Vec<Ray> {
@@ -113,33 +98,34 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
     rays
 }
 
-pub fn handle_lidar_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    info!("{:?}", msg);
-    let mut response = vec![];
+impl Service for LIDARService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-    let s = room.services.get(&(msg.device.clone(), ServiceType::LIDAR));
-    if let Some(s) = s {
-        let service = s.value();
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
+
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        info!("{:?}", msg);
+        let mut response = vec![];
+
+        let service = self.get_service_info();
         if msg.function == "getRange" {
             if !room.lidar_configs.contains_key(&service.id) {
                 info!("Adding default LIDAR config for {}", service.id);
                 room.lidar_configs.insert(service.id.clone(), LIDARConfig::default());
             }
 
-            if let Some(body) = service.attached_rigid_bodies.get("main") {
-                response = do_rays(room.lidar_configs.get(&service.id).unwrap(), body.to_owned(), room.sim.lock().unwrap());     
-            } else {
-                info!("Could not find rigid body for {}", msg.device);
-            }
+            response = do_rays(room.lidar_configs.get(&service.id).unwrap(), self.rigid_body, room.sim.lock().unwrap());     
         } else {
             info!("Unrecognized function {}", msg.function);
         }
         service.enqueue_response_to(msg, Ok(response.clone()));
-    } else {
-        info!("Could not find service for {}", msg.device);
-    }
 
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+    }
 }
 
 fn do_rays(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {

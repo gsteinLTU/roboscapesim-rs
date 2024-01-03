@@ -1,16 +1,14 @@
 use std::collections::BTreeMap;
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
 use nalgebra::Vector3;
 use netsblox_vm::runtime::SimpleValue;
-use rapier3d::prelude::{RigidBodyHandle, Real};
+use rapier3d::prelude::Real;
 
 use crate::room::RoomData;
 
-use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WaypointConfig {
@@ -25,7 +23,11 @@ impl Default for WaypointConfig {
     }
 }
 
-pub fn create_waypoint_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub struct WaypointService {
+    pub service_info: ServiceInfo,
+}
+
+pub fn create_waypoint_service(id: &str) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -53,38 +55,26 @@ pub fn create_waypoint_service(id: &str, rigid_body: &RigidBodyHandle) -> Servic
             },
         },
     );
-    
-    let service = setup_service(definition, ServiceType::WaypointList, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::WaypointList,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(WaypointService {
+            service_info: ServiceInfo::new(id, definition, ServiceType::WaypointList),
+    }) as Box<dyn Service + Sync + Send>
 }
 
-pub fn handle_waypoint_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let mut response = vec![];
-    let message_response = None;
+impl Service for WaypointService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-    let s = room.services.get(&(msg.device.clone(), ServiceType::WaypointList));
-    if let Some(s) = s {
-        let service = s.value();            
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
+
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        
+        let mut response = vec![];
+        let message_response = None;
+
+        let service = self.get_service_info();            
         if let Some(t) = room.waypoint_configs.get(&msg.device) {
             match msg.function.as_str() {
                 "getNextWaypoint" => {
@@ -102,12 +92,10 @@ pub fn handle_waypoint_message(room: &mut RoomData, msg: Request) -> HandleMessa
 
         service.enqueue_response_to(msg, Ok(response.clone()));      
 
-    } else {
-        info!("No service found for {}", msg.device);
-    }
 
-    if response.len() == 1 {
-        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), message_response);
+        if response.len() == 1 {
+            return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), message_response);
+        }
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), message_response)
     }
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), message_response)
 }

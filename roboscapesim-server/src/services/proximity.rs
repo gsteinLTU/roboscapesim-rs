@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request, EventDescription};
 use log::info;
 use nalgebra::Vector3;
@@ -10,7 +8,7 @@ use rapier3d::prelude::{RigidBodyHandle, Real};
 
 use crate::room::RoomData;
 
-use super::{service_struct::{setup_service, ServiceType, Service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProximityConfig {
@@ -29,7 +27,12 @@ impl Default for ProximityConfig {
     }
 }
 
-pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub struct ProximityService {
+    pub service_info: ServiceInfo,
+    pub rigid_body: RigidBodyHandle,
+}
+
+pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -76,75 +79,59 @@ pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Servi
         params: vec![],
     });
     
-    let service = setup_service(definition, ServiceType::ProximitySensor, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::ProximitySensor,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(ProximityService{
+        service_info: ServiceInfo::new(id, definition, ServiceType::ProximitySensor),
+        rigid_body: *rigid_body,
+    }) as Box<dyn Service + Sync + Send>
 }
 
-pub fn handle_proximity_sensor_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let mut response = vec![];
-    let mut message_response = None;
+impl Service for ProximityService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-    let s = room.services.get(&(msg.device.clone(), ServiceType::ProximitySensor));
-    if let Some(s) = s {
-        let service = s.value();
-        if let Some(body) = service.attached_rigid_bodies.get("main") {
-            let simulation = &mut room.sim.lock().unwrap();
-            
-            if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(*body) {
-                if let Some(t) = room.proximity_configs.get(&msg.device) {
-                    match msg.function.as_str() {
-                        "getIntensity" => {
-                            // TODO: apply some more complex function definable through some config setting?
-                            let dist = ((t.target.to_owned() - o.translation()).norm() * t.multiplier) + t.offset;
-                            response.push(dist.into());
-                        },
-                        "dig" => {
-                            // TODO: Something better than this?
-                            // For now, sending a message to the project that a dig was attempted
-                            message_response.replace(((service.id.to_owned(), ServiceType::ProximitySensor), "dig".to_owned(), BTreeMap::new()));
-                        },
-                        f => {
-                            info!("Unrecognized function {}", f);
-                        }
-                    };
-                } else {
-                    info!("No target defined for {}", msg.device);
-                }
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
+
+    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+
+        let mut response = vec![];
+        let mut message_response = None;
+
+        let service = self.get_service_info();
+        let simulation = &mut room.sim.lock().unwrap();
+        
+        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.rigid_body) {
+            if let Some(t) = room.proximity_configs.get(&msg.device) {
+                match msg.function.as_str() {
+                    "getIntensity" => {
+                        // TODO: apply some more complex function definable through some config setting?
+                        let dist = ((t.target.to_owned() - o.translation()).norm() * t.multiplier) + t.offset;
+                        response.push(dist.into());
+                    },
+                    "dig" => {
+                        // TODO: Something better than this?
+                        // For now, sending a message to the project that a dig was attempted
+                        message_response.replace(((service.id.to_owned(), ServiceType::ProximitySensor), "dig".to_owned(), BTreeMap::new()));
+                    },
+                    f => {
+                        info!("Unrecognized function {}", f);
+                    }
+                };
             } else {
-                info!("Unrecognized object {}", msg.device);
-            };
+                info!("No target defined for {}", msg.device);
+            }
         } else {
-            info!("No main rigid body found for {}", msg.device);
+            info!("Unrecognized object {}", msg.device);
+        };
+
+        service.enqueue_response_to(&msg, Ok(response.clone()));      
+
+
+        if response.len() == 1 {
+            return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), message_response);
         }
-
-        service.enqueue_response_to(msg, Ok(response.clone()));      
-
-    } else {
-        info!("No service found for {}", msg.device);
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), message_response)
     }
-
-    if response.len() == 1 {
-        return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), message_response);
-    }
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), message_response)
 }

@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use atomic_instant::AtomicInstant;
-use dashmap::DashMap;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, Request, EventDescription};
 use log::info;
 use netsblox_vm::runtime::SimpleValue;
@@ -9,9 +7,14 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::room::RoomData;
 
-use super::{service_struct::{Service, ServiceType, setup_service, DEFAULT_ANNOUNCE_PERIOD}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
-pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service {
+pub struct TriggerService {
+    pub service_info: ServiceInfo,
+    pub rigid_body: RigidBodyHandle,
+}
+
+pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -35,45 +38,34 @@ pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Service
         params: vec!["object".into()],
     });
 
-    let service = setup_service(definition, ServiceType::Trigger, None);
-
-    service
-        .lock()
-        .unwrap()
-        .announce()
-        .expect("Could not announce to server");
-
-    let last_announce = AtomicInstant::now();
-    let announce_period = DEFAULT_ANNOUNCE_PERIOD;
-
-    let attached_rigid_bodies = DashMap::new();
-    attached_rigid_bodies.insert("main".into(), *rigid_body);
-
-    Service {
-        id: id.to_string(),
-        service_type: ServiceType::Trigger,
-        service,
-        last_announce,
-        announce_period,
-        attached_rigid_bodies,
-    }
+    Box::new(TriggerService {
+        service_info: ServiceInfo::new(id, definition, ServiceType::Trigger),
+        rigid_body: *rigid_body,
+    }) as Box<dyn Service + Sync + Send>
 }
 
-pub fn handle_trigger_message(room: &mut RoomData, msg: Request) -> HandleMessageResult {
-    let response = vec![];
+impl Service for TriggerService {
+    fn update(&self) -> usize {
+        self.service_info.update()
+    }
 
-    info!("{:?}", msg);
+    fn get_service_info(&self) -> &ServiceInfo {
+        &self.service_info
+    }
+
+    fn handle_message(& self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+        let response = vec![];
+
+        info!("{:?}", msg);
     
-    let s = room.services.get(&(msg.device.clone(), ServiceType::Entity));
-    if let Some(s) = s {
         match msg.function.as_str() {
             f => {
                 info!("Unrecognized function {}", f);
             }
         };
 
-        s.enqueue_response_to(msg, Ok(response.clone()));      
-    }
+        self.get_service_info().enqueue_response_to(msg, Ok(response.clone()));      
 
-    (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+        (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+    }
 }
