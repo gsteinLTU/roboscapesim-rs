@@ -8,7 +8,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
+use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::{ProximityConfig, ProximityService}, lidar::{DEFAULT_LIDAR_CONFIGS, LIDARService}, waypoint::{WaypointConfig, WaypointService}, position::PositionService, entity::EntityService}};
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
@@ -21,7 +21,7 @@ pub struct WorldService {
     pub service_info: ServiceInfo,
 }
 
-pub fn create_world_service(id: &str) -> Box<dyn Service + Sync + Send> {
+pub fn create_world_service(id: &str) -> Box<dyn Service> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -386,7 +386,7 @@ pub fn create_world_service(id: &str) -> Box<dyn Service + Sync + Send> {
 
     Box::new(WorldService {
         service_info: ServiceInfo::new(id, definition, ServiceType::World),
-    }) as Box<dyn Service + Sync + Send>
+    }) as Box<dyn Service>
 }
 
 const MAX_COORD: f32 = 10000.0;
@@ -400,7 +400,7 @@ impl Service for WorldService {
         &self.service_info
     }
 
-    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         let mut response: Vec<Value> = vec![];
 
         info!("{:?}", msg);
@@ -569,7 +569,6 @@ impl Service for WorldService {
                 } else {
                     let is_robot = room.robots.contains_key(&object);
                     let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
-                    let override_name = None;
             
                     // Options for proximity sensor
                     let mut targetpos = None;
@@ -622,20 +621,15 @@ impl Service for WorldService {
 
                     response = vec![match service_type.as_str() {
                         "position" => {
-                            RoomData::add_sensor(room, ServiceType::PositionSensor, &object, override_name, body).unwrap().into()
+                            RoomData::add_sensor::<PositionService>(room, &object, body.clone()).unwrap().into()
                         },
                         "proximity" => {
-                            let result = RoomData::add_sensor(room, ServiceType::ProximitySensor, &object, override_name, body).unwrap();
-                            room.proximity_configs.insert(result.clone(), ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() });
-                            result.into()
+                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).unwrap().into()
                         },
                         "waypoint" => {
-                            let result = RoomData::add_sensor(room, ServiceType::WaypointList, &object, override_name, body).unwrap();
-                            room.waypoint_configs.insert(result.clone(), WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() });
-                            result.into()
+                            RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).unwrap().into()
                         },
                         "lidar" => {
-                            let result = RoomData::add_sensor(room, ServiceType::LIDAR, &object, override_name, body).unwrap();
                             let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
                             let mut config = DEFAULT_LIDAR_CONFIGS.get(&config).unwrap_or_else(|| {
                                 info!("Unrecognized LIDAR config {}, using default", config);
@@ -646,11 +640,12 @@ impl Service for WorldService {
                                 config.offset_pos = vector![0.17,0.04,0.0];
                             }
 
-                            room.lidar_configs.insert(result.clone(), config);
-                            result.into()
+                            config.body = body.clone();
+
+                            RoomData::add_sensor::<LIDARService>(room, &object, config).unwrap().into()
                         },
                         "entity" => {
-                            RoomData::add_sensor(room, ServiceType::Entity, &object, override_name, body).unwrap().into()
+                            RoomData::add_sensor::<EntityService>(room, &object, body.clone()).unwrap().into()
                         },
                         _ => {
                             info!("Unrecognized service type {}", service_type);

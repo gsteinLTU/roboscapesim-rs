@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::{room::RoomData, simulation::SCALE};
 
-use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LIDARConfig {
@@ -19,11 +19,12 @@ pub struct LIDARConfig {
     pub end_angle: Real, 
     pub offset_pos: Vector3<Real>,
     pub max_distance: Real,
+    pub body: RigidBodyHandle,
 }
 
 impl Default for LIDARConfig {
     fn default() -> Self {
-        Self { num_beams: 3, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: Vector3::zeros(), max_distance: 3.0 }
+        Self { num_beams: 3, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: Vector3::zeros(), max_distance: 3.0, body: RigidBodyHandle::invalid() }
     }
 }
 
@@ -40,42 +41,46 @@ pub const DEFAULT_LIDAR_CONFIGS: Lazy<BTreeMap<String, LIDARConfig>> = Lazy::new
 
 pub struct LIDARService {
     pub service_info: ServiceInfo,
-    pub rigid_body: RigidBodyHandle,
+    pub config: LIDARConfig,
 }
 
-pub fn create_lidar_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
-    // Create definition struct
-    let mut definition = ServiceDefinition {
-        id: id.to_owned(),
-        methods: BTreeMap::new(),
-        events: BTreeMap::new(),
-        description: IoTScapeServiceDescription {
-            description: Some("Get distances at multiple angles".to_owned()),
-            externalDocumentation: None,
-            termsOfService: None,
-            contact: Some("gstein@ltu.edu".to_owned()),
-            license: None,
-            version: "1".to_owned(),
-        },
-    };
+impl ServiceFactory for LIDARService {
+    type Config = LIDARConfig;
 
-    // Define methods
-    definition.methods.insert(
-        "getRange".to_owned(),
-        MethodDescription {
-            documentation: Some("Get list of distances around the sensor".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned(), "number".to_owned()],
+    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+        // Create definition struct
+        let mut definition = ServiceDefinition {
+            id: id.to_owned(),
+            methods: BTreeMap::new(),
+            events: BTreeMap::new(),
+            description: IoTScapeServiceDescription {
+                description: Some("Get distances at multiple angles".to_owned()),
+                externalDocumentation: None,
+                termsOfService: None,
+                contact: Some("gstein@ltu.edu".to_owned()),
+                license: None,
+                version: "1".to_owned(),
             },
-        },
-    );
+        };
 
-    Box::new(LIDARService {
-        service_info: ServiceInfo::new(id, definition, ServiceType::LIDAR),
-        rigid_body: rigid_body.to_owned(),
-    }) as Box<dyn Service + Sync + Send>
+        // Define methods
+        definition.methods.insert(
+            "getRange".to_owned(),
+            MethodDescription {
+                documentation: Some("Get list of distances around the sensor".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["number".to_owned(), "number".to_owned()],
+                },
+            },
+        );
+
+        Box::new(LIDARService {
+            service_info: ServiceInfo::new(id, definition, ServiceType::LIDAR),
+            config: config,
+        }) as Box<dyn Service>
+    }
 }
 
 pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, body_pos: &Vector3<Real>) -> Vec<Ray> {
@@ -107,18 +112,14 @@ impl Service for LIDARService {
         &self.service_info
     }
 
-    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         info!("{:?}", msg);
         let mut response = vec![];
 
         let service = self.get_service_info();
         if msg.function == "getRange" {
-            if !room.lidar_configs.contains_key(&service.id) {
-                info!("Adding default LIDAR config for {}", service.id);
-                room.lidar_configs.insert(service.id.clone(), LIDARConfig::default());
-            }
 
-            response = do_rays(room.lidar_configs.get(&service.id).unwrap(), self.rigid_body, room.sim.lock().unwrap());     
+            response = do_rays(&self.config, room.sim.lock().unwrap());     
         } else {
             info!("Unrecognized function {}", msg.function);
         }
@@ -128,15 +129,15 @@ impl Service for LIDARService {
     }
 }
 
-fn do_rays(config: &LIDARConfig, body: RigidBodyHandle, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
+fn do_rays(config: &LIDARConfig, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
     let mut rays = vec![];
 
-    if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(body) {
+    if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(config.body) {
         rays = calculate_rays(config, o.rotation(), o.translation());
     }
 
     // Raycast each ray
-    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(body);
+    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(config.body);
 
     let mut distances: Vec<f32> = vec![];
     // TODO: figure out LIDAR not working

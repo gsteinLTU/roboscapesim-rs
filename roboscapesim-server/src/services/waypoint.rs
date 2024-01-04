@@ -8,7 +8,7 @@ use rapier3d::prelude::Real;
 
 use crate::room::RoomData;
 
-use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WaypointConfig {
@@ -25,39 +25,45 @@ impl Default for WaypointConfig {
 
 pub struct WaypointService {
     pub service_info: ServiceInfo,
+    pub config: WaypointConfig,
 }
 
-pub fn create_waypoint_service(id: &str) -> Box<dyn Service + Sync + Send> {
-    // Create definition struct
-    let mut definition = ServiceDefinition {
-        id: id.to_owned(),
-        methods: BTreeMap::new(),
-        events: BTreeMap::new(),
-        description: IoTScapeServiceDescription {
-            description: Some("Get the position and orientation of an object".to_owned()),
-            externalDocumentation: None,
-            termsOfService: None,
-            contact: Some("gstein@ltu.edu".to_owned()),
-            license: None,
-            version: "1".to_owned(),
-        },
-    };
+impl ServiceFactory for WaypointService {
+    type Config = WaypointConfig;
 
-    // Define methods
-    definition.methods.insert(
-        "getNextWaypoint".to_owned(),
-        MethodDescription {
-            documentation: Some("Get the next waypoint to navigate to".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
+    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+        // Create definition struct
+        let mut definition = ServiceDefinition {
+            id: id.to_owned(),
+            methods: BTreeMap::new(),
+            events: BTreeMap::new(),
+            description: IoTScapeServiceDescription {
+                description: Some("Get the position and orientation of an object".to_owned()),
+                externalDocumentation: None,
+                termsOfService: None,
+                contact: Some("gstein@ltu.edu".to_owned()),
+                license: None,
+                version: "1".to_owned(),
             },
-        },
-    );
-    Box::new(WaypointService {
+        };
+
+        // Define methods
+        definition.methods.insert(
+            "getNextWaypoint".to_owned(),
+            MethodDescription {
+                documentation: Some("Get the next waypoint to navigate to".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
+                },
+            },
+        );
+        Box::new(WaypointService {
             service_info: ServiceInfo::new(id, definition, ServiceType::WaypointList),
-    }) as Box<dyn Service + Sync + Send>
+            config,
+        }) as Box<dyn Service>
+    }
 }
 
 impl Service for WaypointService {
@@ -69,26 +75,21 @@ impl Service for WaypointService {
         &self.service_info
     }
 
-    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
-        
+    fn handle_message(&self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         let mut response = vec![];
         let message_response = None;
 
-        let service = self.get_service_info();            
-        if let Some(t) = room.waypoint_configs.get(&msg.device) {
-            match msg.function.as_str() {
-                "getNextWaypoint" => {
-                    // TODO: apply some function definable through some config setting
-                    let t = t.target.to_owned();
-                    response = vec![t.x.into(), t.y.into(), t.z.into()];
-                },
-                f => {
-                    info!("Unrecognized function {}", f);
-                }
-            };
-        } else {
-            info!("No target defined for {}", msg.device);
-        }
+        let service = self.get_service_info();           
+        match msg.function.as_str() {
+            "getNextWaypoint" => {
+                // TODO: apply some function definable through some config setting
+                let t = self.config.target.to_owned();
+                response = vec![t.x.into(), t.y.into(), t.z.into()];
+            },
+            f => {
+                info!("Unrecognized function {}", f);
+            }
+        };
 
         service.enqueue_response_to(msg, Ok(response.clone()));      
 

@@ -8,13 +8,14 @@ use rapier3d::prelude::{RigidBodyHandle, Real};
 
 use crate::room::RoomData;
 
-use super::{service_struct::{ServiceType, Service, ServiceInfo}, HandleMessageResult};
+use super::{service_struct::{ServiceType, Service, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProximityConfig {
     pub target: Vector3<Real>,
     pub multiplier: f32,
     pub offset: f32,
+    pub body: RigidBodyHandle,
 }
 
 impl Default for ProximityConfig {
@@ -23,66 +24,71 @@ impl Default for ProximityConfig {
             target: Vector3::new(0.0, 0.0, 0.0),
             multiplier: 1.0,
             offset: 0.0,
+            body: RigidBodyHandle::invalid(),
         }
     }
 }
 
 pub struct ProximityService {
     pub service_info: ServiceInfo,
-    pub rigid_body: RigidBodyHandle,
+    pub config: ProximityConfig,
 }
 
-pub fn create_proximity_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
+impl ServiceFactory for ProximityService {
+    type Config = ProximityConfig;
+
+    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
     // Create definition struct
-    let mut definition = ServiceDefinition {
-        id: id.to_owned(),
-        methods: BTreeMap::new(),
-        events: BTreeMap::new(),
-        description: IoTScapeServiceDescription {
-            description: Some("Get the position and orientation of an object".to_owned()),
-            externalDocumentation: None,
-            termsOfService: None,
-            contact: Some("gstein@ltu.edu".to_owned()),
-            license: None,
-            version: "1".to_owned(),
-        },
-    };
-
-    // Define methods
-    definition.methods.insert(
-        "getIntensity".to_owned(),
-        MethodDescription {
-            documentation: Some("Get sensor reading at current position".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned()],
+        let mut definition = ServiceDefinition {
+            id: id.to_owned(),
+            methods: BTreeMap::new(),
+            events: BTreeMap::new(),
+            description: IoTScapeServiceDescription {
+                description: Some("Get the position and orientation of an object".to_owned()),
+                externalDocumentation: None,
+                termsOfService: None,
+                contact: Some("gstein@ltu.edu".to_owned()),
+                license: None,
+                version: "1".to_owned(),
             },
-        },
-    );
+        };
 
-    definition.methods.insert(
-        "dig".to_owned(),
-        MethodDescription {
-            documentation: Some("Get heading direction (yaw) of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
+        // Define methods
+        definition.methods.insert(
+            "getIntensity".to_owned(),
+            MethodDescription {
+                documentation: Some("Get sensor reading at current position".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["number".to_owned()],
+                },
             },
-        },
-    );
+        );
 
-    // Define events
-    definition.events.insert("dig".to_owned(),
-    EventDescription {
-        params: vec![],
-    });
-    
-    Box::new(ProximityService{
-        service_info: ServiceInfo::new(id, definition, ServiceType::ProximitySensor),
-        rigid_body: *rigid_body,
-    }) as Box<dyn Service + Sync + Send>
+        definition.methods.insert(
+            "dig".to_owned(),
+            MethodDescription {
+                documentation: Some("Get heading direction (yaw) of object".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        // Define events
+        definition.events.insert("dig".to_owned(),
+        EventDescription {
+            params: vec![],
+        });
+        
+        Box::new(ProximityService{
+            service_info: ServiceInfo::new(id, definition, ServiceType::ProximitySensor),
+            config,
+        }) as Box<dyn Service>
+    }
 }
 
 impl Service for ProximityService {
@@ -94,7 +100,7 @@ impl Service for ProximityService {
         &self.service_info
     }
 
-    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
 
         let mut response = vec![];
         let mut message_response = None;
@@ -102,26 +108,22 @@ impl Service for ProximityService {
         let service = self.get_service_info();
         let simulation = &mut room.sim.lock().unwrap();
         
-        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.rigid_body) {
-            if let Some(t) = room.proximity_configs.get(&msg.device) {
-                match msg.function.as_str() {
-                    "getIntensity" => {
-                        // TODO: apply some more complex function definable through some config setting?
-                        let dist = ((t.target.to_owned() - o.translation()).norm() * t.multiplier) + t.offset;
-                        response.push(dist.into());
-                    },
-                    "dig" => {
-                        // TODO: Something better than this?
-                        // For now, sending a message to the project that a dig was attempted
-                        message_response.replace(((service.id.to_owned(), ServiceType::ProximitySensor), "dig".to_owned(), BTreeMap::new()));
-                    },
-                    f => {
-                        info!("Unrecognized function {}", f);
-                    }
-                };
-            } else {
-                info!("No target defined for {}", msg.device);
-            }
+        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.config.body) {
+             match msg.function.as_str() {
+                "getIntensity" => {
+                    // TODO: apply some more complex function definable through some config setting?
+                    let dist = ((self.config.target.to_owned() - o.translation()).norm() * self.config.multiplier) + self.config.offset;
+                    response.push(dist.into());
+                },
+                "dig" => {
+                    // TODO: Something better than this?
+                    // For now, sending a message to the project that a dig was attempted
+                    message_response.replace(((service.id.to_owned(), ServiceType::ProximitySensor), "dig".to_owned(), BTreeMap::new()));
+                },
+                f => {
+                    info!("Unrecognized function {}", f);
+                }
+            };
         } else {
             info!("Unrecognized object {}", msg.device);
         };

@@ -81,7 +81,7 @@ impl ServiceInfo {
 }
 
 /// Trait for defining a service
-pub trait Service {
+pub trait Service: Sync + Send {
     /// Update the service, return number of messages in queue
     fn update(&self) -> usize;
 
@@ -90,6 +90,12 @@ pub trait Service {
 
     /// Handle a message
     fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult;
+}
+
+pub trait ServiceFactory: Sync + Send {
+    type Config;
+
+    fn create(id: &str, config: Self::Config) -> Box<dyn Service>;
 }
 
 impl Hash for ServiceInfo {

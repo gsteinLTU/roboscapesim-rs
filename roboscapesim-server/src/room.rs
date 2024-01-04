@@ -12,18 +12,17 @@ use netsblox_vm::real_time::OffsetDateTime;
 use netsblox_vm::{runtime::{SimpleValue, ErrorCause, CommandStatus, Command, RequestStatus, Config, Key, System}, std_util::Clock, project::{ProjectStep, IdleAction}, real_time::UtcOffset, std_system::StdSystem};
 use once_cell::sync::Lazy;
 use rand::Rng;
-use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real, RigidBodyHandle};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::services::proximity::ProximityConfig;
-use crate::services::waypoint::{create_waypoint_service, WaypointConfig};
+use crate::services::service_struct::ServiceFactory;
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
-use crate::services::{proximity::create_proximity_service, trigger::create_trigger_service, entity::create_entity_service, lidar::{LIDARConfig, create_lidar_service}, position::create_position_service, service_struct::{Service, ServiceType}, world::{self}};
+use crate::services::{trigger::create_trigger_service, service_struct::{Service, ServiceType}, world::{self}};
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
@@ -57,13 +56,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
-    pub services: Arc<DashMap<(String, ServiceType), Arc<Box<dyn Service + Send + Sync>>>>,
-    #[derivative(Debug = "ignore")]
-    pub lidar_configs: HashMap<String, LIDARConfig>,
-    #[derivative(Debug = "ignore")]
-    pub proximity_configs: HashMap<String, ProximityConfig>,
-    #[derivative(Debug = "ignore")]
-    pub waypoint_configs: HashMap<String, WaypointConfig>,
+    pub services: Arc<DashMap<(String, ServiceType), Arc<Box<dyn Service>>>>,
     #[derivative(Debug = "ignore")]
     pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
     #[derivative(Debug = "ignore")]
@@ -108,9 +101,6 @@ impl RoomData {
             robots: Arc::new(DashMap::new()),
             reseters: HashMap::new(),
             services: Arc::new(DashMap::new()),
-            lidar_configs: HashMap::new(),
-            proximity_configs: HashMap::new(),
-            waypoint_configs: HashMap::new(),
             iotscape_rx,
             netsblox_msg_tx,
             netsblox_msg_rx,
@@ -908,27 +898,12 @@ impl RoomData {
     }
 
     /// Add a service to the room
-    pub(crate) fn add_sensor(room: &mut RoomData, service_type: ServiceType, id: &str, _service_name_override: Option<String>, target_rigid_body: RigidBodyHandle) -> Result<String, String> {
-        
-        #[allow(unreachable_patterns)]
-        let service = match service_type {
-            ServiceType::World => Err("Cannot add World service".to_owned()),
-            ServiceType::Entity => Ok(create_entity_service(id, &target_rigid_body)),
-            ServiceType::PositionSensor => Ok(create_position_service(id, &target_rigid_body)),
-            ServiceType::LIDAR => Ok(create_lidar_service(id, &target_rigid_body)),
-            ServiceType::ProximitySensor => Ok(create_proximity_service(id, &target_rigid_body)),
-            ServiceType::WaypointList => Ok(create_waypoint_service(id)),
-            ServiceType::Trigger => Err("Cannot add Trigger service".to_owned()),
-            _ => Err(format!("Service type {:?} not yet implemented.", service_type))
-        };
+    pub(crate) fn add_sensor<T: ServiceFactory>(room: &mut RoomData, id: &str, config: T::Config) -> Result<String, String> {
+        let service = T::create(id, config);
 
-        if let Err(e) = service {
-            return Err(e);
-        }
-
-        let service = Arc::new(service.unwrap());
+        let service = Arc::new(service);
         let service_id = service.get_service_info().id.clone();
-        room.services.insert((service_id.clone(), service_type), service);
+        room.services.insert((service_id.clone(), service.get_service_info().service_type), service);
 
         // // TODO: accept lidar config as input
         // if service_type == ServiceType::LIDAR {

@@ -8,136 +8,15 @@ use rapier3d::prelude::RigidBodyHandle;
 
 use crate::{room::RoomData, util::util::num_val};
 
-use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
+use super::{service_struct::{Service, ServiceType, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 pub struct EntityService {
     pub service_info: ServiceInfo,
     pub rigid_body: RigidBodyHandle,
 }
 
-pub fn create_entity_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
-    // Create definition struct
-    let mut definition = ServiceDefinition {
-        id: id.to_owned(),
-        methods: BTreeMap::new(),
-        events: BTreeMap::new(),
-        description: IoTScapeServiceDescription {
-            description: Some("Service for managing objects in a RoboScape Online simulation".to_owned()),
-            externalDocumentation: None,
-            termsOfService: None,
-            contact: Some("gstein@ltu.edu".to_owned()),
-            license: None,
-            version: "1".to_owned(),
-        },
-    };
-
-    // Define methods
-    definition.methods.insert(
-        "setPosition".to_owned(),
-        MethodDescription {
-            documentation: Some("Set position".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "x".to_owned(),
-                    documentation: Some("X position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "y".to_owned(),
-                    documentation: Some("Y position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "z".to_owned(),
-                    documentation: Some("Z position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "setRotation".to_owned(),
-        MethodDescription {
-            documentation: Some("Set rotation".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "pitch".to_owned(),
-                    documentation: Some("X rotation".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "yaw".to_owned(),
-                    documentation: Some("Y rotation".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "roll".to_owned(),
-                    documentation: Some("Z rotation".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "reset".to_owned(),
-        MethodDescription {
-            documentation: Some("Reset conditions of Entity".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "getPosition".to_owned(),
-        MethodDescription {
-            documentation: Some("Get XYZ coordinate position of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "getRotation".to_owned(),
-        MethodDescription {
-            documentation: Some("Get Euler angle rotation of object".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
-            },
-        },
-    );
-
-    Box::new(EntityService {
-        service_info: ServiceInfo::new(id, definition, ServiceType::Entity),
-        rigid_body: *rigid_body,
-    }) as Box<dyn Service + Sync + Send>
-}
-
 impl Service for EntityService {
-    fn handle_message(& self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         let mut response = vec![];
 
         trace!("{:?}", msg);
@@ -189,5 +68,130 @@ impl Service for EntityService {
 
     fn get_service_info(&self) -> &ServiceInfo {
         &self.service_info
+    }
+}
+
+impl ServiceFactory for EntityService {
+    type Config = RigidBodyHandle;
+
+    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+        // Create definition struct
+        let mut definition = ServiceDefinition {
+            id: id.to_owned(),
+            methods: BTreeMap::new(),
+            events: BTreeMap::new(),
+            description: IoTScapeServiceDescription {
+                description: Some("Service for managing objects in a RoboScape Online simulation".to_owned()),
+                externalDocumentation: None,
+                termsOfService: None,
+                contact: Some("gstein@ltu.edu".to_owned()),
+                license: None,
+                version: "1".to_owned(),
+            },
+        };
+    
+        // Define methods
+        definition.methods.insert(
+            "setPosition".to_owned(),
+            MethodDescription {
+                documentation: Some("Set position".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "x".to_owned(),
+                        documentation: Some("X position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "y".to_owned(),
+                        documentation: Some("Y position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "z".to_owned(),
+                        documentation: Some("Z position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+    
+        definition.methods.insert(
+            "setRotation".to_owned(),
+            MethodDescription {
+                documentation: Some("Set rotation".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "pitch".to_owned(),
+                        documentation: Some("X rotation".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "yaw".to_owned(),
+                        documentation: Some("Y rotation".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "roll".to_owned(),
+                        documentation: Some("Z rotation".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+    
+        definition.methods.insert(
+            "reset".to_owned(),
+            MethodDescription {
+                documentation: Some("Reset conditions of Entity".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+    
+        definition.methods.insert(
+            "getPosition".to_owned(),
+            MethodDescription {
+                documentation: Some("Get XYZ coordinate position of object".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
+                },
+            },
+        );
+    
+        definition.methods.insert(
+            "getRotation".to_owned(),
+            MethodDescription {
+                documentation: Some("Get Euler angle rotation of object".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["number".to_owned(), "number".to_owned(), "number".to_owned()],
+                },
+            },
+        );
+    
+        Box::new(EntityService {
+            service_info: ServiceInfo::new(id, definition, ServiceType::Entity),
+            rigid_body: config,
+        }) as Box<dyn Service>
     }
 }

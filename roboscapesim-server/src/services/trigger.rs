@@ -14,7 +14,7 @@ pub struct TriggerService {
     pub rigid_body: RigidBodyHandle,
 }
 
-pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service + Sync + Send> {
+pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service> {
     // Create definition struct
     let mut definition = ServiceDefinition {
         id: id.to_owned(),
@@ -41,7 +41,7 @@ pub fn create_trigger_service(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn
     Box::new(TriggerService {
         service_info: ServiceInfo::new(id, definition, ServiceType::Trigger),
         rigid_body: *rigid_body,
-    }) as Box<dyn Service + Sync + Send>
+    }) as Box<dyn Service>
 }
 
 impl Service for TriggerService {
@@ -53,7 +53,7 @@ impl Service for TriggerService {
         &self.service_info
     }
 
-    fn handle_message(& self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         let response = vec![];
 
         info!("{:?}", msg);
