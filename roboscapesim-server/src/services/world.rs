@@ -21,374 +21,6 @@ pub struct WorldService {
     pub service_info: ServiceInfo,
 }
 
-pub fn create_world_service(id: &str) -> Box<dyn Service> {
-    // Create definition struct
-    let mut definition = ServiceDefinition {
-        id: id.to_owned(),
-        methods: BTreeMap::new(),
-        events: BTreeMap::new(),
-        description: IoTScapeServiceDescription {
-            description: Some("Service for managing the RoboScape Online simulation".to_owned()),
-            externalDocumentation: None,
-            termsOfService: None,
-            contact: Some("gstein@ltu.edu".to_owned()),
-            license: None,
-            version: "1".to_owned(),
-        },
-    };
-
-    // Define methods
-    definition.methods.insert(
-        "addRobot".to_owned(),
-        MethodDescription {
-            documentation: Some("Add a robot to the World".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "x".to_owned(),
-                    documentation: Some("X position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "y".to_owned(),
-                    documentation: Some("Y position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "z".to_owned(),
-                    documentation: Some("Z position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "heading".to_owned(),
-                    documentation: Some("Direction".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: Some("ID of created entity".to_owned()),
-                r#type: vec!["string".to_owned()],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "addBlock".to_owned(),
-        MethodDescription {
-            documentation: Some("Add a block to the World".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "x".to_owned(),
-                    documentation: Some("X position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "y".to_owned(),
-                    documentation: Some("Y position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "z".to_owned(),
-                    documentation: Some("Z position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "heading".to_owned(),
-                    documentation: Some("Direction".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "width".to_owned(),
-                    documentation: Some("X-axis size".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "height".to_owned(),
-                    documentation: Some("Y-axis size".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "depth".to_owned(),
-                    documentation: Some("Z-axis size".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "kinematic".to_owned(),
-                    documentation: Some("Should the block be unaffected by physics".to_owned()),
-                    r#type: "boolean".to_owned(),
-                    optional: true,
-                },
-                MethodParam {
-                    name: "visualInfo".to_owned(),
-                    documentation: Some("Visual appearance of the object, hex color or texture".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: true,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: Some("ID of created entity".to_owned()),
-                r#type: vec!["string".to_owned()],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "addEntity".to_owned(),
-        MethodDescription {
-            documentation: Some("Add an entity to the World".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "type".to_owned(),
-                    documentation: Some("Type of entity (block, ball, trigger, robot)".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "x".to_owned(),
-                    documentation: Some("X position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "y".to_owned(),
-                    documentation: Some("Y position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "z".to_owned(),
-                    documentation: Some("Z position".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "rotation".to_owned(),
-                    documentation: Some("Yaw or list of pitch, yaw, roll".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "options".to_owned(),
-                    documentation: Some("Two-dimensional list of options, e.g. visualInfo, size, isKinematic".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: true,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: Some("ID of created entity".to_owned()),
-                r#type: vec!["string".to_owned()],
-            },
-        },
-    );
-
-    
-    definition.methods.insert(
-        "addSensor".to_owned(),
-        MethodDescription {
-            documentation: Some("Add a sensor to some object in the World".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "type".to_owned(),
-                    documentation: Some("Type of sensor (position, LIDAR, proximity, etc)".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "object".to_owned(),
-                    documentation: Some("Object to attach service to".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "options".to_owned(),
-                    // TODO: Better documentation
-                    documentation: Some("Two-dimensional list of options, e.g. lidar settings".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: true,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: Some("ID of created sensor".to_owned()),
-                r#type: vec!["string".to_owned()],
-            },
-        },
-    );
-
-    
-    definition.methods.insert(
-        "instantiateEntities".to_owned(),
-        MethodDescription {
-            documentation: Some("Add a list of Entities to the World".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "entities".to_owned(),
-                    documentation: Some("List of entity data to instantiate".to_owned()),
-                    r#type: "Array".to_owned(),
-                    optional: false,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: Some("ID of created entities".to_owned()),
-                r#type: vec!["string".to_owned(), "string".to_owned()],
-            },
-        },
-    );
-
-    
-    definition.methods.insert(
-        "listEntities".to_owned(),
-        MethodDescription {
-            documentation: Some("List Entities in this World".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: Some("IDs of Entities in World".to_owned()),
-                r#type: vec!["string".to_owned(), "string".to_owned()],
-            },
-        },
-    );
-
-    
-
-    definition.methods.insert(
-        "removeEntity".to_owned(),
-        MethodDescription {
-            documentation: Some("Remove an entity from the world".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "entity".to_owned(),
-                    documentation: Some("ID of entity to remove".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "removeAllEntities".to_owned(),
-        MethodDescription {
-            documentation: Some("Remove all entities from the world".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "reset".to_owned(),
-        MethodDescription {
-            documentation: Some("Reset conditions of World".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "clearText".to_owned(),
-        MethodDescription {
-            documentation: Some("Clear text messages on the client display".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "showText".to_owned(),
-        MethodDescription {
-            documentation: Some("Show a text message on the client displays".to_owned()),
-            params: vec![
-                MethodParam {
-                    name: "textbox_id".to_owned(),
-                    documentation: Some("ID of text box to update/create".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "text".to_owned(),
-                    documentation: Some("Text to display".to_owned()),
-                    r#type: "string".to_owned(),
-                    optional: false,
-                },
-                MethodParam {
-                    name: "timeout".to_owned(),
-                    documentation: Some("Time (in s) to keep message around for".to_owned()),
-                    r#type: "number".to_owned(),
-                    optional: true,
-                },
-            ],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec![],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "listTextures".to_owned(),
-        MethodDescription {
-            documentation: Some("List available textures".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["string".to_owned(), "string".to_owned()],
-            },
-        },
-    );
-
-    definition.methods.insert(
-        "listMeshes".to_owned(),
-        MethodDescription {
-            documentation: Some("List available meshes".to_owned()),
-            params: vec![],
-            returns: MethodReturns {
-                documentation: None,
-                r#type: vec!["string".to_owned(), "string".to_owned()],
-            },
-        },
-    );
-
-    definition.events.insert(
-        "reset".to_owned(),
-        EventDescription { params: vec![] },
-    );
-
-    definition.events.insert(
-        "userJoined".to_owned(),
-        EventDescription { params: vec!["username".into()] },
-    );
-
-    definition.events.insert(
-        "userLeft".to_owned(),
-        EventDescription { params: vec!["username".into()] },
-    );
-
-    Box::new(WorldService {
-        service_info: ServiceInfo::new(id, definition, ServiceType::World),
-    }) as Box<dyn Service>
-}
-
 const MAX_COORD: f32 = 10000.0;
 
 impl Service for WorldService {
@@ -435,12 +67,12 @@ impl Service for WorldService {
                 RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
             },
             "addEntity" => {
-                response = vec![add_entity(None, &msg.params, room).into()];
+                response = vec![Self::add_entity(None, &msg.params, room).into()];
             },
             "instantiateEntities" => {
                 if msg.params[0].is_array() {
                     let objs = msg.params[0].as_array().unwrap();
-                    response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| add_entity(obj[0].as_str().map(|s| s.to_owned()), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
+                    response = objs.iter().filter_map(|obj| obj.as_array().and_then(|obj| Self::add_entity(obj[0].as_str().map(|s| s.to_owned()), &obj.iter().skip(1).map(|o| o.to_owned()).collect(), room))).collect();
                 }
             },
             "listEntities" => {
@@ -524,9 +156,9 @@ impl Service for WorldService {
                         None
                     }));
 
-                    parse_visual_info(&options, Shape::Box).unwrap_or_default() 
+                    Self::parse_visual_info(&options, Shape::Box).unwrap_or_default() 
                 } else { 
-                    parse_visual_info_color(visualinfo, Shape::Box)
+                    Self::parse_visual_info_color(visualinfo, Shape::Box)
                 };
 
                 if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || (kinematic && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT){
@@ -621,13 +253,13 @@ impl Service for WorldService {
 
                     response = vec![match service_type.as_str() {
                         "position" => {
-                            RoomData::add_sensor::<PositionService>(room, &object, body.clone()).unwrap().into()
+                            RoomData::add_sensor::<PositionService>(room, &object, body.clone()).into()
                         },
                         "proximity" => {
-                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).unwrap().into()
+                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).into()
                         },
                         "waypoint" => {
-                            RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).unwrap().into()
+                            RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).into()
                         },
                         "lidar" => {
                             let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
@@ -642,10 +274,10 @@ impl Service for WorldService {
 
                             config.body = body.clone();
 
-                            RoomData::add_sensor::<LIDARService>(room, &object, config).unwrap().into()
+                            RoomData::add_sensor::<LIDARService>(room, &object, config).into()
                         },
                         "entity" => {
-                            RoomData::add_sensor::<EntityService>(room, &object, body.clone()).unwrap().into()
+                            RoomData::add_sensor::<EntityService>(room, &object, body.clone()).into()
                         },
                         _ => {
                             info!("Unrecognized service type {}", service_type);
@@ -756,251 +388,621 @@ impl Service for WorldService {
     }
 }
 
-fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
+impl WorldService {
+    pub fn create(id: &str) -> Box<dyn Service> {
+        // Create definition struct
+        let mut definition = ServiceDefinition {
+            id: id.to_owned(),
+            methods: BTreeMap::new(),
+            events: BTreeMap::new(),
+            description: IoTScapeServiceDescription {
+                description: Some("Service for managing the RoboScape Online simulation".to_owned()),
+                externalDocumentation: None,
+                termsOfService: None,
+                contact: Some("gstein@ltu.edu".to_owned()),
+                license: None,
+                version: "1".to_owned(),
+            },
+        };
 
-    if params.len() < 6 {
-        return None;
+        // Define methods
+        definition.methods.insert(
+            "addRobot".to_owned(),
+            MethodDescription {
+                documentation: Some("Add a robot to the World".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "x".to_owned(),
+                        documentation: Some("X position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "y".to_owned(),
+                        documentation: Some("Y position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "z".to_owned(),
+                        documentation: Some("Z position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "heading".to_owned(),
+                        documentation: Some("Direction".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: Some("ID of created entity".to_owned()),
+                    r#type: vec!["string".to_owned()],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "addBlock".to_owned(),
+            MethodDescription {
+                documentation: Some("Add a block to the World".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "x".to_owned(),
+                        documentation: Some("X position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "y".to_owned(),
+                        documentation: Some("Y position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "z".to_owned(),
+                        documentation: Some("Z position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "heading".to_owned(),
+                        documentation: Some("Direction".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "width".to_owned(),
+                        documentation: Some("X-axis size".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "height".to_owned(),
+                        documentation: Some("Y-axis size".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "depth".to_owned(),
+                        documentation: Some("Z-axis size".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "kinematic".to_owned(),
+                        documentation: Some("Should the block be unaffected by physics".to_owned()),
+                        r#type: "boolean".to_owned(),
+                        optional: true,
+                    },
+                    MethodParam {
+                        name: "visualInfo".to_owned(),
+                        documentation: Some("Visual appearance of the object, hex color or texture".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: true,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: Some("ID of created entity".to_owned()),
+                    r#type: vec!["string".to_owned()],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "addEntity".to_owned(),
+            MethodDescription {
+                documentation: Some("Add an entity to the World".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "type".to_owned(),
+                        documentation: Some("Type of entity (block, ball, trigger, robot)".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "x".to_owned(),
+                        documentation: Some("X position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "y".to_owned(),
+                        documentation: Some("Y position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "z".to_owned(),
+                        documentation: Some("Z position".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "rotation".to_owned(),
+                        documentation: Some("Yaw or list of pitch, yaw, roll".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "options".to_owned(),
+                        documentation: Some("Two-dimensional list of options, e.g. visualInfo, size, isKinematic".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: true,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: Some("ID of created entity".to_owned()),
+                    r#type: vec!["string".to_owned()],
+                },
+            },
+        );
+
+        
+        definition.methods.insert(
+            "addSensor".to_owned(),
+            MethodDescription {
+                documentation: Some("Add a sensor to some object in the World".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "type".to_owned(),
+                        documentation: Some("Type of sensor (position, LIDAR, proximity, etc)".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "object".to_owned(),
+                        documentation: Some("Object to attach service to".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "options".to_owned(),
+                        // TODO: Better documentation
+                        documentation: Some("Two-dimensional list of options, e.g. lidar settings".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: true,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: Some("ID of created sensor".to_owned()),
+                    r#type: vec!["string".to_owned()],
+                },
+            },
+        );
+
+        
+        definition.methods.insert(
+            "instantiateEntities".to_owned(),
+            MethodDescription {
+                documentation: Some("Add a list of Entities to the World".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "entities".to_owned(),
+                        documentation: Some("List of entity data to instantiate".to_owned()),
+                        r#type: "Array".to_owned(),
+                        optional: false,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: Some("ID of created entities".to_owned()),
+                    r#type: vec!["string".to_owned(), "string".to_owned()],
+                },
+            },
+        );
+
+        
+        definition.methods.insert(
+            "listEntities".to_owned(),
+            MethodDescription {
+                documentation: Some("List Entities in this World".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: Some("IDs of Entities in World".to_owned()),
+                    r#type: vec!["string".to_owned(), "string".to_owned()],
+                },
+            },
+        );
+
+        
+
+        definition.methods.insert(
+            "removeEntity".to_owned(),
+            MethodDescription {
+                documentation: Some("Remove an entity from the world".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "entity".to_owned(),
+                        documentation: Some("ID of entity to remove".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "removeAllEntities".to_owned(),
+            MethodDescription {
+                documentation: Some("Remove all entities from the world".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "reset".to_owned(),
+            MethodDescription {
+                documentation: Some("Reset conditions of World".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "clearText".to_owned(),
+            MethodDescription {
+                documentation: Some("Clear text messages on the client display".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "showText".to_owned(),
+            MethodDescription {
+                documentation: Some("Show a text message on the client displays".to_owned()),
+                params: vec![
+                    MethodParam {
+                        name: "textbox_id".to_owned(),
+                        documentation: Some("ID of text box to update/create".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "text".to_owned(),
+                        documentation: Some("Text to display".to_owned()),
+                        r#type: "string".to_owned(),
+                        optional: false,
+                    },
+                    MethodParam {
+                        name: "timeout".to_owned(),
+                        documentation: Some("Time (in s) to keep message around for".to_owned()),
+                        r#type: "number".to_owned(),
+                        optional: true,
+                    },
+                ],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec![],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "listTextures".to_owned(),
+            MethodDescription {
+                documentation: Some("List available textures".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["string".to_owned(), "string".to_owned()],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "listMeshes".to_owned(),
+            MethodDescription {
+                documentation: Some("List available meshes".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["string".to_owned(), "string".to_owned()],
+                },
+            },
+        );
+
+        definition.events.insert(
+            "reset".to_owned(),
+            EventDescription { params: vec![] },
+        );
+
+        definition.events.insert(
+            "userJoined".to_owned(),
+            EventDescription { params: vec!["username".into()] },
+        );
+
+        definition.events.insert(
+            "userLeft".to_owned(),
+            EventDescription { params: vec!["username".into()] },
+        );
+
+        Box::new(WorldService {
+            service_info: ServiceInfo::new(id, definition, ServiceType::World),
+        }) as Box<dyn Service>
     }
 
-    // TODO: use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
+    fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
 
-    let mut entity_type = str_val(&params[0]).to_lowercase();
-
-    // Check limits
-    if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
-        info!("Robot limit already reached");
-        return Some(Value::Bool(false));
-    }
-
-    let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
-    let y = num_val(&params[2]).clamp(-MAX_COORD, MAX_COORD);
-    let z = num_val(&params[3]).clamp(-MAX_COORD, MAX_COORD);
-    let mut options = params[5].clone();
-
-    // Parse rotation
-    let rotation = parse_rotation(&params[4]);
-
-    if !options.is_array() {
-        options = serde_json::Value::Array(vec![]);
-    }
-
-    // Parse options
-    let mut options = options.as_array().unwrap().to_owned();
-
-    // Check for 2x1 array
-    if options.len() == 2 && options[0].is_string() {
-        options = vec![serde_json::Value::Array(vec![options[0].clone(), options[1].clone()])];
-    }
-
-    let shape = match entity_type.as_str() {
-        "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
-        "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
-        "robot" => { Shape::Box },
-        _ => {
-            info!("Unknown entity type requested: {entity_type}");
-            entity_type = "box".to_owned();
-            Shape::Box
+        if params.len() < 6 {
+            return None;
         }
-    };
 
-    // Transform into dict
-    let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
-        if option.is_array() {
-            let option = option.as_array().unwrap();
+        // TODO: use ids to replace existing entities or recreate with same id (should it keep room part consistent?)
 
-            if option.len() >= 2 && option[0].is_string() {
-                return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+        let mut entity_type = str_val(&params[0]).to_lowercase();
+
+        // Check limits
+        if entity_type == "robot" && room.robots.len() >= ROBOT_LIMIT {
+            info!("Robot limit already reached");
+            return Some(Value::Bool(false));
+        }
+
+        let x = num_val(&params[1]).clamp(-MAX_COORD, MAX_COORD);
+        let y = num_val(&params[2]).clamp(-MAX_COORD, MAX_COORD);
+        let z = num_val(&params[3]).clamp(-MAX_COORD, MAX_COORD);
+        let mut options = params[5].clone();
+
+        // Parse rotation
+        let rotation = Self::parse_rotation(&params[4]);
+
+        if !options.is_array() {
+            options = serde_json::Value::Array(vec![]);
+        }
+
+        // Parse options
+        let mut options = options.as_array().unwrap().to_owned();
+
+        // Check for 2x1 array
+        if options.len() == 2 && options[0].is_string() {
+            options = vec![serde_json::Value::Array(vec![options[0].clone(), options[1].clone()])];
+        }
+
+        let shape = match entity_type.as_str() {
+            "box" | "block" | "cube" | "cuboid" | "trigger" => Shape::Box,
+            "ball" | "sphere" | "orb" | "spheroid" => Shape::Sphere,
+            "robot" => { Shape::Box },
+            _ => {
+                info!("Unknown entity type requested: {entity_type}");
+                entity_type = "box".to_owned();
+                Shape::Box
             }
+        };
+
+        // Transform into dict
+        let options = BTreeMap::from_iter(options.iter().filter_map(|option| { 
+            if option.is_array() {
+                let option = option.as_array().unwrap();
+
+                if option.len() >= 2 && option[0].is_string() {
+                    return Some((str_val(&option[0]).to_lowercase(), option[1].clone()));
+                }
+            }
+
+            None
+        }));
+
+        // Check for each option
+        let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
+        let mut size = vec![];
+
+        if options.contains_key("size") {
+            match &options.get("size").unwrap() {
+                serde_json::Value::Number(n) => {
+                    size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 1000.0) as f32].repeat(3);
+                },
+                serde_json::Value::String(s) => {
+                    size = vec![s.parse::<f32>().unwrap_or(1.0).clamp(0.05, 1000.0)].repeat(3);
+                },
+                serde_json::Value::Array(a) =>  {
+                    size = a.iter().map(|n| num_val(n).clamp(0.05, 1000.0)).collect();
+                },
+                other => {
+                    info!("Invalid size option: {:?}", other);
+                }
+            }
+        } else {
+            size = vec![1.0, 1.0, 1.0];
+        }
+
+        while size.len() < 3 {
+            size.push(1.0);
+        }
+
+        let parsed_visualinfo = Self::parse_visual_info(&options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+
+        if entity_type != "robot" {
+            if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
+                info!("Entity limit already reached");
+                return Some(Value::Bool(false));
+            }
+        }        
+
+        // Number part of name
+        let name_num =  room.next_object_id.to_string();
+
+        let id = match entity_type.as_str() {
+            "robot" => {
+                let speed_mult = options.get("speed").clone().map(num_val);
+                Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult, Some(size[0])))
+            },
+            "box" | "block" | "cube" | "cuboid" => {
+                let name = "block".to_string() + &name_num;
+            
+                if size.len() == 1 {
+                    size = vec![size[0], size[0], size[0]];
+                } else if size.is_empty() {
+                    size = vec![1.0, 1.0, 1.0];
+                }
+
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
+            },
+            "ball" | "sphere" | "orb" | "spheroid" => {
+                let name = "ball".to_string() + &name_num;
+
+                if size.is_empty() {
+                    size = vec![1.0];
+                }
+
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+            },
+            "trigger" => {
+                let name = "trigger".to_string() + &name_num;
+                Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
+            },
+            _ => {
+                info!("Unknown entity type requested: {entity_type}");
+                None
+            }
+        };
+
+        if let Some(id) = id {
+            // Increment only if successful
+            room.next_object_id += 1;
+            return Some(id.into());
+        }
+        
+        None
+    }
+
+    fn parse_rotation(rotation: &Value) -> nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>> {
+        let rotation = match rotation {
+            serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32  * PI / 180.0, 0.0),
+            serde_json::Value::String(s) => AngVector::new(0.0, s.parse::<f32>().unwrap_or_default()  * PI / 180.0, 0.0),
+            serde_json::Value::Array(a) => {
+                if a.len() >= 3 {
+                    AngVector::new(num_val(&a[0]) * PI / 180.0, num_val(&a[1]) * PI / 180.0, num_val(&a[2]) * PI / 180.0)
+                } else if !a.is_empty() {
+                    AngVector::new(0.0, num_val(&a[0]) * PI / 180.0, 0.0)
+                } else {
+                    AngVector::new(0.0, 0.0, 0.0)
+                }
+            },
+            _ => AngVector::new(0.0, 0.0, 0.0)
+        };
+        rotation
+    }
+
+    fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
+        if options.len() == 0 {
+            return None;
+        }
+        
+        if options.contains_key("texture") {
+            let mut uscale = 1.0;
+            let mut vscale = 1.0;
+
+            if options.contains_key("uscale") {
+                uscale = num_val(options.get("uscale").unwrap());
+            }
+
+            if options.contains_key("vscale") {
+                vscale = num_val(options.get("vscale").unwrap());
+            }
+
+            return Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
+        } else if options.contains_key("color") {
+            // Parse color data
+            return Some(Self::parse_visual_info_color(options.get("color").unwrap(), shape));
+        } else if options.contains_key("mesh") {
+            // Use mesh
+            let mut mesh_name = str_val(options.get("mesh").unwrap());
+
+            // Assume non-specified extension is glb
+            if !mesh_name.contains('.') {
+                mesh_name += ".glb";
+            }
+
+            return Some(VisualInfo::Mesh(mesh_name));
         }
 
         None
-    }));
-
-    // Check for each option
-    let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
-    let mut size = vec![];
-
-    if options.contains_key("size") {
-        match &options.get("size").unwrap() {
-            serde_json::Value::Number(n) => {
-                size = vec![n.as_f64().unwrap_or(1.0).clamp(0.05, 1000.0) as f32].repeat(3);
-            },
-            serde_json::Value::String(s) => {
-                size = vec![s.parse::<f32>().unwrap_or(1.0).clamp(0.05, 1000.0)].repeat(3);
-            },
-            serde_json::Value::Array(a) =>  {
-                size = a.iter().map(|n| num_val(n).clamp(0.05, 1000.0)).collect();
-            },
-            other => {
-                info!("Invalid size option: {:?}", other);
-            }
-        }
-    } else {
-        size = vec![1.0, 1.0, 1.0];
     }
 
-    while size.len() < 3 {
-        size.push(1.0);
-    }
+    fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
+        let mut parsed_visualinfo = VisualInfo::default_with_shape(shape);
 
-    let parsed_visualinfo = parse_visual_info(&options, shape).unwrap_or(VisualInfo::Color(1.0, 1.0, 1.0, shape));
+        if !visualinfo.is_null() {
+            match visualinfo {
+                serde_json::Value::String(s) => { 
+                    if !s.is_empty() {
+                        if s.starts_with('#') || s.starts_with("rgb") {
+                            // attempt to parse as hex/CSS color
+                            let r: Result<colorsys::Rgb, _> = s.parse();
 
-    if entity_type != "robot" {
-        if (!kinematic && room.count_dynamic() >= DYNAMIC_ENTITY_LIMIT) || ((kinematic || entity_type == "trigger") && room.count_kinematic() >= KINEMATIC_ENTITY_LIMIT) {
-            info!("Entity limit already reached");
-            return Some(Value::Bool(false));
-        }
-    }        
-
-    // Number part of name
-    let name_num =  room.next_object_id.to_string();
-
-    let id = match entity_type.as_str() {
-        "robot" => {
-            let speed_mult = options.get("speed").clone().map(num_val);
-            Some(RoomData::add_robot(room, vector![x, y, z], UnitQuaternion::from_axis_angle(&Vector3::y_axis(), rotation.y), false, speed_mult, Some(size[0])))
-        },
-        "box" | "block" | "cube" | "cuboid" => {
-            let name = "block".to_string() + &name_num;
-        
-            if size.len() == 1 {
-                size = vec![size[0], size[0], size[0]];
-            } else if size.is_empty() {
-                size = vec![1.0, 1.0, 1.0];
-            }
-
-            Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
-        },
-        "ball" | "sphere" | "orb" | "spheroid" => {
-            let name = "ball".to_string() + &name_num;
-
-            if size.is_empty() {
-                size = vec![1.0];
-            }
-
-            Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
-        },
-        "trigger" => {
-            let name = "trigger".to_string() + &name_num;
-            Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
-        },
-        _ => {
-            info!("Unknown entity type requested: {entity_type}");
-            None
-        }
-    };
-
-    if let Some(id) = id {
-        // Increment only if successful
-        room.next_object_id += 1;
-        return Some(id.into());
-    }
-    
-    None
-}
-
-fn parse_rotation(rotation: &Value) -> nalgebra::Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>> {
-    let rotation = match rotation {
-        serde_json::Value::Number(n) => AngVector::new(0.0, n.as_f64().unwrap() as f32  * PI / 180.0, 0.0),
-        serde_json::Value::String(s) => AngVector::new(0.0, s.parse::<f32>().unwrap_or_default()  * PI / 180.0, 0.0),
-        serde_json::Value::Array(a) => {
-            if a.len() >= 3 {
-                AngVector::new(num_val(&a[0]) * PI / 180.0, num_val(&a[1]) * PI / 180.0, num_val(&a[2]) * PI / 180.0)
-            } else if !a.is_empty() {
-                AngVector::new(0.0, num_val(&a[0]) * PI / 180.0, 0.0)
-            } else {
-                AngVector::new(0.0, 0.0, 0.0)
-            }
-        },
-        _ => AngVector::new(0.0, 0.0, 0.0)
-    };
-    rotation
-}
-
-fn parse_visual_info(options: &BTreeMap<String, Value>, shape: Shape) -> Option<VisualInfo> {
-    if options.len() == 0 {
-        return None;
-    }
-    
-    if options.contains_key("texture") {
-        let mut uscale = 1.0;
-        let mut vscale = 1.0;
-
-        if options.contains_key("uscale") {
-            uscale = num_val(options.get("uscale").unwrap());
-        }
-
-        if options.contains_key("vscale") {
-            vscale = num_val(options.get("vscale").unwrap());
-        }
-
-        return Some(VisualInfo::Texture(str_val(options.get("texture").unwrap()), uscale, vscale, shape));
-    } else if options.contains_key("color") {
-        // Parse color data
-        return Some(parse_visual_info_color(options.get("color").unwrap(), shape));
-    } else if options.contains_key("mesh") {
-        // Use mesh
-        let mut mesh_name = str_val(options.get("mesh").unwrap());
-
-        // Assume non-specified extension is glb
-        if !mesh_name.contains('.') {
-            mesh_name += ".glb";
-        }
-
-        return Some(VisualInfo::Mesh(mesh_name));
-    }
-
-    None
-}
-
-fn parse_visual_info_color(visualinfo: &serde_json::Value, shape: roboscapesim_common::Shape) -> VisualInfo {
-    let mut parsed_visualinfo = VisualInfo::default_with_shape(shape);
-
-    if !visualinfo.is_null() {
-        match visualinfo {
-            serde_json::Value::String(s) => { 
-                if !s.is_empty() {
-                    if s.starts_with('#') || s.starts_with("rgb") {
-                        // attempt to parse as hex/CSS color
-                        let r: Result<colorsys::Rgb, _> = s.parse();
-
-                        if let Ok(color) = r {
-                            parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
-                        } else if r.is_err() {
-                            let r = colorsys::Rgb::from_hex_str(s);
                             if let Ok(color) = r {
-                                parsed_visualinfo = VisualInfo::Color(color.red() as f32 / 255.0, color.green() as f32 / 255.0, color.blue() as f32 / 255.0, shape);
+                                parsed_visualinfo = VisualInfo::Color(color.red() as f32, color.green() as f32, color.blue() as f32, shape);
                             } else if r.is_err() {
-                                info!("Failed to parse {s} as color");
+                                let r = colorsys::Rgb::from_hex_str(s);
+                                if let Ok(color) = r {
+                                    parsed_visualinfo = VisualInfo::Color(color.red() as f32 / 255.0, color.green() as f32 / 255.0, color.blue() as f32 / 255.0, shape);
+                                } else if r.is_err() {
+                                    info!("Failed to parse {s} as color");
+                                }
+                            }
+                        } else {
+                            // attempt to parse as color name
+                            let color = color_name::Color::val().by_string(s.to_owned());
+
+                            info!("{:?}", color);
+                            if let Ok(color) = color {
+                                parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0, shape);
                             }
                         }
-                    } else {
-                        // attempt to parse as color name
-                        let color = color_name::Color::val().by_string(s.to_owned());
-
-                        info!("{:?}", color);
-                        if let Ok(color) = color {
-                            parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0, shape);
-                        }
                     }
+                },
+                serde_json::Value::Array(a) =>  { 
+                    if a.len() == 3 {
+                        // Color as array
+                        parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
+                    } else if a.len() == 4 {
+                        // Color as array with alpha
+                        parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
+                    } else if a.len() == 1 {
+                        parsed_visualinfo = Self::parse_visual_info_color(&a[0], shape);
+                    }
+                },
+                _ => {
+                    info!("Received invalid visualinfo");
                 }
-            },
-            serde_json::Value::Array(a) =>  { 
-                if a.len() == 3 {
-                    // Color as array
-                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
-                } else if a.len() == 4 {
-                    // Color as array with alpha
-                    parsed_visualinfo = VisualInfo::Color(num_val(&a[0]) / 255.0, num_val(&a[1]) / 255.0, num_val(&a[2]) / 255.0, shape);
-                } else if a.len() == 1 {
-                    parsed_visualinfo = parse_visual_info_color(&a[0], shape);
-                }
-            },
-            _ => {
-                info!("Received invalid visualinfo");
             }
         }
+        
+        parsed_visualinfo
     }
-    
-    parsed_visualinfo
 }

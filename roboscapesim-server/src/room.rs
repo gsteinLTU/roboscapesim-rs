@@ -17,12 +17,11 @@ use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::services::service_struct::ServiceFactory;
+use crate::services::*;
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
-use crate::services::{trigger::create_trigger_service, service_struct::{Service, ServiceType}, world::{self}};
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::UpperHexadecimal;
 use crate::robot::RobotData;
@@ -114,7 +113,7 @@ impl RoomData {
 
         // Setup test room
         // Create IoTScape service
-        let service = Arc::new(world::create_world_service(obj.name.as_str()));
+        let service = Arc::new(WorldService::create(obj.name.as_str()));
         let service_id = service.get_service_info().id.clone();
         obj.services.insert((service_id, ServiceType::World), service);
         
@@ -898,19 +897,10 @@ impl RoomData {
     }
 
     /// Add a service to the room
-    pub(crate) fn add_sensor<T: ServiceFactory>(room: &mut RoomData, id: &str, config: T::Config) -> Result<String, String> {
-        let service = T::create(id, config);
-
-        let service = Arc::new(service);
-        let service_id = service.get_service_info().id.clone();
-        room.services.insert((service_id.clone(), service.get_service_info().service_type), service);
-
-        // // TODO: accept lidar config as input
-        // if service_type == ServiceType::LIDAR {
-        //     room.lidar_configs.insert(service_id.clone(), LIDARConfig { num_beams: 16, start_angle: -FRAC_PI_2, end_angle: FRAC_PI_2, offset_pos: vector![0.17,0.1,0.0], max_distance: 3.0 });
-        // }   
-
-        Ok(service_id.clone())
+    pub(crate) fn add_sensor<'a, T: ServiceFactory>(&mut self, id: &'a str, config: T::Config) -> &'a str {
+        let service = Arc::new(T::create(id, config));
+        self.services.insert((id.into(), service.get_service_info().service_type), service);
+        id
     }
 
     /// Specialized add_shape for triggers
@@ -942,7 +932,7 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
 
-        let service = Arc::new(create_trigger_service(&body_name, &cube_body_handle));
+        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle));
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         simulation.sensors.insert((service_id, collider_handle), DashSet::new());

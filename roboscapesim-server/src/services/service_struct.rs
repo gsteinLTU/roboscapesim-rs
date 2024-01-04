@@ -7,7 +7,6 @@ use log::error;
 use serde_json::Value;
 
 use crate::room::RoomData;
-
 use super::HandleMessageResult;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -62,7 +61,7 @@ pub struct ServiceInfo {
 
 impl ServiceInfo {
     pub fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
-        let service = setup_service(definition, service_type, None);
+        let service = Self::setup_service(definition, service_type, None);
 
         service
             .lock()
@@ -78,6 +77,17 @@ impl ServiceInfo {
             announce_period: DEFAULT_ANNOUNCE_PERIOD,
         }
     }
+
+    fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<Mutex<IoTScapeService>> {
+        let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
+        let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
+        let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
+            override_name.unwrap_or(service_type.into()),
+            definition,
+            (server + ":" + &port).parse().unwrap(),
+        )));
+        service
+    }
 }
 
 /// Trait for defining a service
@@ -92,9 +102,12 @@ pub trait Service: Sync + Send {
     fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult;
 }
 
+/// Trait for defining services directly creatable by user (i.e. not world or trigger)
 pub trait ServiceFactory: Sync + Send {
+    /// Type used for configuration of service
     type Config;
 
+    /// Create a new instance of the service
     fn create(id: &str, config: Self::Config) -> Box<dyn Service>;
 }
 
@@ -134,17 +147,6 @@ impl ServiceInfo {
         
         iotscape_service.rx_queue.len()
     }
-}
-
-pub(crate) fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<Mutex<IoTScapeService>> {
-    let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
-    let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
-    let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
-        override_name.unwrap_or(service_type.into()),
-        definition,
-        (server + ":" + &port).parse().unwrap(),
-    )));
-    service
 }
 
 pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(225);
