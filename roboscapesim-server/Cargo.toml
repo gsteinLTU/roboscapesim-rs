@@ -25,7 +25,7 @@ log = "0.4"
 derivative = "2.2"
 iotscape = "0.4.1"
 dotenvy = "0.15"
-netsblox-vm = { version = "=0.4.0", default-features = false, features = ["std", "rustls-tls-native-roots", "std-system"] }
+netsblox-vm = { version = "=0.4.2", default-features = false, features = ["std", "rustls-tls-native-roots", "std-system"] }
 axum-macros = "0.4.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
