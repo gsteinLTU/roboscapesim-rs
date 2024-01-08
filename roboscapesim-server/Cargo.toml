@@ -32,7 +32,7 @@ futures = "0.3"
 rayon = "1.8"
 color-name = "1.1.0"
 colorsys = "0.6"
-gc-arena = "0.4"
+gc-arena = "0.5"
 crossbeam-channel = "0.5"
 async-tungstenite = { version = "0.24", features = ["tokio-rustls-native-certs"] }
 async-std = "1.12.0"
