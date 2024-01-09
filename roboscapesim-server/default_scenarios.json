@@ -61,5 +61,12 @@
         "host": "remote",
         "path": "gstein/Waypoint%20Navigation",
         "creator": "Gordon Stein"
+    },
+    "fourcolor": {
+        "name": "FourColor",
+        "description": "Four Color Robots scenario",
+        "host": "remote",
+        "path": "gstein/Four%20Robots",
+        "creator": "Gordon Stein"
     }
 }
