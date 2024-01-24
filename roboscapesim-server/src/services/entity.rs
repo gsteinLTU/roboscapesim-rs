@@ -23,51 +23,55 @@ impl Service for EntityService {
         trace!("{:?}", msg);
         
         // TODO: Determine why quotes are being added to device name in VM
-        if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
-            match msg.function.as_str() {
-                "reset" => {
-                    if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
-                        r.reset(&mut room.sim.lock().unwrap());
-                    } else {
-                        info!("Unrecognized device {}", msg.device);
-                    }
-                },
-                "setPosition" => {
-                    let x = num_val(&msg.params[0]);
-                    let y = num_val(&msg.params[1]);
-                    let z = num_val(&msg.params[2]);
+        match msg.function.as_str() {
+            "reset" => {
+                if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
+                    r.reset(&mut room.sim.lock().unwrap());
+                } else {
+                    info!("Unrecognized device {}", msg.device);
+                }
+            },
+            "setPosition" => {
+                let x = num_val(&msg.params[0]);
+                let y = num_val(&msg.params[1]);
+                let z = num_val(&msg.params[2]);
 
-                    if self.is_robot {
-                        room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), Some(vector![x, y, z]), None, true);
-                    } else {
+                if self.is_robot {
+                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), Some(vector![x, y, z]), None, true);
+                } else {
+                    if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
                         o.set_translation(vector![x, y, z], true);
                     }
-                },
-                "setRotation" => {
-                    let pitch = num_val(&msg.params[1]) * PI / 180.0;
-                    let yaw = num_val(&msg.params[2]) * PI / 180.0;
-                    let roll = num_val(&msg.params[0]) * PI / 180.0;
+                }
+            },
+            "setRotation" => {
+                let pitch = num_val(&msg.params[1]) * PI / 180.0;
+                let yaw = num_val(&msg.params[2]) * PI / 180.0;
+                let roll = num_val(&msg.params[0]) * PI / 180.0;
 
-                    if self.is_robot {
-                        room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
-                    } else {
+                if self.is_robot {
+                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
+                } else {
+                    if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                     }
-                },
-                "getPosition" => {
+                }
+            },
+            "getPosition" => {
+                if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
                     response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
-                },
-                "getRotation" => {
+                }
+            },
+            "getRotation" => {
+                if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
                     let r = o.rotation().euler_angles();
                     response = vec![r.2.into(), r.0.into(), r.1.into()];              
-                },
-                f => {
-                    info!("Unrecognized function {}", f);
                 }
-            };
-        } else {
-            info!("Could not find rigid body for {}", msg.device);
-        }
+            },
+            f => {
+                info!("Unrecognized function {}", f);
+            }
+        };
 
         self.get_service_info().enqueue_response_to(msg, Ok(response.clone()));
         (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
