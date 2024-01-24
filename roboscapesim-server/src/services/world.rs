@@ -8,7 +8,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{proximity::{ProximityConfig, ProximityService}, lidar::{DEFAULT_LIDAR_CONFIGS, LIDARService}, waypoint::{WaypointConfig, WaypointService}, position::PositionService, entity::EntityService}};
+use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{*, proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 

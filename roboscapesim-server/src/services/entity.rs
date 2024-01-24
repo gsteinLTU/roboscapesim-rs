@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, f32::consts::PI};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
 use log::{info, trace};
@@ -38,9 +38,9 @@ impl Service for EntityService {
                     o.set_translation(vector![x, y, z], true);
                 },
                 "setRotation" => {
-                    let pitch = num_val(&msg.params[1]);
-                    let yaw = num_val(&msg.params[2]);
-                    let roll = num_val(&msg.params[0]);
+                    let pitch = num_val(&msg.params[1]) * PI / 180.0;
+                    let yaw = num_val(&msg.params[2]) * PI / 180.0;
+                    let roll = num_val(&msg.params[0]) * PI / 180.0;
                     o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                 },
                 "getPosition" => {
