@@ -13,6 +13,7 @@ use super::{service_struct::{Service, ServiceType, ServiceInfo, ServiceFactory},
 pub struct EntityService {
     pub service_info: ServiceInfo,
     pub rigid_body: RigidBodyHandle,
+    pub is_robot: bool,
 }
 
 impl Service for EntityService {
@@ -35,13 +36,23 @@ impl Service for EntityService {
                     let x = num_val(&msg.params[0]);
                     let y = num_val(&msg.params[1]);
                     let z = num_val(&msg.params[2]);
-                    o.set_translation(vector![x, y, z], true);
+
+                    if self.is_robot {
+                        room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), Some(vector![x, y, z]), None, true);
+                    } else {
+                        o.set_translation(vector![x, y, z], true);
+                    }
                 },
                 "setRotation" => {
                     let pitch = num_val(&msg.params[1]) * PI / 180.0;
                     let yaw = num_val(&msg.params[2]) * PI / 180.0;
                     let roll = num_val(&msg.params[0]) * PI / 180.0;
-                    o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
+
+                    if self.is_robot {
+                        room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
+                    } else {
+                        o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
+                    }
                 },
                 "getPosition" => {
                     response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
@@ -72,7 +83,7 @@ impl Service for EntityService {
 }
 
 impl ServiceFactory for EntityService {
-    type Config = RigidBodyHandle;
+    type Config = (RigidBodyHandle, bool);
 
     fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
         // Create definition struct
@@ -191,7 +202,8 @@ impl ServiceFactory for EntityService {
     
         Box::new(EntityService {
             service_info: ServiceInfo::new(id, definition, ServiceType::Entity),
-            rigid_body: config,
+            rigid_body: config.0,
+            is_robot: config.1,
         }) as Box<dyn Service>
     }
 }

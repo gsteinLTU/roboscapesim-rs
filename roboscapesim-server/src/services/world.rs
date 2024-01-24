@@ -277,7 +277,7 @@ impl Service for WorldService {
                             RoomData::add_sensor::<LIDARService>(room, &object, config).into()
                         },
                         "entity" => {
-                            RoomData::add_sensor::<EntityService>(room, &object, body.clone()).into()
+                            RoomData::add_sensor::<EntityService>(room, &object, (body.clone(), is_robot)).into()
                         },
                         _ => {
                             info!("Unrecognized service type {}", service_type);

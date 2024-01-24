@@ -469,44 +469,58 @@ impl RobotData {
 
         (had_messages, msg)
     }
+
+    pub fn update_transform(&mut self, sim: &mut Simulation, position: Option<Vector3<Real>>, rotation: Option<Orientation>, reset_velocity: bool) {
+        if let Some(position) = position {
+            // Reset position
+            {
+                let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+                for wheel in &self.wheel_bodies {
+                    let body = rigid_body_set.get_mut(*wheel).unwrap();
+                    body.set_linvel(vector![0.0, 0.0, 0.0], true);
+                    body.set_angvel(vector![0.0, 0.0, 0.0], true);
+                }
+                
+                // Reset position
+                let body = rigid_body_set.get_mut(self.body_handle).unwrap();
+                body.set_translation(position, false);
+                body.set_locked_axes(LockedAxes::all(), true);
+            }
+            
+            // Update simulation one frame
+            sim.update(1.0 / 60.0);
+        }
+
+        let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
+        body.set_locked_axes(LockedAxes::empty(), true);
+
+        // Reset velocity
+        if reset_velocity {
+            body.set_linvel(vector![0.0, -0.01, 0.0], true);
+            body.set_angvel(vector![0.0, 0.0, 0.0], true);
+        }
+
+        if let Some(rotation) = rotation {
+            // Set rotation
+            match rotation {
+                Orientation::Quaternion(q) => {
+                    body.set_rotation(UnitQuaternion::new_unchecked(q), true);
+                }
+                Orientation::Euler(e) => {
+                    body.set_rotation(UnitQuaternion::from_euler_angles(e.x, e.y, e.z), true);
+                }
+            }
+        }
+    }
 }
 
 impl Resettable for RobotData {
     fn reset(&mut self, sim: &mut Simulation) {
-        {
-            // Reset position
-            let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
-            for wheel in &self.wheel_bodies {
-                let body = rigid_body_set.get_mut(*wheel).unwrap();
-                body.set_linvel(vector![0.0, 0.0, 0.0], true);
-                body.set_angvel(vector![0.0, 0.0, 0.0], true);
-            }
+        let rotation = self.initial_transform.rotation.clone();
+        let position = self.initial_transform.position - point![0.0, 0.0, 0.0];
 
-            // Reset position
-            let body = rigid_body_set.get_mut(self.body_handle).unwrap();
-            body.set_translation(self.initial_transform.position - point![0.0, 0.0, 0.0], false);
-            body.set_locked_axes(LockedAxes::all(), true);
-        }
-
-        // Update simulation one frame
-        sim.update(1.0 / 60.0);
-
-        // Reset velocity
-        let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
-        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
-        body.set_locked_axes(LockedAxes::empty(), true);
-        body.set_linvel(vector![0.0, -0.01, 0.0], true);
-        body.set_angvel(vector![0.0, 0.0, 0.0], true);
-
-        // Reset rotation
-        match self.initial_transform.rotation {
-            Orientation::Quaternion(q) => {
-                body.set_rotation(UnitQuaternion::new_unchecked(q), true);
-            }
-            Orientation::Euler(e) => {
-                body.set_rotation(UnitQuaternion::from_euler_angles(e.x, e.y, e.z), true);
-            }
-        }
+        self.update_transform(sim, Some(position), Some(rotation), true);
 
         // Reset state
         self.drive_state = DriveState::SetSpeed;
