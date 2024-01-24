@@ -173,7 +173,7 @@ impl RoomData {
                                                 "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
                                                     // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
-                                                    vm_iotscape_tx.send((iotscape::Request { id: "".into(), service: service.to_owned().into(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned().into(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
+                                                    vm_iotscape_tx.send((iotscape::Request { client_id: None, id: "".into(), service: service.to_owned().into(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned().into(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
                                                 },
                                                 /*"RoboScape" => {
                                                     // TODO: RoboScape service but in Rust?
