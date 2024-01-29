@@ -74,9 +74,10 @@ async fn main() {
     api.await;
 }
 
+pub const UPDATE_FPS: f64 = 60.0;
+
 async fn update_fn() {
-    let update_fps = 60;
-    let mut interval = time::interval(Duration::from_millis(1000 / update_fps));
+    let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
 
     loop {
         interval.tick().await;

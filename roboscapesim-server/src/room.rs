@@ -17,7 +17,7 @@ use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::services::*;
+use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS, ROOMS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
@@ -416,7 +416,7 @@ impl RoomData {
 
     pub fn update(&mut self) {
         let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
-        let delta_time = 1.0 / 60.0;
+        let delta_time = 1.0 / UPDATE_FPS;
 
         if !self.hibernating.load(Ordering::Relaxed) {
 

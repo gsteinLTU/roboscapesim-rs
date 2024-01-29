@@ -113,7 +113,7 @@ impl Service for LIDARService {
     }
 
     fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
-        info!("{:?}", msg);
+        trace!("{:?}", msg);
         let mut response = vec![];
 
         let service = self.get_service_info();

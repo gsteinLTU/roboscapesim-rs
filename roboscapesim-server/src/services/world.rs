@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, f32::consts::PI};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
-use log::info;
+use log::{info, trace};
 use nalgebra::{vector, UnitQuaternion, Vector3};
 use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::AngVector;
@@ -35,7 +35,7 @@ impl Service for WorldService {
     fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
         let mut response: Vec<Value> = vec![];
 
-        info!("{:?}", msg);
+        trace!("{:?}", msg);
 
         match msg.function.as_str() {
             "reset" => {
@@ -979,7 +979,6 @@ impl WorldService {
                             // attempt to parse as color name
                             let color = color_name::Color::val().by_string(s.to_owned());
 
-                            info!("{:?}", color);
                             if let Ok(color) = color {
                                 parsed_visualinfo = VisualInfo::Color(color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0, shape);
                             }

@@ -9,6 +9,7 @@ use nalgebra::{Point3,UnitQuaternion, Vector3};
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
+use crate::UPDATE_FPS;
 use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
@@ -488,7 +489,7 @@ impl RobotData {
             }
             
             // Update simulation one frame
-            sim.update(1.0 / 60.0);
+            sim.update(1.0 / UPDATE_FPS);
         }
 
         let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
@@ -531,6 +532,8 @@ impl Resettable for RobotData {
         self.start_time = SystemTime::now();
 
         self.last_heartbeat = get_timestamp();
+        
+        self.update_transform(sim, Some(position), Some(rotation), true);
         
         // Send initial message
         if let Err(e) = self.send_roboscape_message(b"I") {
