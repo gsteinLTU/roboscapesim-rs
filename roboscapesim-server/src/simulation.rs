@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, num::NonZeroUsize};
 
 use dashmap::{DashMap, DashSet};
 use nalgebra::Vector3;
@@ -36,7 +36,7 @@ impl Simulation {
             rigid_body_set: Arc::new(Mutex::new(RigidBodySet::new())),
             collider_set: ColliderSet::new(),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
-            integration_parameters: IntegrationParameters { max_ccd_substeps: 2, max_stabilization_iterations: 6, max_velocity_friction_iterations: 10, max_velocity_iterations: 14, allowed_linear_error: 0.002, prediction_distance: 0.0015, min_island_size: 64, ..Default::default() },
+            integration_parameters: IntegrationParameters { num_additional_friction_iterations: 4, num_solver_iterations: NonZeroUsize::new(2).unwrap(), num_internal_pgs_iterations: 10, ..Default::default() },
             physics_pipeline: PhysicsPipeline::new(),
             island_manager: IslandManager::new(),
             broad_phase: BroadPhase::new(),

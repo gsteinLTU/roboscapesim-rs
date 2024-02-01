@@ -416,7 +416,12 @@ impl RoomData {
 
     pub fn update(&mut self) {
         let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
-        let delta_time = 1.0 / UPDATE_FPS;
+        
+        let mut delta_time = (now - self.last_update).as_seconds_f64();
+        
+        delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
+        
+//        info!("{}", delta_time);
 
         if !self.hibernating.load(Ordering::Relaxed) {
 
@@ -486,7 +491,7 @@ impl RoomData {
                 // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
                 for mut entry in simulation.sensors.iter_mut() {
                     let ((name, sensor), in_sensor) = entry.pair_mut();
-                    for (c1, c2, intersecting) in simulation.narrow_phase.intersections_with(*sensor) {
+                    for (c1, c2, intersecting) in simulation.narrow_phase.intersection_pairs_with(*sensor) {
                         if intersecting {
                             if in_sensor.contains(&c2) {
                                 // Already in sensor
@@ -876,7 +881,7 @@ impl RoomData {
         };
 
         let simulation = &mut room.sim.lock().unwrap();
-        let collider = collider.restitution(0.3).density(0.095).friction(0.65).build();
+        let collider = collider.restitution(0.3).density(0.045).friction(0.6).build();
         let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
         let rigid_body_set = simulation.rigid_body_set.clone();
         simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());

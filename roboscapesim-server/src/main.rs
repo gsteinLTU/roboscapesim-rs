@@ -79,6 +79,8 @@ pub const UPDATE_FPS: f64 = 60.0;
 async fn update_fn() {
     let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
 
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+
     loop {
         interval.tick().await;
 

@@ -114,6 +114,18 @@ impl From<Vector3<f32>> for Orientation {
     }
 }
 
+impl From<UnitQuaternion<f32>> for Orientation {
+    fn from(value: UnitQuaternion<f32>) -> Self {
+        Self::Quaternion(value.quaternion().to_owned())
+    }
+}
+
+impl From<Quaternion<f32>> for Orientation {
+    fn from(value: Quaternion<f32>) -> Self {
+        Self::Quaternion(value)
+    }
+}
+
 impl Into<Vector3<f32>> for Orientation {
     fn into(self) -> Vector3<f32> {
         match self {

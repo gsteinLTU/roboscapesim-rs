@@ -9,7 +9,6 @@ use nalgebra::{Point3,UnitQuaternion, Vector3};
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
-use crate::UPDATE_FPS;
 use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
@@ -105,8 +104,8 @@ impl RobotData {
         let hh: f32 = 0.03 * scale;
         let hd: f32 = 0.03 * scale;
 
-        let mut box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
-        let mut box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
+        let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
+        let box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
 
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
@@ -203,17 +202,17 @@ impl RobotData {
         let whisker_r = sim.collider_set.insert_with_parent(whisker_r, vehicle_handle, &mut sim.rigid_body_set.lock().unwrap());
 
         // Apply position and orientation
-        if let Some(p) = position {
-            sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_translation(p, true);
-            box_center = p.into();
-        }
+        // if let Some(p) = position {
+        //     sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_translation(p, true);
+        //     box_center = p.into();
+        // }
 
-        if let Some(o) = orientation {
-            sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_rotation(o, true);
-            box_rotation = o;
-        }
+        // if let Some(o) = orientation {
+        //     sim.rigid_body_set.lock().unwrap().get_mut(vehicle_handle).unwrap().set_rotation(o, true);
+        //     box_rotation = o;
+        // }
 
-        RobotData { 
+        let mut robot = RobotData { 
             body_handle: vehicle_handle,
             wheel_joints,
             wheel_bodies,
@@ -230,12 +229,16 @@ impl RobotData {
             drive_state: DriveState::SetSpeed,
             distance_l: 0.0,
             distance_r: 0.0,
-            initial_transform: Transform { position: box_center.to_owned(), rotation: roboscapesim_common::Orientation::Quaternion(box_rotation.quaternion().to_owned()), ..Default::default() },
+            initial_transform: Transform { position: position.unwrap_or(box_center.to_owned().coords).into(), rotation: orientation.unwrap_or(box_rotation).into(), ..Default::default() },
             claimed_by: None,
             claimable: true,
             start_time: SystemTime::now(),
             speed_scale: 1.0,
-        }
+        };
+        
+        robot.update_transform(sim, position, orientation.and_then(|o| Some(o.into())), true);
+
+        robot
     }
 
     pub fn setup_robot_socket(robot: &mut RobotData) {
@@ -433,27 +436,24 @@ impl RobotData {
         let mut new_whisker_states = [false, false];
 
         // Check whiskers
-        if sim.narrow_phase.intersections_with(robot.whisker_l).count() > 0 {
-            for c in sim.narrow_phase.intersections_with(robot.whisker_l) {
-                // Ignore non-intersections 
-                if !c.2 {
-                    continue;
-                } 
+        for c in sim.narrow_phase.intersection_pairs_with(robot.whisker_l) {
+            // Ignore non-intersections 
+            if !c.2 {
+                continue;
+            } 
 
-                new_whisker_states[0] = true;
-            }
+            new_whisker_states[0] = true;
         }
+        
+        for c in sim.narrow_phase.intersection_pairs_with(robot.whisker_r) {
+            // Ignore non-intersections 
+            if !c.2 {
+                continue;
+            } 
 
-        if sim.narrow_phase.intersections_with(robot.whisker_r).count() > 0 {
-            for c in sim.narrow_phase.intersections_with(robot.whisker_r) {
-                // Ignore non-intersections 
-                if !c.2 {
-                    continue;
-                } 
-
-                new_whisker_states[1] = true;
-            }
+            new_whisker_states[1] = true;
         }
+        
 
         // Send message if whisker changed
         if new_whisker_states != robot.whisker_states {
@@ -489,7 +489,7 @@ impl RobotData {
             }
             
             // Update simulation one frame
-            sim.update(1.0 / UPDATE_FPS);
+            //sim.update(1.0 / (UPDATE_FPS / 2.0));
         }
 
         let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
