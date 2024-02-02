@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}};
+use std::{collections::BTreeMap, f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4}, sync::Arc};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::{trace, info};
@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use rapier3d::prelude::{RigidBodyHandle, Real, Ray, QueryFilter};
 use serde_json::Value;
 
-use crate::{room::RoomData, simulation::SCALE};
+use crate::{room::RoomData, simulation::{SCALE, Simulation}};
 
 use super::{service_struct::{ServiceType, Service, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
@@ -112,27 +112,28 @@ impl Service for LIDARService {
         &self.service_info
     }
 
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
         trace!("{:?}", msg);
         let mut response = vec![];
 
         let service = self.get_service_info();
-        if msg.function == "getRange" {
 
-            response = do_rays(&self.config, room.sim.lock().unwrap());     
+        if msg.function == "getRange" {
+            response = do_rays(&self.config, room.sim.clone());
         } else {
             info!("Unrecognized function {}", msg.function);
         }
+
         service.enqueue_response_to(msg, Ok(response.clone()));
 
         (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
     }
 }
 
-fn do_rays(config: &LIDARConfig, simulation: std::sync::MutexGuard<'_, crate::simulation::Simulation>)  -> Vec<Value> {
+fn do_rays(config: &LIDARConfig, simulation: Arc<Simulation>)  -> Vec<Value> {
     let mut rays = vec![];
 
-    if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(config.body) {
+    if let Some(o) = simulation.rigid_body_set.read().unwrap().get(config.body) {
         rays = calculate_rays(config, o.rotation(), o.translation());
     }
 
@@ -144,7 +145,7 @@ fn do_rays(config: &LIDARConfig, simulation: std::sync::MutexGuard<'_, crate::si
     for ray in rays {
         let mut distance = config.max_distance * 100.0;
         if let Some((handle, toi)) = 
-            simulation.query_pipeline.cast_ray(&simulation.rigid_body_set.lock().unwrap(),&simulation.collider_set, &ray, config.max_distance * SCALE, true, filter) {
+            simulation.query_pipeline.lock().unwrap().cast_ray(&simulation.rigid_body_set.read().unwrap(),&simulation.collider_set.read().unwrap(), &ray, config.max_distance * SCALE, true, filter) {
             // The first collider hit has the handle `handle` and it hit after
             // the ray travelled a distance equal to `ray.dir * toi`.
             let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`

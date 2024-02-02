@@ -2,7 +2,7 @@ use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, AtomicI64};
 
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
@@ -15,7 +15,8 @@ use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, mpsc};
+use no_deadlocks::{Mutex, RwLock};
 
 use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
@@ -40,24 +41,27 @@ pub struct RoomData {
     pub environment: String,
     pub password: Option<String>,
     pub timeout: i64,
-    pub last_interaction_time: i64,
+    pub last_interaction_time: Arc<AtomicI64>,
     pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, DashSet<u128>>,
     /// List of usernames of users who have visited the room
     pub visitors: DashSet<String>,
-    pub last_update: OffsetDateTime,
-    pub last_full_update: i64,
-    pub hibernating_since: Arc<Mutex<Option<i64>>>,
-    pub roomtime: f64,
+    #[derivative(Debug = "ignore")]
+    pub last_update: Arc<RwLock<OffsetDateTime>>,
+    pub last_full_update: Arc<AtomicI64>,
+    #[derivative(Debug = "ignore")]
+    pub hibernating_since: Arc<RwLock<Option<i64>>>,
+    #[derivative(Debug = "ignore")]
+    pub roomtime: Arc<RwLock<f64>>,
     pub robots: Arc<DashMap<String, RobotData>>,
     #[derivative(Debug = "ignore")]
-    pub sim: Arc<Mutex<Simulation>>,
+    pub sim: Arc<Simulation>,
     #[derivative(Debug = "ignore")]
-    pub reseters: HashMap<String, Box<dyn Resettable + Send + Sync>>,
+    pub reseters: DashMap<String, Box<dyn Resettable + Send + Sync>>,
     #[derivative(Debug = "ignore")]
     pub services: Arc<DashMap<(String, ServiceType), Arc<Box<dyn Service>>>>,
     #[derivative(Debug = "ignore")]
-    pub iotscape_rx: mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>,
+    pub iotscape_rx: Arc<Mutex<mpsc::Receiver<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)>>>,
     #[derivative(Debug = "ignore")]
     pub netsblox_msg_tx: mpsc::Sender<((String, ServiceType), String, BTreeMap<String, String>)>,
     #[derivative(Debug = "ignore")]
@@ -68,7 +72,7 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub vm_thread: Option<JoinHandle<()>>,
     /// Next object ID to use
-    pub next_object_id: usize,
+    pub next_object_id: Arc<AtomicI64>,
 }
 
 pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
@@ -80,6 +84,7 @@ impl RoomData {
         let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel();
         let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
+        let iotscape_rx = Arc::new(Mutex::new(iotscape_rx));
         let vm_netsblox_msg_rx = netsblox_msg_rx.clone();
         let iotscape_netsblox_msg_rx = netsblox_msg_rx.clone();
 
@@ -89,24 +94,24 @@ impl RoomData {
             environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
             timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
-            last_interaction_time: get_timestamp(),
+            last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
             visitors: DashSet::new(),
-            last_full_update: 0,
-            roomtime: 0.0,
-            sim: Arc::new(Mutex::new(Simulation::new())),
-            last_update: SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium),
+            last_full_update: Arc::new(AtomicI64::new(0)),
+            roomtime: Arc::new(RwLock::new(0.0)),
+            sim: Arc::new(Simulation::new()),
+            last_update: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             robots: Arc::new(DashMap::new()),
-            reseters: HashMap::new(),
+            reseters: DashMap::new(),
             services: Arc::new(DashMap::new()),
             iotscape_rx,
             netsblox_msg_tx,
             netsblox_msg_rx,
             edit_mode,
             vm_thread: None,
-            hibernating_since: Arc::new(Mutex::new(None)),
-            next_object_id: 0,
+            hibernating_since: Arc::new(RwLock::new(None)),
+            next_object_id: Arc::new(AtomicI64::new(0)),
         };
 
         info!("Creating Room {}", obj.name);
@@ -124,7 +129,7 @@ impl RoomData {
         let hibernating_since = obj.hibernating_since.clone();
         spawn(async move {
             loop {
-                if hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                if hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                     sleep(Duration::from_millis(50)).await;
                 } else {
                     for service in services.iter() {
@@ -138,7 +143,7 @@ impl RoomData {
                         }
                     }
 
-                    sleep(Duration::from_millis(5)).await;
+                    sleep(Duration::from_millis(3)).await;
                 }
             }
         });
@@ -237,7 +242,7 @@ impl RoomData {
 
                     // Run program
                     loop {
-                        if hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                        if hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             sleep(Duration::from_millis(50)).await;
                         } else {
 
@@ -280,7 +285,7 @@ impl RoomData {
             spawn(async move {
                 loop {
                     while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.lock().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
                                 if let Err(e) = service.value().get_service_info().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
@@ -292,7 +297,7 @@ impl RoomData {
                             }
                         }
                     }
-                    sleep(Duration::from_millis(5)).await;
+                    sleep(Duration::from_millis(3)).await;
                 }
             });
         }
@@ -329,7 +334,7 @@ impl RoomData {
     pub fn send_info_to_client(&self, client: u128) {
         Self::send_to_client(
             &UpdateMessage::RoomInfo(
-                RoomState { name: self.name.clone(), roomtime: self.roomtime, users: self.visitors.clone().into_iter().collect() }
+                RoomState { name: self.name.clone(), roomtime: self.roomtime.read().unwrap().clone(), users: self.visitors.clone().into_iter().collect() }
             ),
             client,
         );
@@ -339,13 +344,13 @@ impl RoomData {
     pub fn send_state_to_client(&self, full_update: bool, client: u128) {
         if full_update {
             Self::send_to_client(
-                &UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),
+                &UpdateMessage::Update(self.roomtime.read().unwrap().clone(), true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),
                 client,
             );
         } else {
             Self::send_to_client(
                 &UpdateMessage::Update(
-                    self.roomtime,
+                    self.roomtime.read().unwrap().clone(),
                     false,
                     self.objects
                         .iter()
@@ -378,10 +383,10 @@ impl RoomData {
     pub fn send_state_to_all_clients(&self, full_update: bool) {
         let update_msg: UpdateMessage;
         if full_update {
-            update_msg = UpdateMessage::Update(self.roomtime, true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
+            update_msg = UpdateMessage::Update(self.roomtime.read().unwrap().clone(), true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
         } else {
             update_msg = UpdateMessage::Update(
-                self.roomtime,
+                self.roomtime.read().unwrap().clone(),
                 false,
                 self.objects
                     .iter()
@@ -414,14 +419,14 @@ impl RoomData {
         ("Room".to_owned() + &s).to_owned()
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&self) {
         let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
         
-        let mut delta_time = (now - self.last_update).as_seconds_f64();
+        let mut delta_time = (now - *self.last_update.read().unwrap()).as_seconds_f64();
         
         delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
         
-//        info!("{}", delta_time);
+        trace!("{}", delta_time);
 
         if !self.hibernating.load(Ordering::Relaxed) {
 
@@ -484,68 +489,66 @@ impl RoomData {
             
             self.get_iotscape_messages();
             
-            {
-                let simulation = &mut self.sim.lock().unwrap();
-                simulation.update(delta_time);
+            self.sim.update(delta_time);
 
-                // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
-                for mut entry in simulation.sensors.iter_mut() {
-                    let ((name, sensor), in_sensor) = entry.pair_mut();
-                    for (c1, c2, intersecting) in simulation.narrow_phase.intersection_pairs_with(*sensor) {
-                        if intersecting {
-                            if in_sensor.contains(&c2) {
-                                // Already in sensor
-                                continue;
-                            } else {
-                                trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
-                                in_sensor.insert(c2);
-                                // TODO: find other object name
-                                self.services.get(&(name.clone(), ServiceType::Trigger))
-                                    .and_then(|s| Some(
-                                        s.value().get_service_info().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
-                            }
+            // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
+            for mut entry in self.sim.sensors.iter_mut() {
+                let ((name, sensor), in_sensor) = entry.pair_mut();
+                for (c1, c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersection_pairs_with(*sensor) {
+                    if intersecting {
+                        if in_sensor.contains(&c2) {
+                            // Already in sensor
+                            continue;
                         } else {
-                            if in_sensor.contains(&c2) {
-                                in_sensor.remove(&c2);
-                                trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
-                            }
+                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                            in_sensor.insert(c2);
+                            // TODO: find other object name
+                            self.services.get(&(name.clone(), ServiceType::Trigger))
+                                .and_then(|s| Some(
+                                    s.value().get_service_info().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
                         }
-                    }
-                }
-
-                // Update data before send
-                for mut o in self.objects.iter_mut()  {
-                    if simulation.rigid_body_labels.contains_key(o.key()) {
-                        let get = &simulation.rigid_body_labels.get(o.key()).unwrap();
-                        let handle = get.value();
-                        let rigid_body_set = &simulation.rigid_body_set.lock().unwrap();
-                        let body = rigid_body_set.get(*handle);
-
-                        if let Some(body) = body {
-                            let old_transform = o.value().transform;
-                            o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
-
-                            if old_transform != o.value().transform {
-                                o.value_mut().updated = true;
-                            }
+                    } else {
+                        if in_sensor.contains(&c2) {
+                            in_sensor.remove(&c2);
+                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
                         }
                     }
                 }
             }
 
-            self.roomtime += delta_time;
+            // Update data before send
+            for mut o in self.objects.iter_mut()  {
+                if self.sim.rigid_body_labels.contains_key(o.key()) {
+                    let get = &self.sim.rigid_body_labels.get(o.key()).unwrap();
+                    let handle = get.value();
+                    let rigid_body_set = &self.sim.rigid_body_set.read().unwrap();
+                    let body = rigid_body_set.get(*handle);
 
-            if time - self.last_full_update < 60 {
-                if (now - self.last_update) > Duration::from_millis(120) {
+                    if let Some(body) = body {
+                        let old_transform = o.value().transform;
+                        o.value_mut().transform = Transform { position: (*body.translation()).into(), rotation: Orientation::Quaternion(*body.rotation().quaternion()), scaling: old_transform.scaling };
+
+                        if old_transform != o.value().transform {
+                            o.value_mut().updated = true;
+                        }
+                    }
+                }
+            }
+            
+
+            *self.roomtime.write().unwrap() += delta_time;
+
+            if time - self.last_full_update.load(Ordering::Relaxed) < 60 {
+                if (now - *self.last_update.read().unwrap()) > Duration::from_millis(120) {
                     // Send incremental state to clients
                     self.send_state_to_all_clients(false);
-                    self.last_update = now;
+                    *self.last_update.write().unwrap() = now;
                 }
             } else {
                 // Send full state to clients
                 self.send_state_to_all_clients(true);
-                self.last_full_update = time;
-                self.last_update = now;
+                self.last_full_update.store(time, Ordering::Relaxed);
+                *self.last_update.write().unwrap() = now;
             }
         } else {
             // Still do IoTScape handling
@@ -555,7 +558,7 @@ impl RoomData {
         // Check if room empty/not empty
         if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
-            self.hibernating_since.lock().unwrap().replace(get_timestamp());
+            self.hibernating_since.write().unwrap().replace(get_timestamp());
             info!("{} is now hibernating", self.name);
             self.announce();
             return;
@@ -570,12 +573,12 @@ impl RoomData {
         }
     }
 
-    fn update_robots(&mut self, delta_time: f64) {
+    fn update_robots(&self, delta_time: f64) {
         for mut robot in self.robots.iter_mut() {
-            let (updated, msg) = RobotData::robot_update(robot.value_mut(), &mut self.sim.lock().unwrap(), &self.sockets, delta_time);
+            let (updated, msg) = RobotData::robot_update(robot.value_mut(), self.sim.clone(), &self.sockets, delta_time);
     
             if updated {
-                self.last_interaction_time = get_timestamp();
+                self.last_interaction_time.store(get_timestamp(), Ordering::Relaxed);
             }
 
             // Check if claimed by user not in room
@@ -601,10 +604,10 @@ impl RoomData {
         }
     }
 
-    fn get_iotscape_messages(&mut self) {
+    fn get_iotscape_messages(&self) {
         let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
 
-        while let Ok(msg) = self.iotscape_rx.recv_timeout(Duration::ZERO) {
+        while let Ok(msg) = self.iotscape_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
             if msg.0.function != "heartbeat" {
                 // TODO: figure out which interactions should keep room alive
                 //self.last_interaction_time = get_timestamp();
@@ -628,7 +631,7 @@ impl RoomData {
         }
     }
 
-    fn handle_iotscape_message(&mut self, msg: iotscape::Request) -> (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>) {
+    fn handle_iotscape_message(&self, msg: iotscape::Request) -> (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>) {
         let mut response = None;
 
         let service = self.services.get(&(msg.device.clone(), msg.service.clone().into())).map(|s| s.value().clone());
@@ -649,7 +652,7 @@ impl RoomData {
         response.unwrap_or((Err(format!("Service type {:?} not yet implemented.", &msg.service)), None))
     }
 
-    fn handle_client_message(&mut self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {
+    fn handle_client_message(&self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {
         let client = CLIENTS.get(&client_id);
 
         if let Some(client) = client {
@@ -716,16 +719,16 @@ impl RoomData {
     }
 
     /// Reset entire room
-    pub(crate) fn reset(&mut self){
-        let simulation = &mut self.sim.lock().unwrap();
+    pub(crate) fn reset(&self){
+        info!("Resetting room {}", self.name);
 
         // Reset robots
         for mut r in self.robots.iter_mut() {
-            r.value_mut().reset(simulation);
+            r.value_mut().reset(self.sim.clone());
         }
 
-        for resetter in self.reseters.iter_mut() {
-            resetter.1.reset(simulation);
+        for mut resetter in self.reseters.iter_mut() {
+            resetter.value_mut().reset(self.sim.clone());
         }
 
         // Send
@@ -734,18 +737,18 @@ impl RoomData {
             self.netsblox_msg_tx.send(((world_service.get_service_info().id.clone(), ServiceType::World), "reset".to_string(), BTreeMap::new())).unwrap();
         }
         
-        self.last_interaction_time = get_timestamp();
+        self.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
     }
     
     /// Reset single robot
-    pub(crate) fn reset_robot(&mut self, id: &str){
+    pub(crate) fn reset_robot(&self, id: &str){
         if self.robots.contains_key(&id.to_string()) {
-            self.robots.get_mut(&id.to_string()).unwrap().reset(&mut self.sim.lock().unwrap());
+            self.robots.get_mut(&id.to_string()).unwrap().reset(self.sim.clone());
         } else {
             info!("Request to reset non-existing robot {}", id);
         }
 
-        self.last_interaction_time = get_timestamp();
+        self.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
     }
 
     /// Test if a client is allowed to interact with a robot (for encrypt, reset)
@@ -789,15 +792,14 @@ impl RoomData {
     }
 
     /// Add a robot to a room
-    pub(crate) fn add_robot(room: &mut RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool, speed_mult: Option<f32>, scale: Option<f32>) -> String {
+    pub(crate) fn add_robot(room: &RoomData, position: Vector3<Real>, orientation: UnitQuaternion<f32>, wheel_debug: bool, speed_mult: Option<f32>, scale: Option<f32>) -> String {
         let speed_mult = speed_mult.unwrap_or(1.0).clamp(-10.0, 10.0);
         let scale: f32 = scale.unwrap_or(1.0).clamp(1.0, 5.0);
 
-        let simulation = &mut room.sim.lock().unwrap();
-        let mut robot = RobotData::create_robot_body(simulation, None, Some(position), Some(orientation), Some(scale));
+        let mut robot = RobotData::create_robot_body(room.sim.clone(), None, Some(position), Some(orientation), Some(scale));
         robot.speed_scale = speed_mult;
         let robot_id: String = "robot_".to_string() + robot.id.as_str();
-        simulation.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
+        room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {
             name: robot_id.clone(),
             transform: Transform {scaling: vector![scale * SCALE, scale * SCALE, scale * SCALE], ..Default::default() },
@@ -811,7 +813,7 @@ impl RoomData {
         if wheel_debug {
             let mut i = 0;
             for wheel in &robot.wheel_bodies {
-                simulation.rigid_body_labels.insert(format!("wheel_{}", i), *wheel);
+                room.sim.rigid_body_labels.insert(format!("wheel_{}", i), *wheel);
                 room.objects.insert(format!("wheel_{}", i), ObjectData {
                     name: format!("wheel_{}", i),
                     transform: Transform { scaling: vector![0.18,0.03,0.18], ..Default::default() },
@@ -825,12 +827,12 @@ impl RoomData {
 
         let id = robot.id.to_string();
         room.robots.insert(robot.id.to_string(), robot);
-        room.last_full_update = 0;
+        room.last_full_update.store(0, Ordering::Relaxed);
         id
     }
 
     /// Add a physics object to the room
-    pub(crate) fn add_shape(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
+    pub(crate) fn add_shape(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
         let body_name = room.name.to_owned() + "_" + name;
         let mut position = position;
 
@@ -880,12 +882,11 @@ impl RoomData {
             },
         };
 
-        let simulation = &mut room.sim.lock().unwrap();
         let collider = collider.restitution(0.3).density(0.045).friction(0.6).build();
-        let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
-        let rigid_body_set = simulation.rigid_body_set.clone();
-        simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());
-        simulation.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+        let cube_body_handle = room.sim.rigid_body_set.write().unwrap().insert(rigid_body);
+        let rigid_body_set = room.sim.rigid_body_set.clone();
+        room.sim.collider_set.write().unwrap().insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.write().unwrap());
+        room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
 
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
@@ -895,21 +896,21 @@ impl RoomData {
             updated: true,
         });
 
-        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
         
-        room.last_full_update = 0;
+        room.last_full_update.store(0, Ordering::Relaxed);
         body_name
     }
 
     /// Add a service to the room
-    pub(crate) fn add_sensor<'a, T: ServiceFactory>(&mut self, id: &'a str, config: T::Config) -> &'a str {
+    pub(crate) fn add_sensor<'a, T: ServiceFactory>(&self, id: &'a str, config: T::Config) -> &'a str {
         let service = Arc::new(T::create(id, config));
         self.services.insert((id.into(), service.get_service_info().service_type), service);
         id
     }
 
     /// Specialized add_shape for triggers
-    pub(crate) fn add_trigger(room: &mut RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
+    pub(crate) fn add_trigger(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
         let body_name = room.name.to_owned() + "_" + name;
         let rigid_body =  RigidBodyBuilder::kinematic_position_based()
             .ccd_enabled(true)
@@ -921,11 +922,10 @@ impl RoomData {
 
         let collider = ColliderBuilder::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0).sensor(true).build();
 
-        let simulation = &mut room.sim.lock().unwrap();
-        let cube_body_handle = simulation.rigid_body_set.lock().unwrap().insert(rigid_body);
-        let rigid_body_set = simulation.rigid_body_set.clone();
-        let collider_handle = simulation.collider_set.insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.lock().unwrap());
-        simulation.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
+        let cube_body_handle = room.sim.rigid_body_set.write().unwrap().insert(rigid_body);
+        let rigid_body_set = room.sim.rigid_body_set.clone();
+        let collider_handle = room.sim.collider_set.write().unwrap().insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.write().unwrap());
+        room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
 
         room.objects.insert(body_name.clone(), ObjectData {
             name: body_name.clone(),
@@ -935,53 +935,51 @@ impl RoomData {
             updated: true,
         });
 
-        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, simulation)));
+        room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
 
         let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle));
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
-        simulation.sensors.insert((service_id, collider_handle), DashSet::new());
-        room.last_full_update = 0;
+        room.sim.sensors.insert((service_id, collider_handle), DashSet::new());
+        room.last_full_update.store(0, Ordering::Relaxed);
         body_name
     }
 
-    pub(crate) fn remove(&mut self, id: &String) {
-        let simulation = &mut self.sim.lock().unwrap();
+    pub(crate) fn remove(&self, id: &String) {
         self.objects.remove(id);
 
-        if simulation.rigid_body_labels.contains_key(id) {
-            let handle = *simulation.rigid_body_labels.get(id).unwrap();
-            simulation.rigid_body_labels.remove(id);
-            simulation.remove_body(handle);
+        if self.sim.rigid_body_labels.contains_key(id) {
+            let handle = *self.sim.rigid_body_labels.get(id).unwrap();
+            self.sim.rigid_body_labels.remove(id);
+            self.sim.remove_body(handle);
         }
 
         if self.robots.contains_key(id) {
-            simulation.cleanup_robot(self.robots.get(id).unwrap().value());
+            self.sim.cleanup_robot(self.robots.get(id).unwrap().value());
             self.robots.remove(id);
         }
 
         self.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));
     }
 
-    pub(crate) fn remove_all(&mut self) {
+    pub(crate) fn remove_all(&self) {
         info!("Removing all entities from {}", self.name);
         self.objects.clear();
 
         // Remove non-world services
         self.services.retain(|k, _| k.1 == ServiceType::World);
 
-        let simulation = &mut self.sim.lock().unwrap();
-        let labels = simulation.rigid_body_labels.clone();
+        let labels = self.sim.rigid_body_labels.clone();
         for l in labels.iter() {
             if !l.key().starts_with("robot_") {
-                simulation.remove_body(*l.value());
+                self.sim.remove_body(*l.value());
             }
         }
 
-        simulation.rigid_body_labels.clear();
+        self.sim.rigid_body_labels.clear();
 
         for r in self.robots.iter() {
-            simulation.cleanup_robot(r.value());
+            self.sim.cleanup_robot(r.value());
         }
         self.robots.clear();
         self.send_to_all_clients(&UpdateMessage::RemoveAll());
@@ -1034,7 +1032,6 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     let room = ROOMS.get(room_id).unwrap();
-    let room = &mut room.lock().unwrap();
     
     // Check password
     if room.password.clone().is_some_and(|pass| pass != password) {
@@ -1051,8 +1048,8 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     }
 
     room.sockets.get_mut(username).unwrap().insert(peer_id);
-    room.last_interaction_time = get_timestamp();
-
+    room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
+    
     // Give client initial update
     room.send_info_to_client(peer_id);
     room.send_state_to_client(true, peer_id);
@@ -1075,12 +1072,12 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
 }
 
 pub async fn create_room(environment: Option<String>, password: Option<String>, edit_mode: bool) -> String {
-    let room = Arc::new(Mutex::new(RoomData::new(None, environment, password, edit_mode)));
+    let room = Arc::new(RoomData::new(None, environment, password, edit_mode));
     
     // Set last interaction to creation time
-    room.lock().unwrap().last_interaction_time = get_timestamp();
+    room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
 
-    let room_id = room.lock().unwrap().name.clone();
+    let room_id = room.name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     room_id
 }

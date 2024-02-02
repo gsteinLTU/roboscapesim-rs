@@ -55,7 +55,7 @@ impl Service for TriggerService {
         &self.service_info
     }
 
-    fn handle_message(&self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, _room: &RoomData, msg: &Request) -> HandleMessageResult {
         let response = vec![];
 
         info!("{:?}", msg);

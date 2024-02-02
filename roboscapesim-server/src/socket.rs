@@ -6,7 +6,8 @@ use once_cell::sync::Lazy;
 
 use async_tungstenite::{WebSocketStream, tungstenite::Message};
 use roboscapesim_common::{ClientMessage, UpdateMessage};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use no_deadlocks::Mutex;
 use crossbeam_channel::{Sender, Receiver, self};
 
 use tokio::time::{Duration, sleep};

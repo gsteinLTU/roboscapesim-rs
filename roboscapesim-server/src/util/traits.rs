@@ -1,9 +1,11 @@
 pub mod resettable {
+    use std::sync::Arc;
+
     use rapier3d::prelude::{Real, Isometry, RigidBodyHandle};
     use crate::simulation::Simulation;
 
     pub trait Resettable {
-        fn reset(&mut self, sim: &mut Simulation);
+        fn reset(&mut self, sim: Arc<Simulation>);
     }
 
     /// Resets a rigid body to its initial conditions
@@ -15,16 +17,16 @@ pub mod resettable {
     }
 
     impl RigidBodyResetter {
-        pub fn new(body_handle: RigidBodyHandle, sim: &Simulation) -> RigidBodyResetter {
-            let binding = sim.rigid_body_set.lock().unwrap();
+        pub fn new(body_handle: RigidBodyHandle, sim: Arc<Simulation>) -> RigidBodyResetter {
+            let binding = sim.rigid_body_set.read().unwrap();
             let body = binding.get(body_handle).unwrap();
             RigidBodyResetter { body_handle, initial_position: body.position().to_owned(), initial_angvel: body.angvel().to_owned(), initial_linvel: body.linvel().to_owned()}
         }
     }
 
     impl Resettable for RigidBodyResetter {
-        fn reset(&mut self, sim: &mut Simulation) {
-            let rigid_body_set = &mut sim.rigid_body_set.lock().unwrap();
+        fn reset(&mut self, sim: Arc<Simulation>) {
+            let rigid_body_set = &mut sim.rigid_body_set.write().unwrap();
             if rigid_body_set.contains(self.body_handle){
                 let body = rigid_body_set.get_mut(self.body_handle).unwrap();
                 body.set_position(self.initial_position, true);

@@ -17,7 +17,7 @@ pub struct EntityService {
 }
 
 impl Service for EntityService {
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
         let mut response = vec![];
 
         trace!("{:?}", msg);
@@ -25,8 +25,8 @@ impl Service for EntityService {
         // TODO: Determine why quotes are being added to device name in VM
         match msg.function.as_str() {
             "reset" => {
-                if let Some(r) = room.reseters.get_mut(msg.device.as_str()) {
-                    r.reset(&mut room.sim.lock().unwrap());
+                if let Some(mut r) = room.reseters.get_mut(msg.device.as_str()) {
+                    r.value_mut().reset(room.sim.clone());
                 } else {
                     info!("Unrecognized device {}", msg.device);
                 }
@@ -37,9 +37,9 @@ impl Service for EntityService {
                 let z = num_val(&msg.params[2]);
 
                 if self.is_robot {
-                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), Some(vector![x, y, z]), None, true);
+                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(room.sim.clone(), Some(vector![x, y, z]), None, true);
                 } else {
-                    if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
+                    if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                         o.set_translation(vector![x, y, z], true);
                     }
                 }
@@ -50,20 +50,20 @@ impl Service for EntityService {
                 let roll = num_val(&msg.params[0]) * PI / 180.0;
 
                 if self.is_robot {
-                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(&mut room.sim.lock().unwrap(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
+                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(room.sim.clone(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
                 } else {
-                    if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
+                    if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);
                     }
                 }
             },
             "getPosition" => {
-                if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
+                if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                     response = vec![o.translation().x.into(), o.translation().y.into(), o.translation().z.into()];              
                 }
             },
             "getRotation" => {
-                if let Some(o) = room.sim.lock().unwrap().rigid_body_set.lock().unwrap().get_mut(self.rigid_body) {
+                if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                     let r = o.rotation().euler_angles();
                     response = vec![r.2.into(), r.0.into(), r.1.into()];              
                 }

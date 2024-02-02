@@ -1,5 +1,6 @@
-use std::{sync::{Arc, Mutex}, time::Duration, hash::Hash};
+use std::{sync::Arc, time::Duration, hash::Hash};
 
+use no_deadlocks::Mutex;
 use atomic_instant::AtomicInstant;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition, Request};
@@ -99,7 +100,7 @@ pub trait Service: Sync + Send {
     fn get_service_info(&self) -> &ServiceInfo;
 
     /// Handle a message
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult;
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult;
 }
 
 /// Trait for defining services directly creatable by user (i.e. not world or trigger)
@@ -135,7 +136,7 @@ impl ServiceInfo {
     /// Update the service, return number of messages in queue
     pub fn update(&self) -> usize {
         let iotscape_service = &mut self.service.lock().unwrap();
-        iotscape_service.poll(Some(Duration::from_millis(1)));
+        iotscape_service.poll(Some(Duration::from_micros(1)));
 
         // Re-announce to server regularly
         if self.last_announce.elapsed() > self.announce_period {
