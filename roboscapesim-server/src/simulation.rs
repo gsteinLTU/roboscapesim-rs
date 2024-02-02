@@ -1,5 +1,9 @@
 use std::{sync::Arc, num::NonZeroUsize};
-use no_deadlocks::{RwLock, Mutex};
+
+#[cfg(feature = "no_deadlocks")]
+use no_deadlocks::{Mutex, RwLock};
+#[cfg(not(feature = "no_deadlocks"))]
+use std::sync::{Mutex, RwLock};
 
 use dashmap::{DashMap, DashSet};
 use nalgebra::Vector3;
@@ -37,7 +41,7 @@ impl Simulation {
             rigid_body_set: Arc::new(RwLock::new(RigidBodySet::new())),
             collider_set: Arc::new(RwLock::new(ColliderSet::new())),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
-            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { num_additional_friction_iterations: 4, num_solver_iterations: NonZeroUsize::new(2).unwrap(), num_internal_pgs_iterations: 10, ..Default::default() })),
+            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { num_additional_friction_iterations: 4, num_solver_iterations: NonZeroUsize::new(1).unwrap(), num_internal_pgs_iterations: 12, ..Default::default() })),
             physics_pipeline: Arc::new(Mutex::new(PhysicsPipeline::new())),
             island_manager: Arc::new(Mutex::new(IslandManager::new())),
             broad_phase: Arc::new(Mutex::new(BroadPhase::new())),

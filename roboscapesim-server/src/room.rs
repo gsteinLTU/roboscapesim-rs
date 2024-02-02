@@ -16,7 +16,11 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
 use std::sync::{Arc, mpsc};
+
+#[cfg(feature = "no_deadlocks")]
 use no_deadlocks::{Mutex, RwLock};
+#[cfg(not(feature = "no_deadlocks"))]
+use std::sync::{Mutex, RwLock};
 
 use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
@@ -427,6 +431,7 @@ impl RoomData {
         let now = OffsetDateTime::now_utc();
         
         if !self.hibernating.load(Ordering::Relaxed) {
+            // Calculate delta time
             let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
             let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
             //info!("{}", delta_time);
@@ -440,6 +445,7 @@ impl RoomData {
                     }
                 }
             }
+            // Remove disconnected clients
             for (username, client_id) in disconnected {
                 info!("Removing client {} from room {}", client_id, &self.name);
                 self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
@@ -579,11 +585,13 @@ impl RoomData {
     }
 
     fn update_robots(&self, delta_time: f64) {
+        let mut any_robot_updated = false;
+
         for mut robot in self.robots.iter_mut() {
             let (updated, msg) = RobotData::robot_update(robot.value_mut(), self.sim.clone(), &self.sockets, delta_time);
     
             if updated {
-                self.last_interaction_time.store(get_timestamp(), Ordering::Relaxed);
+                any_robot_updated = true;
             }
 
             // Check if claimed by user not in room
@@ -606,6 +614,10 @@ impl RoomData {
                     RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             }
+        }
+        
+        if any_robot_updated {
+            self.last_interaction_time.store(get_timestamp(), Ordering::Relaxed);
         }
     }
 

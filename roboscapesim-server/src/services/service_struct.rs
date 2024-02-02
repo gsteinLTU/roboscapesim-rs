@@ -1,6 +1,11 @@
 use std::{sync::Arc, time::Duration, hash::Hash};
 
+
+#[cfg(feature = "no_deadlocks")]
 use no_deadlocks::Mutex;
+#[cfg(not(feature = "no_deadlocks"))]
+use std::sync::Mutex;
+
 use atomic_instant::AtomicInstant;
 use derivative::Derivative;
 use iotscape::{IoTScapeService, ServiceDefinition, Request};
