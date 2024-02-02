@@ -47,8 +47,10 @@ pub struct RoomData {
     /// List of usernames of users who have visited the room
     pub visitors: DashSet<String>,
     #[derivative(Debug = "ignore")]
-    pub last_update: Arc<RwLock<OffsetDateTime>>,
-    pub last_full_update: Arc<AtomicI64>,
+    pub last_update_run: Arc<RwLock<OffsetDateTime>>,
+    #[derivative(Debug = "ignore")]
+    pub last_update_sent: Arc<RwLock<OffsetDateTime>>,
+    pub last_full_update_sent: Arc<AtomicI64>,
     #[derivative(Debug = "ignore")]
     pub hibernating_since: Arc<RwLock<Option<i64>>>,
     #[derivative(Debug = "ignore")]
@@ -98,10 +100,11 @@ impl RoomData {
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
             visitors: DashSet::new(),
-            last_full_update: Arc::new(AtomicI64::new(0)),
+            last_update_run: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
+            last_update_sent: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
+            last_full_update_sent: Arc::new(AtomicI64::new(0)),
             roomtime: Arc::new(RwLock::new(0.0)),
             sim: Arc::new(Simulation::new()),
-            last_update: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             robots: Arc::new(DashMap::new()),
             reseters: DashMap::new(),
             services: Arc::new(DashMap::new()),
@@ -421,12 +424,13 @@ impl RoomData {
 
     pub fn update(&self) {
         let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
+        //let now = OffsetDateTime::now_utc();
+
+        let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
         
-        let mut delta_time = (now - *self.last_update.read().unwrap()).as_seconds_f64();
+        let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
         
-        delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
-        
-        trace!("{}", delta_time);
+        info!("{}", delta_time);
 
         if !self.hibernating.load(Ordering::Relaxed) {
 
@@ -538,18 +542,22 @@ impl RoomData {
 
             *self.roomtime.write().unwrap() += delta_time;
 
-            if time - self.last_full_update.load(Ordering::Relaxed) < 60 {
-                if (now - *self.last_update.read().unwrap()) > Duration::from_millis(120) {
+            if time - self.last_full_update_sent.load(Ordering::Relaxed) < 60 {
+                if (now - *self.last_update_sent.read().unwrap()) > Duration::from_millis(120) {
+                    info!("Sending incremental state to clients");
                     // Send incremental state to clients
                     self.send_state_to_all_clients(false);
-                    *self.last_update.write().unwrap() = now;
+                    *self.last_update_sent.write().unwrap() = now;
                 }
             } else {
                 // Send full state to clients
+                info!("Sending full state to clients");
                 self.send_state_to_all_clients(true);
-                self.last_full_update.store(time, Ordering::Relaxed);
-                *self.last_update.write().unwrap() = now;
+                self.last_full_update_sent.store(time, Ordering::Relaxed);
+                *self.last_update_sent.write().unwrap() = now;
             }
+
+            *self.last_update_run.write().unwrap() = now;
         } else {
             // Still do IoTScape handling
             self.get_iotscape_messages();
@@ -827,7 +835,7 @@ impl RoomData {
 
         let id = robot.id.to_string();
         room.robots.insert(robot.id.to_string(), robot);
-        room.last_full_update.store(0, Ordering::Relaxed);
+        room.last_full_update_sent.store(0, Ordering::Relaxed);
         id
     }
 
@@ -898,7 +906,7 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
         
-        room.last_full_update.store(0, Ordering::Relaxed);
+        room.last_full_update_sent.store(0, Ordering::Relaxed);
         body_name
     }
 
@@ -941,7 +949,7 @@ impl RoomData {
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         room.sim.sensors.insert((service_id, collider_handle), DashSet::new());
-        room.last_full_update.store(0, Ordering::Relaxed);
+        room.last_full_update_sent.store(0, Ordering::Relaxed);
         body_name
     }
 

@@ -10,6 +10,7 @@ use nalgebra::{Point3,UnitQuaternion, Vector3};
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
+use crate::UPDATE_FPS;
 use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
@@ -484,8 +485,8 @@ impl RobotData {
                 body.set_locked_axes(LockedAxes::all(), true);
             }
             
-            // Update simulation one frame
-            //sim.update(1.0 / (UPDATE_FPS / 2.0));
+            // Update simulation a bit
+            sim.update(1.0 / (UPDATE_FPS / 4.0));
         }
 
         let rigid_body_set = &mut sim.rigid_body_set.write().unwrap();
