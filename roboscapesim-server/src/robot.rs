@@ -485,8 +485,8 @@ impl RobotData {
                 body.set_locked_axes(LockedAxes::all(), true);
             }
             
-            // Update simulation a bit
-            sim.update(1.0 / (UPDATE_FPS / 4.0));
+            // // Update simulation a bit
+            // sim.update(1.0 / (UPDATE_FPS / 4.0));
         }
 
         let rigid_body_set = &mut sim.rigid_body_set.write().unwrap();

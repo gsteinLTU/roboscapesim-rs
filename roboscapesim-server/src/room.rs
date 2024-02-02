@@ -423,17 +423,14 @@ impl RoomData {
     }
 
     pub fn update(&self) {
-        let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
-        //let now = OffsetDateTime::now_utc();
-
-        let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
+        //let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
+        let now = OffsetDateTime::now_utc();
         
-        let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
-        
-        info!("{}", delta_time);
-
         if !self.hibernating.load(Ordering::Relaxed) {
-
+            let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
+            let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
+            //info!("{}", delta_time);
+            
             // Check for disconnected clients
             let mut disconnected = vec![];
             for client_ids in self.sockets.iter() {
@@ -544,14 +541,14 @@ impl RoomData {
 
             if time - self.last_full_update_sent.load(Ordering::Relaxed) < 60 {
                 if (now - *self.last_update_sent.read().unwrap()) > Duration::from_millis(120) {
-                    info!("Sending incremental state to clients");
+                    trace!("Sending incremental state to clients");
                     // Send incremental state to clients
                     self.send_state_to_all_clients(false);
                     *self.last_update_sent.write().unwrap() = now;
                 }
             } else {
                 // Send full state to clients
-                info!("Sending full state to clients");
+                trace!("Sending full state to clients");
                 self.send_state_to_all_clients(true);
                 self.last_full_update_sent.store(time, Ordering::Relaxed);
                 *self.last_update_sent.write().unwrap() = now;
