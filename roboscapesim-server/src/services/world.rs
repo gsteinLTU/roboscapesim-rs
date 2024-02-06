@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, f32::consts::PI};
+use std::{collections::BTreeMap, f32::consts::PI, sync::atomic::Ordering};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::{info, trace};
@@ -32,7 +32,7 @@ impl Service for WorldService {
         &self.service_info
     }
 
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
         let mut response: Vec<Value> = vec![];
 
         trace!("{:?}", msg);
@@ -127,8 +127,8 @@ impl Service for WorldService {
                 let z = num_val(&msg.params[2]).clamp(-MAX_COORD, MAX_COORD);
                 let heading = num_val(&msg.params[3]);
 
-                let name = "block".to_string() + &room.next_object_id.to_string();
-                room.next_object_id += 1;
+                let name = "block".to_string() + &room.next_object_id.load(Ordering::Relaxed).to_string();
+                room.next_object_id.fetch_add(1, Ordering::Relaxed);
                 
                 let width = num_val(&msg.params[4]);
                 let height = num_val(&msg.params[5]);
@@ -249,7 +249,7 @@ impl Service for WorldService {
                         }
                     }
 
-                    let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.lock().unwrap().rigid_body_labels.get(&object).unwrap().clone() };
+                    let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.rigid_body_labels.get(&object).unwrap().clone() };
 
                     response = vec![match service_type.as_str() {
                         "position" => {
@@ -757,7 +757,7 @@ impl WorldService {
         }) as Box<dyn Service>
     }
 
-    fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &mut RoomData) -> Option<Value> {
+    fn add_entity(_desired_name: Option<String>, params: &Vec<Value>, room: &RoomData) -> Option<Value> {
 
         if params.len() < 6 {
             return None;
@@ -854,7 +854,7 @@ impl WorldService {
         }        
 
         // Number part of name
-        let name_num =  room.next_object_id.to_string();
+        let name_num =  room.next_object_id.load(Ordering::Relaxed).to_string();
 
         let id = match entity_type.as_str() {
             "robot" => {
@@ -893,7 +893,7 @@ impl WorldService {
 
         if let Some(id) = id {
             // Increment only if successful
-            room.next_object_id += 1;
+            room.next_object_id.fetch_add(1, Ordering::Relaxed);
             return Some(id.into());
         }
         

@@ -52,7 +52,7 @@ pub async fn announce_api() {
         tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         let data = (server.clone(), ServerStatus {
             active_rooms: ROOMS.len(),
-            hibernating_rooms: ROOMS.iter().filter(|r| r.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
+            hibernating_rooms: ROOMS.iter().filter(|r| r.hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
             max_rooms,
             address: get_server(),
         });
@@ -95,7 +95,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
-        if r.lock().unwrap().hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+        if r.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             hibernating_rooms += 1;
         }
     }
@@ -127,18 +127,17 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
 
     let server = get_server().to_owned();
     let room = room.unwrap().clone();
-    let room_data = room.lock().unwrap();
 
-    let visitors = room_data.visitors.clone().into_iter().collect();
+    let visitors = room.visitors.clone().into_iter().collect();
     
     
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
-        id: room_data.name.clone(),
-        environment: room_data.environment.clone(),
+        id: room.name.clone(),
+        environment: room.environment.clone(),
         server,
         creator: "TODO".to_owned(),
-        has_password: room_data.password.is_some(),
-        is_hibernating: room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed),
+        has_password: room.password.is_some(),
+        is_hibernating: room.hibernating.load(std::sync::atomic::Ordering::Relaxed),
         visitors,
     })))
 }
@@ -150,18 +149,17 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
     let user_filter = user_filter.unwrap_or_default();
 
     for r in ROOMS.iter() {
-        let room_data = r.lock().unwrap();
 
         // Skip if user not in visitors
-        if !user_filter.is_empty() && !room_data.visitors.contains(&user_filter) {
+        if !user_filter.is_empty() && !r.visitors.contains(&user_filter) {
             continue;
         }
 
-        if !include_hibernating && room_data.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+        if !include_hibernating && r.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             continue;
         }
 
-        rooms.push(room_data.get_room_info());
+        rooms.push(r.get_room_info());
     }
     rooms
 }
@@ -171,7 +169,7 @@ pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> i
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
     // Send room info to API
-    ROOMS.get(&room_id).unwrap().value().lock().unwrap().announce();
+    ROOMS.get(&room_id).unwrap().value().announce();
 
     Json(CreateRoomResponseData {
         server: get_server(),

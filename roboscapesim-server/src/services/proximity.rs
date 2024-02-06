@@ -100,15 +100,14 @@ impl Service for ProximityService {
         &self.service_info
     }
 
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
 
         let mut response = vec![];
         let mut message_response = None;
 
         let service = self.get_service_info();
-        let simulation = &mut room.sim.lock().unwrap();
         
-        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.config.body) {
+        if let Some(o) = room.sim.rigid_body_set.read().unwrap().get(self.config.body) {
              match msg.function.as_str() {
                 "getIntensity" => {
                     // TODO: apply some more complex function definable through some config setting?

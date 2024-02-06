@@ -114,15 +114,13 @@ impl Service for PositionService {
         &self.service_info
     }
 
-    fn handle_message(&self, room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
         let mut response = vec![];
         
         let msg = msg;
         // TODO: figure out why this is necessary for VM requests to PositionSensor
-            
-        let simulation = &mut room.sim.lock().unwrap();
 
-        if let Some(o) = simulation.rigid_body_set.lock().unwrap().get(self.rigid_body) {
+        if let Some(o) = room.sim.rigid_body_set.read().unwrap().get(self.rigid_body) {
             match msg.function.as_str() {
                 "getX" => {
                         response.push(o.translation().x.into());

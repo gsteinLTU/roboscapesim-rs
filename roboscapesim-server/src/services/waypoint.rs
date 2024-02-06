@@ -75,7 +75,7 @@ impl Service for WaypointService {
         &self.service_info
     }
 
-    fn handle_message(&self, _room: &mut RoomData, msg: &Request) -> HandleMessageResult {
+    fn handle_message(&self, _room: &RoomData, msg: &Request) -> HandleMessageResult {
         let mut response = vec![];
         let message_response = None;
 
