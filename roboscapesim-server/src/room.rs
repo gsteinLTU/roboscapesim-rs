@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering, AtomicI64};
 
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
+use futures::FutureExt;
 use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::real_time::OffsetDateTime;
@@ -86,7 +87,7 @@ pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
 });
 
 impl RoomData {
-    pub fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
+    pub async fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
         let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel();
         let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
@@ -125,7 +126,7 @@ impl RoomData {
 
         // Setup test room
         // Create IoTScape service
-        let service = Arc::new(WorldService::create(obj.name.as_str()));
+        let service = Arc::new(WorldService::create(obj.name.as_str()).await);
         let service_id = service.get_service_info().id.clone();
         obj.services.insert((service_id, ServiceType::World), service);
         
@@ -141,8 +142,9 @@ impl RoomData {
                 } else {
                     for service in services.iter() {
                         // Handle messages
-                        if service.value().update() > 0 {
-                            let rx = &mut service.get_service_info().service.lock().unwrap().rx_queue;
+                        if service.value().get_service_info().update().now_or_never().unwrap_or(0) > 0 {
+                            let service_info = service.value().get_service_info().clone();
+                            let mut rx = service_info.service.rx_queue.lock().unwrap();
                             while !rx.is_empty() {
                                 let msg = rx.pop_front().unwrap();
                                 net_iotscape_tx.send((msg, None)).unwrap();
@@ -295,7 +297,7 @@ impl RoomData {
                         if !hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
-                                if let Err(e) = service.value().get_service_info().service.lock().unwrap().send_event(event_id.to_string().as_str(), &msg_type, values) {
+                                if let Err(e) = service.value().get_service_info().service.send_event(event_id.to_string().as_str(), &msg_type, values).now_or_never().unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send event to NetsBlox server"))) {
                                     error!("Error sending event to NetsBlox server: {:?}", e);
                                 }
                                 event_id += 1;
@@ -512,7 +514,7 @@ impl RoomData {
                             // TODO: find other object name
                             self.services.get(&(name.clone(), ServiceType::Trigger))
                                 .and_then(|s| Some(
-                                    s.value().get_service_info().service.lock().unwrap().send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())]))));
+                                    s.value().get_service_info().service.send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())])).now_or_never()));
                         }
                     } else {
                         if in_sensor.contains(&c2) {
@@ -921,14 +923,14 @@ impl RoomData {
     }
 
     /// Add a service to the room
-    pub(crate) fn add_sensor<'a, T: ServiceFactory>(&self, id: &'a str, config: T::Config) -> &'a str {
-        let service = Arc::new(T::create(id, config));
+    pub(crate) async fn add_sensor<'a, T: ServiceFactory>(&self, id: &'a str, config: T::Config) -> &'a str {
+        let service = Arc::new(T::create(id, config).await);
         self.services.insert((id.into(), service.get_service_info().service_type), service);
         id
     }
 
     /// Specialized add_shape for triggers
-    pub(crate) fn add_trigger(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
+    pub(crate) async fn add_trigger(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
         let body_name = room.name.to_owned() + "_" + name;
         let rigid_body =  RigidBodyBuilder::kinematic_position_based()
             .ccd_enabled(true)
@@ -955,7 +957,7 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
 
-        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle));
+        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle).await);
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         room.sim.sensors.insert((service_id, collider_handle), DashSet::new());
@@ -1090,7 +1092,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
 }
 
 pub async fn create_room(environment: Option<String>, password: Option<String>, edit_mode: bool) -> String {
-    let room = Arc::new(RoomData::new(None, environment, password, edit_mode));
+    let room = Arc::new(RoomData::new(None, environment, password, edit_mode).await);
     
     // Set last interaction to creation time
     room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);

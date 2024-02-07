@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, Request, EventDescription};
 use log::info;
@@ -10,12 +10,12 @@ use crate::room::RoomData;
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
 pub struct TriggerService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
     pub rigid_body: RigidBodyHandle,
 }
 
 impl TriggerService {
-    pub fn create(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service> {
+    pub async fn create(id: &str, rigid_body: &RigidBodyHandle) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -40,19 +40,19 @@ impl TriggerService {
         });
 
         Box::new(TriggerService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::Trigger),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::Trigger).await),
             rigid_body: *rigid_body,
         }) as Box<dyn Service>
     }
 }
 
 impl Service for TriggerService {
-    fn update(&self) -> usize {
-        self.service_info.update()
+    fn update(&self) {
+        
     }
 
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 
     fn handle_message(&self, _room: &RoomData, msg: &Request) -> HandleMessageResult {

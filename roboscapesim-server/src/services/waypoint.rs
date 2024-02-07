@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
@@ -24,14 +24,14 @@ impl Default for WaypointConfig {
 }
 
 pub struct WaypointService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
     pub config: WaypointConfig,
 }
 
 impl ServiceFactory for WaypointService {
     type Config = WaypointConfig;
 
-    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+    async fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -60,19 +60,19 @@ impl ServiceFactory for WaypointService {
             },
         );
         Box::new(WaypointService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::WaypointList),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::WaypointList).await),
             config,
         }) as Box<dyn Service>
     }
 }
 
 impl Service for WaypointService {
-    fn update(&self) -> usize {
-        self.service_info.update()
+    fn update(&self) {
+        
     }
 
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 
     fn handle_message(&self, _room: &RoomData, msg: &Request) -> HandleMessageResult {

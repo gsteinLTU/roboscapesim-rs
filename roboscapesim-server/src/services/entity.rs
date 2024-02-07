@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, f32::consts::PI};
+use std::{collections::BTreeMap, f32::consts::PI, sync::Arc};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, Request};
 use log::{info, trace};
@@ -11,7 +11,7 @@ use crate::{room::RoomData, util::util::num_val};
 use super::{service_struct::{Service, ServiceType, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 pub struct EntityService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
     pub rigid_body: RigidBodyHandle,
     pub is_robot: bool,
 }
@@ -77,19 +77,19 @@ impl Service for EntityService {
         (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
     }
 
-    fn update(&self) -> usize {
-        self.get_service_info().update()
+    fn update(&self) {
+        
     }
 
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 }
 
 impl ServiceFactory for EntityService {
     type Config = (RigidBodyHandle, bool);
 
-    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+    async fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -205,7 +205,7 @@ impl ServiceFactory for EntityService {
         );
     
         Box::new(EntityService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::Entity),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::Entity).await),
             rigid_body: config.0,
             is_robot: config.1,
         }) as Box<dyn Service>

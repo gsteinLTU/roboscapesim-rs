@@ -1,14 +1,11 @@
 use std::{sync::Arc, time::Duration, hash::Hash};
 
 
-#[cfg(feature = "no_deadlocks")]
-use no_deadlocks::Mutex;
-#[cfg(not(feature = "no_deadlocks"))]
-use std::sync::Mutex;
+use futures::{Future, FutureExt};
 
 use atomic_instant::AtomicInstant;
 use derivative::Derivative;
-use iotscape::{IoTScapeService, ServiceDefinition, Request};
+use iotscape::{IoTScapeServiceAsync, ServiceDefinition, Request};
 use log::error;
 use serde_json::Value;
 
@@ -60,20 +57,18 @@ pub struct ServiceInfo {
     pub id: String,
     pub service_type: ServiceType,
     #[derivative(Debug = "ignore")]
-    pub service: Arc<Mutex<IoTScapeService>>,
+    pub service: Arc<IoTScapeServiceAsync>,
     pub last_announce: AtomicInstant,
     pub announce_period: Duration,
 }
 
 impl ServiceInfo {
-    pub fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
+    pub async fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
         let service = Self::setup_service(definition, service_type, None);
 
         service
-            .lock()
-            .unwrap()
             .announce()
-            .expect("Could not announce to server");
+            .await;
 
         Self {
             id: id.to_owned(),
@@ -84,25 +79,25 @@ impl ServiceInfo {
         }
     }
 
-    fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<Mutex<IoTScapeService>> {
+    fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<IoTScapeServiceAsync> {
         let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
         let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
-        let service: Arc<Mutex<IoTScapeService>> = Arc::from(Mutex::new(IoTScapeService::new(
+        let service = Arc::new(IoTScapeServiceAsync::new(
             override_name.unwrap_or(service_type.into()),
             definition,
             (server + ":" + &port).parse().unwrap(),
-        )));
-        service
+        ).now_or_never().unwrap());
+        service.into()
     }
 }
 
 /// Trait for defining a service
 pub trait Service: Sync + Send {
     /// Update the service, return number of messages in queue
-    fn update(&self) -> usize;
+    fn update(&self);
 
     /// Get the service info
-    fn get_service_info(&self) -> &ServiceInfo;
+    fn get_service_info(&self) -> Arc<ServiceInfo>;
 
     /// Handle a message
     fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult;
@@ -114,7 +109,7 @@ pub trait ServiceFactory: Sync + Send {
     type Config;
 
     /// Create a new instance of the service
-    fn create(id: &str, config: Self::Config) -> Box<dyn Service>;
+    async fn create(id: &str, config: Self::Config) -> Box<dyn Service>;
 }
 
 impl Hash for ServiceInfo {
@@ -133,25 +128,26 @@ impl PartialEq for ServiceInfo {
 impl ServiceInfo {
     /// Enqueue a response to a request
     pub fn enqueue_response_to(&self, request: &Request, params: Result<Vec<Value>, String>) {
-        if let Err(e) = self.service.lock().unwrap().enqueue_response_to(request.clone(), params) {
+        if let Err(e) = self.service.enqueue_response_to(request.clone(), params).now_or_never().unwrap_or_else(|| Err(std::io::Error::new(std::io::ErrorKind::Other, "Could not enqueue response".to_string()))) {
             error!("Could not enqueue response: {}", e);
         }
     }
     
     /// Update the service, return number of messages in queue
-    pub fn update(&self) -> usize {
-        let iotscape_service = &mut self.service.lock().unwrap();
-        iotscape_service.poll(Some(Duration::from_micros(1)));
+    pub async fn update(&self) -> usize {
+        self.service.poll().await;
 
         // Re-announce to server regularly
         if self.last_announce.elapsed() > self.announce_period {
-            iotscape_service
+            if let Err(e) = self.service
                 .announce()
-                .expect("Could not announce to server");
+                .await {
+                error!("Could not announce service: {:?}", e);
+            }
             self.last_announce.set_now();
         }
         
-        iotscape_service.rx_queue.len()
+        self.service.rx_queue.lock().unwrap().len()
     }
 }
 

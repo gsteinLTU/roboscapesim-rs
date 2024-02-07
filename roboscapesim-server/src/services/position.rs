@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, f32::consts::PI};
+use std::{collections::BTreeMap, f32::consts::PI, sync::Arc};
 
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, Request};
 use log::info;
@@ -11,14 +11,14 @@ use crate::room::RoomData;
 use super::{service_struct::{ServiceType, Service, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
 pub struct PositionService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
     pub rigid_body: RigidBodyHandle,
 }
 
 impl ServiceFactory for PositionService {
     type Config = RigidBodyHandle;
 
-    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+    async fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -99,19 +99,15 @@ impl ServiceFactory for PositionService {
         );
 
         Box::new(PositionService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::PositionSensor),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::PositionSensor).await),
             rigid_body: config,
         }) as Box<dyn Service>
     }
 }
 
 impl Service for PositionService {
-    fn update(&self) -> usize {
-        self.service_info.update()
-    }
-
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 
     fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
@@ -164,5 +160,9 @@ impl Service for PositionService {
             return (Ok(SimpleValue::from_json(response[0].clone()).unwrap()), None);
         }
         (Ok(SimpleValue::from_json(serde_json::to_value(response).unwrap()).unwrap()), None)
+    }
+
+    fn update(&self) {
+        
     }
 }

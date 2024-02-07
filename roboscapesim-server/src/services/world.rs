@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, f32::consts::PI, sync::atomic::Ordering};
+use std::{collections::BTreeMap, f32::consts::PI, sync::{atomic::Ordering, Arc}};
 
+use futures::executor::block_on;
 use iotscape::{ServiceDefinition, IoTScapeServiceDescription, MethodDescription, MethodReturns, MethodParam, EventDescription, Request};
 use log::{info, trace};
 use nalgebra::{vector, UnitQuaternion, Vector3};
@@ -7,6 +8,7 @@ use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
+use tokio::task::{spawn_blocking, spawn_local};
 
 use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{*, proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
 
@@ -18,18 +20,18 @@ const KINEMATIC_ENTITY_LIMIT: usize = 100;
 const ROBOT_LIMIT: usize = 4;
 
 pub struct WorldService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
 }
 
 const MAX_COORD: f32 = 10000.0;
 
 impl Service for WorldService {
-    fn update(&self) -> usize {
-        self.service_info.update()
+    fn update(&self) {
+        
     }
 
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 
     fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
@@ -251,15 +253,17 @@ impl Service for WorldService {
 
                     let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.rigid_body_labels.get(&object).unwrap().clone() };
 
-                    response = vec![match service_type.as_str() {
+                    response = vec![
+                        block_on(async move { 
+                        match service_type.as_str() {
                         "position" => {
-                            RoomData::add_sensor::<PositionService>(room, &object, body.clone()).into()
+                            RoomData::add_sensor::<PositionService>(room, &object, body.clone()).await.into()
                         },
                         "proximity" => {
-                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).into()
+                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).await.into()
                         },
                         "waypoint" => {
-                            RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).into()
+                            RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).await.into()
                         },
                         "lidar" => {
                             let default = DEFAULT_LIDAR_CONFIGS.get("default").unwrap().clone();
@@ -274,16 +278,16 @@ impl Service for WorldService {
 
                             config.body = body.clone();
 
-                            RoomData::add_sensor::<LIDARService>(room, &object, config).into()
+                            RoomData::add_sensor::<LIDARService>(room, &object, config).await.into()
                         },
                         "entity" => {
-                            RoomData::add_sensor::<EntityService>(room, &object, (body.clone(), is_robot)).into()
+                            RoomData::add_sensor::<EntityService>(room, &object, (body.clone(), is_robot)).await.into()
                         },
                         _ => {
                             info!("Unrecognized service type {}", service_type);
                             false.into()
                         }
-                    }];
+                    }})];
                 }
             },
             "listTextures" => {
@@ -389,7 +393,7 @@ impl Service for WorldService {
 }
 
 impl WorldService {
-    pub fn create(id: &str) -> Box<dyn Service> {
+    pub async fn create(id: &str) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -753,7 +757,7 @@ impl WorldService {
         );
 
         Box::new(WorldService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::World),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::World).await),
         }) as Box<dyn Service>
     }
 
@@ -883,7 +887,7 @@ impl WorldService {
             },
             "trigger" => {
                 let name = "trigger".to_string() + &name_num;
-                Some(RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])))
+                Some(block_on(async { RoomData::add_trigger(room, &name, vector![x, y, z], rotation, Some(vector![size[0], size[1], size[2]])).await }))
             },
             _ => {
                 info!("Unknown entity type requested: {entity_type}");

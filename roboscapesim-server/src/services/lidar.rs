@@ -40,14 +40,14 @@ pub const DEFAULT_LIDAR_CONFIGS: Lazy<BTreeMap<String, LIDARConfig>> = Lazy::new
 });
 
 pub struct LIDARService {
-    pub service_info: ServiceInfo,
+    pub service_info: Arc<ServiceInfo>,
     pub config: LIDARConfig,
 }
 
 impl ServiceFactory for LIDARService {
     type Config = LIDARConfig;
 
-    fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
+    async fn create(id: &str, config: Self::Config) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -77,7 +77,7 @@ impl ServiceFactory for LIDARService {
         );
 
         Box::new(LIDARService {
-            service_info: ServiceInfo::new(id, definition, ServiceType::LIDAR),
+            service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::LIDAR).await),
             config: config,
         }) as Box<dyn Service>
     }
@@ -104,12 +104,12 @@ pub fn calculate_rays(config: &LIDARConfig, orientation: &UnitQuaternion<Real>, 
 }
 
 impl Service for LIDARService {
-    fn update(&self) -> usize {
-        self.service_info.update()
+    fn update(&self) {
+        
     }
 
-    fn get_service_info(&self) -> &ServiceInfo {
-        &self.service_info
+    fn get_service_info(&self) -> Arc<ServiceInfo> {
+        self.service_info.clone()
     }
 
     fn handle_message(&self, room: &RoomData, msg: &Request) -> HandleMessageResult {
