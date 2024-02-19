@@ -98,11 +98,11 @@ async fn update_fn() {
         for kvp in ROOMS.iter() {
             trace!("Updating room {}", kvp.key());
             let m = kvp.value().clone();
-            if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+            if !m.hibernating.load(Ordering::Relaxed) {
                 // Check timeout
                 if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.timeout {
                     m.hibernating.store(true, Ordering::Relaxed);
-                    m.hibernating_since.write().unwrap().replace(get_timestamp());
+                    m.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
 
                     // Kick all users out
                     m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);

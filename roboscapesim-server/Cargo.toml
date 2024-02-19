@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 no_deadlocks = []
 
+[profile.dev.package.parry3d]
 [profile.dev.package.rapier3d]
 opt-level = 3
 

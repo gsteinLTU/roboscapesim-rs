@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use serde_json::Value;
 
 /// Get number value from JSON value, with implicit conversion from other types (from string representation)
@@ -20,7 +22,7 @@ pub(crate) fn bool_val(val: &Value) -> bool {
 /// Get string value from JSON value, with implicit conversion from other types
 pub(crate) fn str_val(val: &Value) -> String {
     match val {
-        Value::Bool(b) => if *b { "true".to_string() } else  { false.to_string() },
+        Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.as_f64().unwrap_or_default().to_string(),
         Value::String(s) => s.clone(),
         Value::Array(a) => if !a.is_empty() { str_val( &a[0]) } else { String::new() },
@@ -33,7 +35,7 @@ pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
     let mut result = String::new();
 
     for i in 0..bytes.len() {
-        result += &format!("{:02x}", bytes[i]);
+        write!(&mut result, "{:02x}", bytes[i]).unwrap();
     }
     
     result

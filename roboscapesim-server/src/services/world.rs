@@ -8,7 +8,6 @@ use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
-use tokio::task::{spawn_blocking, spawn_local};
 
 use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{*, proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
 
@@ -260,7 +259,7 @@ impl Service for WorldService {
                             RoomData::add_sensor::<PositionService>(room, &object, body.clone()).await.into()
                         },
                         "proximity" => {
-                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, ..Default::default() }).await.into()
+                            RoomData::add_sensor::<ProximityService>(room, &object, ProximityConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), multiplier, offset, body: body.clone(), ..Default::default() }).await.into()
                         },
                         "waypoint" => {
                             RoomData::add_sensor::<WaypointService>(room, &object, WaypointConfig { target: targetpos.unwrap_or(vector![0.0, 0.0, 0.0]), ..Default::default() }).await.into()

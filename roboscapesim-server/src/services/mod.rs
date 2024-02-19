@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use std::collections::BTreeMap;
 
 use netsblox_vm::runtime::SimpleValue;

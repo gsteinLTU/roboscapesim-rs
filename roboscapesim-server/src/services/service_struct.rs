@@ -1,10 +1,8 @@
 use std::{sync::Arc, time::Duration, hash::Hash};
 
-
-use futures::{Future, FutureExt};
-
 use atomic_instant::AtomicInstant;
 use derivative::Derivative;
+use futures::FutureExt;
 use iotscape::{IoTScapeServiceAsync, ServiceDefinition, Request};
 use log::error;
 use serde_json::Value;
@@ -66,9 +64,12 @@ impl ServiceInfo {
     pub async fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
         let service = Self::setup_service(definition, service_type, None);
 
-        service
+        if let Err(e) = service
             .announce()
-            .await;
+            .await
+        {
+            error!("Could not announce service: {:?}", e);
+        }
 
         Self {
             id: id.to_owned(),

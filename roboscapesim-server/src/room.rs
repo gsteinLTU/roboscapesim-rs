@@ -57,7 +57,7 @@ pub struct RoomData {
     pub last_update_sent: Arc<RwLock<OffsetDateTime>>,
     pub last_full_update_sent: Arc<AtomicI64>,
     #[derivative(Debug = "ignore")]
-    pub hibernating_since: Arc<RwLock<Option<i64>>>,
+    pub hibernating_since: Arc<AtomicI64>,
     #[derivative(Debug = "ignore")]
     pub roomtime: Arc<RwLock<f64>>,
     pub robots: Arc<DashMap<String, RobotData>>,
@@ -118,7 +118,7 @@ impl RoomData {
             netsblox_msg_rx,
             edit_mode,
             vm_thread: None,
-            hibernating_since: Arc::new(RwLock::new(None)),
+            hibernating_since: Arc::new(AtomicI64::default()),
             next_object_id: Arc::new(AtomicI64::new(0)),
         };
 
@@ -137,13 +137,15 @@ impl RoomData {
         let hibernating_since = obj.hibernating_since.clone();
         spawn(async move {
             loop {
-                if hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
                     sleep(Duration::from_millis(50)).await;
                 } else {
-                    for service in services.iter() {
+                    for service in services.iter().map(|s| s.key().clone()).collect::<Vec<_>>() {
+                        let service = services.get(&service).unwrap().clone();
+                        
                         // Handle messages
-                        if service.value().get_service_info().update().now_or_never().unwrap_or(0) > 0 {
-                            let service_info = service.value().get_service_info().clone();
+                        if service.get_service_info().update().await > 0 {
+                            let service_info = service.get_service_info().clone();
                             let mut rx = service_info.service.rx_queue.lock().unwrap();
                             while !rx.is_empty() {
                                 let msg = rx.pop_front().unwrap();
@@ -251,7 +253,7 @@ impl RoomData {
 
                     // Run program
                     loop {
-                        if hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                        if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
                             sleep(Duration::from_millis(50)).await;
                         } else {
 
@@ -294,7 +296,7 @@ impl RoomData {
             spawn(async move {
                 loop {
                     while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.read().unwrap().clone().unwrap_or(0) < get_timestamp() + 2 {
+                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
                             let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
                             if let Some(service) = service {
                                 if let Err(e) = service.value().get_service_info().service.send_event(event_id.to_string().as_str(), &msg_type, values).now_or_never().unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send event to NetsBlox server"))) {
@@ -571,7 +573,7 @@ impl RoomData {
         // Check if room empty/not empty
         if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
-            self.hibernating_since.write().unwrap().replace(get_timestamp());
+            self.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
             info!("{} is now hibernating", self.name);
             self.announce();
             return;
