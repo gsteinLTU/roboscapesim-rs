@@ -13,6 +13,7 @@ use netsblox_vm::real_time::OffsetDateTime;
 use netsblox_vm::{runtime::{SimpleValue, ErrorCause, CommandStatus, Command, RequestStatus, Config, Key, System}, std_util::Clock, project::{ProjectStep, IdleAction}, real_time::UtcOffset, std_system::StdSystem};
 use once_cell::sync::Lazy;
 use rand::Rng;
+use rapier3d::geometry::ColliderHandle;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
 use tokio::{spawn, time::sleep};
@@ -515,14 +516,13 @@ impl RoomData {
                     }
 
                     // Find if other object has name
-                    let other_body = self.sim.collider_set.read().unwrap().get(c2).unwrap().parent().unwrap_or_default();
-                    let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone());
+                    let other_name = self.get_rigid_body_name_from_collider(c2);
 
 
                     if let Some(other_name) = other_name {
                         trace!("Sensor {:?} ({name}) intersecting {:?} {other_name} = {}", c1, c2, intersecting);
                         if intersecting {
-                            new_in_sensor.insert(c2);
+                            new_in_sensor.insert(other_name);
                         }
                     }
 
@@ -530,25 +530,15 @@ impl RoomData {
 
                 for other in in_sensor.iter() {
                     // Check if object left sensor
-                    if !new_in_sensor.contains(&other) {
-                        let other_body = self.sim.collider_set.read().unwrap().get(*other).unwrap().parent().unwrap_or_default();
-                        let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone()).unwrap();
-
-                        self.services.get(&(name.clone(), ServiceType::Trigger))
-                            .and_then(|s| Some(
-                                s.value().get_service_info().service.send_event("trigger", "triggerExit", BTreeMap::from([("entity".to_owned(), other_name),("trigger".to_owned(), name.clone())])).now_or_never()));
+                    if !new_in_sensor.contains(other.key()) {
+                        self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerExit".into(), BTreeMap::from([("entity".to_owned(), other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
                     }
                 }
 
                 for new_other in new_in_sensor.iter() {
                     // Check if new object
-                    if !in_sensor.contains(&new_other) {
-                        let other_body = self.sim.collider_set.read().unwrap().get(*new_other).unwrap().parent().unwrap_or_default();
-                        let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone()).unwrap();
-
-                        self.services.get(&(name.clone(), ServiceType::Trigger))
-                            .and_then(|s| Some(
-                                s.value().get_service_info().service.send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), other_name),("trigger".to_owned(), name.clone())])).now_or_never()));
+                    if !in_sensor.contains(new_other.key()) {
+                        self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerEnter".into(), BTreeMap::from([("entity".to_owned(), new_other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
                     }
                 }
 
@@ -616,7 +606,14 @@ impl RoomData {
         }
     }
 
-    fn update_robots(&self, delta_time: f64) {
+    /// If the given collider's parent is a named rigid body, return the name of the rigid body
+    pub(crate) fn get_rigid_body_name_from_collider(&self, c: ColliderHandle) -> Option<String> {
+        let other_body = self.sim.collider_set.read().unwrap().get(c).unwrap().parent().unwrap_or_default();
+        let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone());
+        other_name
+    }
+
+    pub(crate) fn update_robots(&self, delta_time: f64) {
         let mut any_robot_updated = false;
 
         for mut robot in self.robots.iter_mut() {
@@ -987,7 +984,7 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
 
-        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle).await);
+        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle, &collider_handle).await);
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         room.sim.sensors.insert((service_id, collider_handle), DashSet::new());
