@@ -505,26 +505,54 @@ impl RoomData {
             // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
             for mut entry in self.sim.sensors.iter_mut() {
                 let ((name, sensor), in_sensor) = entry.pair_mut();
-                for (c1, c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersections_with(*sensor) {
-                    if intersecting {
-                        if in_sensor.contains(&c2) {
-                            // Already in sensor
-                            continue;
-                        } else {
-                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
-                            in_sensor.insert(c2);
-                            // TODO: find other object name
-                            self.services.get(&(name.clone(), ServiceType::Trigger))
-                                .and_then(|s| Some(
-                                    s.value().get_service_info().service.send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), "other".to_string())])).now_or_never()));
-                        }
-                    } else {
-                        if in_sensor.contains(&c2) {
-                            in_sensor.remove(&c2);
-                            trace!("Sensor {:?} intersecting {:?} = {}", c1, c2, intersecting);
+                let new_in_sensor = DashSet::new();
+
+                for (mut c1, mut c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersections_with(*sensor) {
+
+                    // Check which handle is the sensor
+                    if c2 == *sensor {
+                        std::mem::swap(&mut c1, &mut c2);
+                    }
+
+                    // Find if other object has name
+                    let other_body = self.sim.collider_set.read().unwrap().get(c2).unwrap().parent().unwrap_or_default();
+                    let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone());
+
+
+                    if let Some(other_name) = other_name {
+                        trace!("Sensor {:?} ({name}) intersecting {:?} {other_name} = {}", c1, c2, intersecting);
+                        if intersecting {
+                            new_in_sensor.insert(c2);
                         }
                     }
+
                 }
+
+                for other in in_sensor.iter() {
+                    // Check if object left sensor
+                    if !new_in_sensor.contains(&other) {
+                        let other_body = self.sim.collider_set.read().unwrap().get(*other).unwrap().parent().unwrap_or_default();
+                        let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone()).unwrap();
+
+                        self.services.get(&(name.clone(), ServiceType::Trigger))
+                            .and_then(|s| Some(
+                                s.value().get_service_info().service.send_event("trigger", "triggerExit", BTreeMap::from([("entity".to_owned(), other_name),("trigger".to_owned(), name.clone())])).now_or_never()));
+                    }
+                }
+
+                for new_other in new_in_sensor.iter() {
+                    // Check if new object
+                    if !in_sensor.contains(&new_other) {
+                        let other_body = self.sim.collider_set.read().unwrap().get(*new_other).unwrap().parent().unwrap_or_default();
+                        let other_name = self.sim.rigid_body_labels.iter().find(|kvp| kvp.value() == &other_body).map(|kvp| kvp.key().clone()).unwrap();
+
+                        self.services.get(&(name.clone(), ServiceType::Trigger))
+                            .and_then(|s| Some(
+                                s.value().get_service_info().service.send_event("trigger", "triggerEnter", BTreeMap::from([("entity".to_owned(), other_name),("trigger".to_owned(), name.clone())])).now_or_never()));
+                    }
+                }
+
+                *in_sensor = new_in_sensor;
             }
 
             // Update data before send

@@ -147,6 +147,8 @@ impl Game {
                 robotmenu.remove_child(&search_node).unwrap();
             }
         }
+
+        self.state.borrow_mut().remove(&obj);
     }
 
     /// Remove all models from the scene

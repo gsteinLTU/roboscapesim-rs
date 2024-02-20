@@ -32,11 +32,11 @@ impl TriggerService {
         };
 
         definition.events.insert("triggerEnter".into(), EventDescription{
-            params: vec!["object".into()],
+            params: vec!["entity".into(), "trigger".into()],
         });
 
         definition.events.insert("triggerExit".into(), EventDescription{
-            params: vec!["object".into()],
+            params: vec!["entity".into(), "trigger".into()],
         });
 
         Box::new(TriggerService {

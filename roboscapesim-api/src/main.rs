@@ -1,20 +1,15 @@
 use async_once_cell::OnceCell;
-use axum::{extract::Query, response::IntoResponse, Json};
-use axum::{
-    http::{header, Method},
-    routing::{get, post, put},
-    Router,
-};
+use axum::{extract::Query, http::{header, Method}, response::IntoResponse, routing::{get, post, put}, Json, Router};
 use dashmap::DashMap;
 use log::{debug, error, info, trace};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
 };
-
-use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
+
+use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 
 /// Known servers
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
