@@ -376,6 +376,9 @@ impl Service for WorldService {
                     "tree_thin".into(),
                 ];
             },
+            "listUsers" => {
+                response = room.sockets.iter().map(|kvp| Value::from(kvp.key().clone())).collect::<Vec<_>>();
+            },
             f => {
                 info!("Unrecognized function {}", f);
             }
@@ -399,7 +402,7 @@ impl WorldService {
             methods: BTreeMap::new(),
             events: BTreeMap::new(),
             description: IoTScapeServiceDescription {
-                description: Some("Service for managing the RoboScape Online simulation".to_owned()),
+                description: Some("Service for managing a RoboScape Online simulation".to_owned()),
                 externalDocumentation: None,
                 termsOfService: None,
                 contact: Some("gstein@ltu.edu".to_owned()),
@@ -412,7 +415,7 @@ impl WorldService {
         definition.methods.insert(
             "addRobot".to_owned(),
             MethodDescription {
-                documentation: Some("Add a robot to the World".to_owned()),
+                documentation: Some("Add robot to the World".to_owned()),
                 params: vec![
                     MethodParam {
                         name: "x".to_owned(),
@@ -440,7 +443,7 @@ impl WorldService {
                     },
                 ],
                 returns: MethodReturns {
-                    documentation: Some("ID of created entity".to_owned()),
+                    documentation: Some("ID of created Entity".to_owned()),
                     r#type: vec!["string".to_owned()],
                 },
             },
@@ -495,19 +498,19 @@ impl WorldService {
                     },
                     MethodParam {
                         name: "kinematic".to_owned(),
-                        documentation: Some("Should the block be unaffected by physics".to_owned()),
+                        documentation: Some("Should block be unaffected by physics".to_owned()),
                         r#type: "boolean".to_owned(),
                         optional: true,
                     },
                     MethodParam {
                         name: "visualInfo".to_owned(),
-                        documentation: Some("Visual appearance of the object, hex color or texture".to_owned()),
+                        documentation: Some("Block's looks. Color or texture".to_owned()),
                         r#type: "string".to_owned(),
                         optional: true,
                     },
                 ],
                 returns: MethodReturns {
-                    documentation: Some("ID of created entity".to_owned()),
+                    documentation: Some("ID of created block".to_owned()),
                     r#type: vec!["string".to_owned()],
                 },
             },
@@ -516,7 +519,7 @@ impl WorldService {
         definition.methods.insert(
             "addEntity".to_owned(),
             MethodDescription {
-                documentation: Some("Add an entity to the World".to_owned()),
+                documentation: Some("Add Entity to the World".to_owned()),
                 params: vec![
                     MethodParam {
                         name: "type".to_owned(),
@@ -544,13 +547,13 @@ impl WorldService {
                     },
                     MethodParam {
                         name: "rotation".to_owned(),
-                        documentation: Some("Yaw or list of pitch, yaw, roll".to_owned()),
+                        documentation: Some("Yaw, or list of pitch, yaw, roll".to_owned()),
                         r#type: "string".to_owned(),
                         optional: false,
                     },
                     MethodParam {
                         name: "options".to_owned(),
-                        documentation: Some("Two-dimensional list of options, e.g. visualInfo, size, isKinematic".to_owned()),
+                        documentation: Some("2-D list of e.g. visualInfo, size, isKinematic".to_owned()),
                         r#type: "string".to_owned(),
                         optional: true,
                     },
@@ -603,13 +606,13 @@ impl WorldService {
                 params: vec![
                     MethodParam {
                         name: "entities".to_owned(),
-                        documentation: Some("List of entity data to instantiate".to_owned()),
+                        documentation: Some("List of Entity data to add".to_owned()),
                         r#type: "Array".to_owned(),
                         optional: false,
                     },
                 ],
                 returns: MethodReturns {
-                    documentation: Some("ID of created entities".to_owned()),
+                    documentation: Some("Created Entities' IDs".to_owned()),
                     r#type: vec!["string".to_owned(), "string".to_owned()],
                 },
             },
@@ -622,7 +625,7 @@ impl WorldService {
                 documentation: Some("List Entities in this World".to_owned()),
                 params: vec![],
                 returns: MethodReturns {
-                    documentation: Some("IDs of Entities in World".to_owned()),
+                    documentation: Some("Info of Entities in World".to_owned()),
                     r#type: vec!["string".to_owned(), "string".to_owned()],
                 },
             },
@@ -633,11 +636,11 @@ impl WorldService {
         definition.methods.insert(
             "removeEntity".to_owned(),
             MethodDescription {
-                documentation: Some("Remove an entity from the world".to_owned()),
+                documentation: Some("Remove an Entity from the world".to_owned()),
                 params: vec![
                     MethodParam {
                         name: "entity".to_owned(),
-                        documentation: Some("ID of entity to remove".to_owned()),
+                        documentation: Some("ID of Entity to remove".to_owned()),
                         r#type: "string".to_owned(),
                         optional: false,
                     },
@@ -652,7 +655,7 @@ impl WorldService {
         definition.methods.insert(
             "removeAllEntities".to_owned(),
             MethodDescription {
-                documentation: Some("Remove all entities from the world".to_owned()),
+                documentation: Some("Remove all Entities from the world".to_owned()),
                 params: vec![],
                 returns: MethodReturns {
                     documentation: None,
@@ -676,7 +679,7 @@ impl WorldService {
         definition.methods.insert(
             "clearText".to_owned(),
             MethodDescription {
-                documentation: Some("Clear text messages on the client display".to_owned()),
+                documentation: Some("Clear messages on 3d view".to_owned()),
                 params: vec![],
                 returns: MethodReturns {
                     documentation: None,
@@ -688,7 +691,7 @@ impl WorldService {
         definition.methods.insert(
             "showText".to_owned(),
             MethodDescription {
-                documentation: Some("Show a text message on the client displays".to_owned()),
+                documentation: Some("Show a message on 3d view".to_owned()),
                 params: vec![
                     MethodParam {
                         name: "textbox_id".to_owned(),
@@ -698,13 +701,13 @@ impl WorldService {
                     },
                     MethodParam {
                         name: "text".to_owned(),
-                        documentation: Some("Text to display".to_owned()),
+                        documentation: Some("Message text".to_owned()),
                         r#type: "string".to_owned(),
                         optional: false,
                     },
                     MethodParam {
                         name: "timeout".to_owned(),
-                        documentation: Some("Time (in s) to keep message around for".to_owned()),
+                        documentation: Some("Time (in s) to show message for".to_owned()),
                         r#type: "number".to_owned(),
                         optional: true,
                     },
@@ -732,6 +735,18 @@ impl WorldService {
             "listMeshes".to_owned(),
             MethodDescription {
                 documentation: Some("List available meshes".to_owned()),
+                params: vec![],
+                returns: MethodReturns {
+                    documentation: None,
+                    r#type: vec!["string".to_owned(), "string".to_owned()],
+                },
+            },
+        );
+
+        definition.methods.insert(
+            "listUsers".to_owned(),
+            MethodDescription {
+                documentation: Some("List users in room".to_owned()),
                 params: vec![],
                 returns: MethodReturns {
                     documentation: None,

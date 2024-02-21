@@ -125,10 +125,10 @@ impl RoomData {
 
         info!("Creating Room {}", obj.name);
 
-        // Setup test room
         // Create IoTScape service
         let service = Arc::new(WorldService::create(obj.name.as_str()).await);
         let service_id = service.get_service_info().id.clone();
+        service.get_service_info().service.announce().await.unwrap();
         obj.services.insert((service_id, ServiceType::World), service);
         
         // Create IoTScape network I/O Task
@@ -187,7 +187,14 @@ impl RoomData {
                                     match args.iter().map(|(_k, v)| Ok(v.to_simple()?.into_json()?)).collect::<Result<Vec<_>,ErrorCause<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
-                                                "RoboScapeWorld" | "RoboScapeEntity" | "PositionSensor" | "LIDARSensor" => {
+                                                "RoboScapeWorld" |
+                                                "RoboScapeEntity" |
+                                                "PositionSensor" |
+                                                "LIDARSensor" |
+                                                "ProximitySensor" |
+                                                "RoboScapeTrigger" |
+                                                "WaypointList" 
+                                                 => {
                                                     // Keep IoTScape services local
                                                     //println!("{:?}", (service, rpc, &args));
                                                     vm_iotscape_tx.send((iotscape::Request { client_id: None, id: "".into(), service: service.to_owned().into(), device: args[0].to_string().replace("\"", "").replace("\\", ""), function: rpc.to_owned().into(), params: args.iter().skip(1).map(|v| v.to_owned()).collect() }, Some(key))).unwrap();
