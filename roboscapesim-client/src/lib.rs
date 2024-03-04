@@ -404,11 +404,11 @@ pub async fn join_sim_menu() {
 
 pub async fn new_room(environment: Option<String>, password: Option<String>, edit_mode: bool) {
     set_title("Connecting...");
-    let response = request_room(get_username(), password, edit_mode, environment).await;
+    let response = request_room(get_username(), password.clone(), edit_mode, environment).await;
 
     if let Ok(response) = response {
         connect(&response.server).await;
-        send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), None));
+        send_message(&ClientMessage::JoinRoom(response.room_id, get_username(), password.clone()));
         GAME.with(|game| {
             game.borrow().in_room.replace(true);
         });
@@ -427,7 +427,7 @@ pub async fn join_room(id: String, password: Option<String>) {
 
     if let Ok(response) = response {
         connect(&response.server).await;
-        send_message(&ClientMessage::JoinRoom(id, get_username(), password));
+        send_message(&ClientMessage::JoinRoom(id, get_username(), password.clone()));
         GAME.with(|game| {
             game.borrow().in_room.replace(true);
         });

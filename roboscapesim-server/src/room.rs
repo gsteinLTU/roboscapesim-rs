@@ -1089,6 +1089,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     
     // Check password
     if room.password.clone().is_some_and(|pass| pass != password) {
+        error!("User {} attempted to join room {} with wrong password", username, room_id);
         return Err("Wrong password!".to_owned());
     }
     
