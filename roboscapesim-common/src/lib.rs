@@ -237,8 +237,14 @@ pub enum UpdateMessage {
     #[serde(rename="rc")]
     RobotClaimed(String, String),
     /// Error in VM
-    #[serde(rename="e")]
+    #[serde(rename="ve")]
     VMError(String, usize),
+    /// Generic error
+    #[serde(rename="e")]
+    NonFatalError(String),
+    /// Generic error that kills simulation
+    #[serde(rename="fe")]
+    FatalError(String),
 }
 
 /// Struct containing possible message types sent to the server
@@ -264,5 +270,5 @@ pub enum ClientMessage {
     EncryptRobot(String),
     /// Joining Room (room id, username, password)
     #[serde(rename="j")]
-    JoinRoom(String, String, Option<String>)
+    JoinRoom(String, String, Option<String>),
 }

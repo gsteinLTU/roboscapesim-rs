@@ -202,9 +202,22 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
             update_claim_text();
             update_robot_buttons_visibility();
         },
+        Ok(UpdateMessage::VMError(msg, line)) => {
+            console_log!("VM Error: {} at line {}", msg, line);
+            show_message("VM Error", &format!("{} at position {}", msg, line));
+        },
+        Ok(UpdateMessage::NonFatalError(msg)) => {
+            console_log!("Error: {}", msg);
+            show_message("Error", &msg);
+        },
+        Ok(UpdateMessage::FatalError(msg)) => {
+            console_log!("Fatal Error: {}", msg);
+            show_message("Error", &msg);
+            hide_3d_view();
+        },
         Ok(update) => {
             console_log!("Unhandled update: {:?}", update);
-        }
+        },
         Err(e) => console_log!("Failed to deserialize: {}", e),
     }
 }
@@ -530,6 +543,10 @@ pub async fn connect(server: &String) {
 #[wasm_bindgen]
 pub fn show_3d_view() {
     show_dialog("roboscapedialog");
+}
+
+pub fn hide_3d_view() {
+    hide_dialog("roboscapedialog");
 }
 
 #[netsblox_extension_menu_item("Reset Camera")]

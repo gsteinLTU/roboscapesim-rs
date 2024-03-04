@@ -110,6 +110,9 @@ pub async fn ws_rx() {
                             ClientMessage::JoinRoom(id, username, password) => {
                                 if let Err(e) = join_room(&username, &(password.unwrap_or_default()), client.key().to_owned(), &id){
                                     error!("Error joining room: {:?}", e);
+
+                                    // Send error message
+                                    client.tx.send(UpdateMessage::FatalError(e.to_string())).unwrap();
                                 }   
                             },
                             _ => {
