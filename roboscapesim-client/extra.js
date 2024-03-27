@@ -33,6 +33,7 @@
             contentElement.style['justify-content'] = 'flex-end';
             contentElement.appendChild(canvas);
             setupDialog(element);
+            element.onfocus = function() { world.keyboardHandler.focus(); };
             
             window.externalVariables['roboscapedialog'] = element;
 

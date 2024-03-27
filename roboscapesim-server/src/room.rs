@@ -42,6 +42,8 @@ const COLLECT_PERIOD: Duration = Duration::from_secs(60);
 #[derivative(Debug)]
 /// Holds the data for a single room
 pub struct RoomData {
+    #[derivative(Debug = "ignore")]
+    pub is_alive: Arc<AtomicBool>,
     pub objects: DashMap<String, ObjectData>,
     pub name: String,
     pub environment: String,
@@ -97,6 +99,7 @@ impl RoomData {
         let iotscape_netsblox_msg_rx = netsblox_msg_rx.clone();
 
         let mut obj = RoomData {
+            is_alive: Arc::new(AtomicBool::new(true)),
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
             environment: environment.clone().unwrap_or("Default".to_owned()),
@@ -183,7 +186,7 @@ impl RoomData {
                     let system = Rc::new(StdSystem::new_async(DEFAULT_BASE_URL.to_owned().into(), Some(&project_name), Config {
                         request: Some(Rc::new(move |_mc, key, request: netsblox_vm::runtime::Request<'_, C, StdSystem<C>>,  _proc| {
                             match &request {
-                                netsblox_vm::runtime::Request::Rpc { service, rpc, args } => {
+                                netsblox_vm::runtime::Request::Rpc { host: _, service, rpc, args } => {
                                     match args.iter().map(|(_k, v)| Ok(v.to_simple()?.into_json()?)).collect::<Result<Vec<_>,ErrorCause<_,_>>>() {
                                         Ok(args) => {
                                             match service.as_str() {
@@ -1075,6 +1078,12 @@ impl RoomData {
                 error!("Error sending room info to API: {e:?}");
             }
         });
+    }
+}
+
+impl Drop for RoomData {
+    fn drop(&mut self) {
+        self.is_alive.store(false, Ordering::Relaxed);
     }
 }
 

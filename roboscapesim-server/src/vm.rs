@@ -1,6 +1,6 @@
 use std::{fmt, rc::Rc};
 use std::time::Duration;
-use netsblox_vm::runtime::{GetType, SimpleValue, ProcessKind};
+use netsblox_vm::runtime::{GetType, ProcessKind, SimpleValue, Unwindable};
 use netsblox_vm::{ast, runtime::{CustomTypes, Value, EntityKind, FromAstError, Settings}, gc::{Mutation, Collect, RefLock, Gc, Arena, Rootable}, project::Project, bytecode::{Locations, ByteCode}, std_system::StdSystem};
 
 pub const DEFAULT_BASE_URL: &str = "https://cloud.netsblox.org";
@@ -14,13 +14,19 @@ pub struct Env<'gc, C: CustomTypes<StdSystem<C>>> {
                                pub proj: Gc<'gc, RefLock<Project<'gc, C, StdSystem<C>>>>,
     #[collect(require_static)] pub locs: Locations,
 }
-pub type EnvArena<S> = Arena<Rootable![Env<'_, S>]>;
+pub type EnvArena<S> = Arena<Rootable!['gc => Env<'gc, S>]>;
 
 pub struct ProcessState;
 impl From<ProcessKind<'_, '_, C, StdSystem<C>>> for ProcessState {
     fn from(_: ProcessKind<'_, '_, C, StdSystem<C>>) -> Self {
         ProcessState
     }
+}
+
+impl Unwindable for ProcessState {
+    type UnwindPoint = (); // a type to represent process (script) state unwind points - we don't have any process state, so just use a unit struct
+    fn get_unwind_point(&self) -> Self::UnwindPoint { }
+    fn unwind_to(&mut self, _: &Self::UnwindPoint) { }
 }
 
 pub fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: Rc<StdSystem<C>>) -> Result<EnvArena<C>, FromAstError> {
