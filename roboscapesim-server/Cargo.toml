@@ -20,7 +20,7 @@ lto = "fat"
 
 [dependencies]
 roboscapesim-common = { path = "../roboscapesim-common" }
-rapier3d = { version = "0.17", features = ["serde-serialize", "simd-stable"] }
+rapier3d = { version = "0.18", features = ["serde-serialize", "simd-stable"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0" }
 serde_json = "1.0"
