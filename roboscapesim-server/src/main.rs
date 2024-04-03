@@ -86,41 +86,41 @@ async fn update_fn() {
     interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
 
-    let updating = Arc::new(DashSet::new());
+    // let updating = Arc::new(DashSet::new());
     
     loop {
         interval.tick().await;
 
-        let update_time = get_timestamp();
+        // let update_time = get_timestamp();
         SHARED_CLOCK.update();
         
         // Perform updates
-        for kvp in ROOMS.iter() {
-            trace!("Updating room {}", kvp.key());
-            let m = kvp.value().clone();
-            if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
-                // Check timeout
-                if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.timeout {
-                    m.hibernating.store(true, Ordering::Relaxed);
-                    m.hibernating_since.write().unwrap().replace(get_timestamp());
+        // for kvp in ROOMS.iter() {
+        //     trace!("Updating room {}", kvp.key());
+        //     let m = kvp.value().clone();
+        //     if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+        //         // Check timeout
+        //         if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.timeout {
+        //             m.hibernating.store(true, Ordering::Relaxed);
+        //             m.hibernating_since.write().unwrap().replace(get_timestamp());
 
-                    // Kick all users out
-                    m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
-                    m.sockets.clear();
-                    info!("{} is now hibernating", kvp.key());
-                }
-            }
+        //             // Kick all users out
+        //             m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
+        //             m.sockets.clear();
+        //             info!("{} is now hibernating", kvp.key());
+        //         }
+        //     }
 
-            let updating = updating.clone();
-            task::spawn(async move {
-                if updating.contains(&m.name) {
-                    return;
-                }
+        //     let updating = updating.clone();
+        //     task::spawn(async move {
+        //         if updating.contains(&m.name) {
+        //             return;
+        //         }
 
-                updating.insert(m.name.clone());
-                m.update();
-                updating.remove(&m.name);
-            });
-        }
+        //         updating.insert(m.name.clone());
+        //         m.update();
+        //         updating.remove(&m.name);
+        //     });
+        // }
     }
 }

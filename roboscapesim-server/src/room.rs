@@ -14,6 +14,7 @@ use once_cell::sync::Lazy;
 use rand::Rng;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
+use tokio::time;
 use tokio::{spawn, time::sleep};
 use std::sync::{Arc, mpsc};
 
@@ -1039,6 +1040,36 @@ impl RoomData {
             }
         });
     }
+
+    pub fn launch(room: Arc<RoomData>) {
+        let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
+    
+        interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+
+        let m = room.clone();
+        tokio::task::spawn(async move {
+            loop {
+                interval.tick().await;
+        
+                let update_time = get_timestamp();
+
+                trace!("Updating room {}", &m.name);
+                if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+                    // Check timeout
+                    if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.timeout {
+                        m.hibernating.store(true, Ordering::Relaxed);
+                        m.hibernating_since.write().unwrap().replace(get_timestamp());
+
+                        // Kick all users out
+                        m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
+                        m.sockets.clear();
+                        info!("{} is now hibernating", &m.name);
+                    }
+                }
+                m.update();
+            }
+        });
+    }
 }
 
 pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
@@ -1096,5 +1127,6 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
 
     let room_id = room.name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
+    RoomData::launch(room.clone());
     room_id
 }
