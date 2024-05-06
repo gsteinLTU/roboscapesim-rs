@@ -128,9 +128,9 @@ impl RobotData {
                 point![hw * 0.5, -hh + 0.015 * scale, -hd - wheel_half_width * scale],
             ];
 
-            let ball_wheel_radius: f32 = 0.015 * scale;
+            let ball_wheel_radius: f32 = 0.025 * scale;
             let ball_wheel_positions = [
-                point![-hw * 0.75, -hh, 0.0]
+                point![-hw * 0.75, -hh + 0.0045 * scale, 0.0]
             ];
 
             let mut wheel_bodies: Vec<RigidBodyHandle> = Vec::with_capacity(2);
@@ -180,9 +180,10 @@ impl RobotData {
                             wheel_pos_in_world.x,
                             wheel_pos_in_world.y,
                             wheel_pos_in_world.z
-                        ]).soft_ccd_prediction(1.0)
+                        ]).ccd_enabled(true)
                         .can_sleep(false).angular_damping(15.0).linear_damping(5.0)
                         .enabled_translations(false, false, false)
+                        .enabled_rotations(true, true, true)
                 );
 
                 let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.25);
