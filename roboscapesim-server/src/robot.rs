@@ -113,7 +113,7 @@ impl RobotData {
                 .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
                 .angular_damping(5.0)
                 .linear_damping(5.0)
-                .ccd_enabled(true)
+                .soft_ccd_prediction(1.0)
                 .can_sleep(false);
             
             let bodies = &mut sim.rigid_body_set.write().unwrap();
@@ -147,7 +147,7 @@ impl RobotData {
                             wheel_pos_in_world.x,
                             wheel_pos_in_world.y,
                             wheel_pos_in_world.z
-                        ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
+                        ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).soft_ccd_prediction(1.0).can_sleep(false)
                         .angular_damping(500.0).linear_damping(50.0)
                         .enabled_rotations(false, false, true)
                         .enabled_translations(false, false, false)
@@ -180,7 +180,7 @@ impl RobotData {
                             wheel_pos_in_world.x,
                             wheel_pos_in_world.y,
                             wheel_pos_in_world.z
-                        ]).ccd_enabled(true)
+                        ]).soft_ccd_prediction(1.0)
                         .can_sleep(false).angular_damping(15.0).linear_damping(5.0)
                         .enabled_translations(false, false, false)
                 );

@@ -41,7 +41,12 @@ impl Simulation {
             rigid_body_set: Arc::new(RwLock::new(RigidBodySet::new())),
             collider_set: Arc::new(RwLock::new(ColliderSet::new())),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
-            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { num_additional_friction_iterations: 4, num_solver_iterations: NonZeroUsize::new(2).unwrap(), num_internal_pgs_iterations: 10, ..Default::default() })),
+            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { 
+                num_additional_friction_iterations: 4, 
+                num_solver_iterations: NonZeroUsize::new(2).unwrap(), 
+                num_internal_pgs_iterations: 10, 
+                warmstart_coefficient: 1.0,
+                ..Default::default() })),
             physics_pipeline: Arc::new(Mutex::new(PhysicsPipeline::new())),
             island_manager: Arc::new(Mutex::new(IslandManager::new())),
             broad_phase: Arc::new(RwLock::new(DefaultBroadPhase::new())),
