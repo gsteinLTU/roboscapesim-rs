@@ -30,7 +30,7 @@ tower-http = { version = "0.5.0", features = ["cors"] }
 dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
 once_cell = { version = "1.18", features = ["parking_lot"] }
 nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
-simple_logger = "4.2"
+simple_logger = "5.0"
 log = "0.4"
 derivative = "2.2"
 iotscape = { version = "0.5.1", features = ["tokio"]}

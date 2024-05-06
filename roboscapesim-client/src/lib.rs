@@ -215,6 +215,7 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
             show_message("Error", &msg);
             hide_3d_view();
         },
+        #[allow(unreachable_patterns)]
         Ok(update) => {
             console_log!("Unhandled update: {:?}", update);
         },

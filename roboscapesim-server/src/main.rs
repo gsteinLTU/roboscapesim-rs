@@ -1,10 +1,8 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use dashmap::DashMap;
-use dashmap::DashSet;
 use log::info;
-use log::trace;
 use once_cell::sync::Lazy;
 use room::RoomData;
 use room::SHARED_CLOCK;
@@ -14,7 +12,6 @@ use tokio::{
     task,
     time::{self, Duration},
 };
-
 use util::util::get_timestamp;
 
 use crate::api::EXTERNAL_IP;
@@ -82,45 +79,27 @@ pub const UPDATE_FPS: f64 = 60.0;
 
 async fn update_fn() {
     let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
-
     interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
-
-
-    let updating = Arc::new(DashSet::new());
     
     loop {
         interval.tick().await;
-
-        let update_time = get_timestamp();
         SHARED_CLOCK.update();
-        
-        // Perform updates
+
+        // Check for dead rooms
+        let mut dead_rooms = vec![];
+        let timestamp = get_timestamp();
         for kvp in ROOMS.iter() {
-            trace!("Updating room {}", kvp.key());
-            let m = kvp.value().clone();
-            if !m.hibernating.load(Ordering::Relaxed) {
-                // Check timeout
-                if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.timeout {
-                    m.hibernating.store(true, Ordering::Relaxed);
-                    m.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
+            let room = kvp.value();
 
-                    // Kick all users out
-                    m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
-                    m.sockets.clear();
-                    info!("{} is now hibernating", kvp.key());
-                }
+            if timestamp - room.last_interaction_time.load(Ordering::Relaxed) > room.full_timeout {
+                dead_rooms.push(kvp.key().clone());
+                room.is_alive.store(false, Ordering::Relaxed);
             }
+        }
 
-            let updating = updating.clone();
-            task::spawn(async move {
-                if updating.contains(&m.name) {
-                    return;
-                }
-
-                updating.insert(m.name.clone());
-                m.update();
-                updating.remove(&m.name);
-            });
+        for room in dead_rooms {
+            info!("Room {} has timed out and will be removed", room);
+            ROOMS.remove(&room);
         }
     }
 }

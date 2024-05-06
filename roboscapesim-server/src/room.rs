@@ -16,6 +16,7 @@ use rand::Rng;
 use rapier3d::geometry::ColliderHandle;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
 use roboscapesim_common::{*, api::RoomInfo};
+use tokio::time;
 use tokio::{spawn, time::sleep};
 use std::sync::{Arc, mpsc};
 
@@ -48,7 +49,8 @@ pub struct RoomData {
     pub name: String,
     pub environment: String,
     pub password: Option<String>,
-    pub timeout: i64,
+    pub hibernate_timeout: i64,
+    pub full_timeout: i64,
     pub last_interaction_time: Arc<AtomicI64>,
     pub hibernating: Arc<AtomicBool>,
     pub sockets: DashMap<String, DashSet<u128>>,
@@ -104,7 +106,8 @@ impl RoomData {
             name: name.unwrap_or(Self::generate_room_id(None)),
             environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
-            timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
+            hibernate_timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
+            full_timeout:  26 * 60 * 60,
             last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
@@ -139,8 +142,13 @@ impl RoomData {
         let services = obj.services.clone();
         let hibernating = obj.hibernating.clone();
         let hibernating_since = obj.hibernating_since.clone();
+        let is_alive = obj.is_alive.clone();
         spawn(async move {
             loop {
+                if !is_alive.load(Ordering::Relaxed) {
+                    break;
+                }
+
                 if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
                     sleep(Duration::from_millis(50)).await;
                 } else {
@@ -171,6 +179,8 @@ impl RoomData {
             let id_clone = obj.name.clone();
             let id_clone2 = obj.name.clone();
             let robots = obj.robots.clone();
+            let is_alive = obj.is_alive.clone();
+
             obj.vm_thread = Some(thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -264,6 +274,10 @@ impl RoomData {
 
                     // Run program
                     loop {
+                        if !is_alive.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        
                         if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
                             sleep(Duration::from_millis(50)).await;
                         } else {
@@ -629,9 +643,7 @@ impl RoomData {
         for mut robot in self.robots.iter_mut() {
             let (updated, msg) = RobotData::robot_update(robot.value_mut(), self.sim.clone(), &self.sockets, delta_time);
     
-            if updated {
-                any_robot_updated = true;
-            }
+            any_robot_updated |= updated;
 
             // Check if claimed by user not in room
             if let Some(claimant) = &robot.value().claimed_by {
@@ -1079,6 +1091,40 @@ impl RoomData {
             }
         });
     }
+
+    pub fn launch(room: Arc<RoomData>) {
+        let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
+    
+        interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+
+        let m = room.clone();
+        tokio::task::spawn(async move {
+            loop {
+                interval.tick().await;
+
+                if !m.is_alive.load(Ordering::Relaxed) {
+                    break;
+                }
+        
+                let update_time = get_timestamp();
+
+                trace!("Updating room {}", &m.name);
+                if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+                    // Check timeout
+                    if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.hibernate_timeout {
+                        m.hibernating.store(true, Ordering::Relaxed);
+                        m.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
+
+                        // Kick all users out
+                        m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
+                        m.sockets.clear();
+                        info!("{} is now hibernating", &m.name);
+                    }
+                }
+                m.update();
+            }
+        });
+    }
 }
 
 impl Drop for RoomData {
@@ -1143,5 +1189,7 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
 
     let room_id = room.name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
+    RoomData::launch(room.clone());
+    
     room_id
 }

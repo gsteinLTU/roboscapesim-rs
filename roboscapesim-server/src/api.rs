@@ -18,7 +18,9 @@ pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
 );
 
 /// Shared reqwest client for making HTTP requests
-pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| reqwest::Client::new());
+pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| 
+    reqwest::ClientBuilder::new().timeout(std::time::Duration::from_secs(3)).build().unwrap()
+);
 
 /// Announce server to main API server
 pub async fn announce_api() {
