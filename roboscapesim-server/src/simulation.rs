@@ -33,14 +33,13 @@ pub struct Simulation {
 
 pub const SCALE: f32 = 3.0;
 
-
 impl Simulation {
     /// Instantiate the simulation objects with default settings
     pub fn new() -> Simulation {
         Simulation {
             rigid_body_set: Arc::new(RwLock::new(RigidBodySet::new())),
             collider_set: Arc::new(RwLock::new(ColliderSet::new())),
-            gravity: vector![0.0, -9.81 * 3.0, 0.0],
+            gravity: vector![0.0, -9.81 * SCALE, 0.0],
             integration_parameters: Arc::new(RwLock::new(IntegrationParameters { max_ccd_substeps: 2, max_stabilization_iterations: 6, max_velocity_friction_iterations: 10, max_velocity_iterations: 14, allowed_linear_error: 0.002, prediction_distance: 0.0015, min_island_size: 64, ..Default::default() })),
             physics_pipeline: Arc::new(Mutex::new(PhysicsPipeline::new())),
             island_manager: Arc::new(Mutex::new(IslandManager::new())),
