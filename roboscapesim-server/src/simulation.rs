@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 #[cfg(feature = "no_deadlocks")]
 use no_deadlocks::{Mutex, RwLock};
@@ -19,7 +19,7 @@ pub struct Simulation {
     pub integration_parameters: Arc<RwLock<IntegrationParameters>>,
     pub physics_pipeline: Arc<Mutex<PhysicsPipeline>>,
     pub island_manager: Arc<Mutex<IslandManager>>,
-    pub broad_phase: Arc<Mutex<BroadPhase>>,
+    pub broad_phase: Arc<RwLock<DefaultBroadPhase>>,
     pub narrow_phase: Arc<Mutex<NarrowPhase>>,
     pub impulse_joint_set: Arc<RwLock<ImpulseJointSet>>,
     pub multibody_joint_set: Arc<RwLock<MultibodyJointSet>>,
@@ -41,10 +41,10 @@ impl Simulation {
             rigid_body_set: Arc::new(RwLock::new(RigidBodySet::new())),
             collider_set: Arc::new(RwLock::new(ColliderSet::new())),
             gravity: vector![0.0, -9.81 * 3.0, 0.0],
-            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { max_ccd_substeps: 2, max_stabilization_iterations: 6, max_velocity_friction_iterations: 10, max_velocity_iterations: 14, allowed_linear_error: 0.002, prediction_distance: 0.0015, min_island_size: 64, ..Default::default() })),
+            integration_parameters: Arc::new(RwLock::new(IntegrationParameters { num_additional_friction_iterations: 4, num_solver_iterations: NonZeroUsize::new(2).unwrap(), num_internal_pgs_iterations: 10, ..Default::default() })),
             physics_pipeline: Arc::new(Mutex::new(PhysicsPipeline::new())),
             island_manager: Arc::new(Mutex::new(IslandManager::new())),
-            broad_phase: Arc::new(Mutex::new(BroadPhase::new())),
+            broad_phase: Arc::new(RwLock::new(DefaultBroadPhase::new())),
             narrow_phase: Arc::new(Mutex::new(NarrowPhase::new())),
             impulse_joint_set: Arc::new(RwLock::new(ImpulseJointSet::new())),
             multibody_joint_set: Arc::new(RwLock::new(MultibodyJointSet::new())),
@@ -61,13 +61,15 @@ impl Simulation {
     pub fn update(&self, delta_time: f64) {
         // Update dt
         self.integration_parameters.write().unwrap().dt = delta_time as f32;
-        
+
+        let broad_phase = &mut *self.broad_phase.write().unwrap();
+
         // Run physics
         self.physics_pipeline.lock().unwrap().step(
             &self.gravity,
             &self.integration_parameters.read().unwrap(),
             &mut self.island_manager.lock().unwrap(),
-            &mut self.broad_phase.lock().unwrap(),
+            broad_phase,
             &mut self.narrow_phase.lock().unwrap(),
             &mut self.rigid_body_set.write().unwrap(),
             &mut self.collider_set.write().unwrap(),

@@ -532,7 +532,7 @@ impl RoomData {
                 let ((name, sensor), in_sensor) = entry.pair_mut();
                 let new_in_sensor = DashSet::new();
 
-                for (mut c1, mut c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersections_with(*sensor) {
+                for (mut c1, mut c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersection_pairs_with(*sensor) {
 
                     // Check which handle is the sensor
                     if c2 == *sensor {

@@ -432,18 +432,18 @@ impl RobotData {
         let mut new_whisker_states = [false, false];
 
         // Check whiskers
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_l) {
+        for (c1, c2, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_l) {
             // Ignore non-intersections 
-            if !c.2 {
+            if !intersecting {
                 continue;
             } 
 
             new_whisker_states[0] = true;
         }
         
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_r) {
+        for (c1, c2, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_r) {
             // Ignore non-intersections 
-            if !c.2 {
+            if !intersecting {
                 continue;
             } 
 
