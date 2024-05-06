@@ -16,6 +16,6 @@ reqwest = { version = "0.12.2", features = ["json"] }
 roboscapesim-common = { path = "../roboscapesim-common" }
 serde = "1.0.193"
 serde_json = "1.0.108"
-simple_logger = "4.2.0"
+simple_logger = "5.0"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5.0", features = ["cors"] }
