@@ -106,14 +106,14 @@ impl RobotData {
             let hh: f32 = 0.03 * scale;
             let hd: f32 = 0.03 * scale;
 
-            let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
+            let box_center: Point3<f32> = Point3::new(0.0, 1.0 * scale + hh * 2.0, 0.0);
             let box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
 
             let rigid_body = RigidBodyBuilder::dynamic()
                 .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
-                .angular_damping(5.0)
-                .linear_damping(5.0)
-                .soft_ccd_prediction(1.0)
+                .angular_damping(15.0)
+                .linear_damping(15.0)
+                .soft_ccd_prediction(0.25)
                 .can_sleep(false);
             
             let bodies = &mut sim.rigid_body_set.write().unwrap();
@@ -122,13 +122,13 @@ impl RobotData {
             let collider = ColliderBuilder::cuboid(hw, hh, hd).density(25.0);
             sim.collider_set.write().unwrap().insert_with_parent(collider, vehicle_handle, bodies);
 
-            let wheel_half_width = 0.01;
+            let wheel_half_width = 0.01 * scale;
             let wheel_positions = [
-                point![hw * 0.5, -hh + 0.015 * scale, hd + wheel_half_width * scale],
-                point![hw * 0.5, -hh + 0.015 * scale, -hd - wheel_half_width * scale],
+                point![hw * 0.5, -hh + 0.015 * scale, hd + wheel_half_width],
+                point![hw * 0.5, -hh + 0.015 * scale, -hd - wheel_half_width],
             ];
 
-            let ball_wheel_radius: f32 = 0.025 * scale;
+            let ball_wheel_radius: f32 = 0.0225 * scale;
             let ball_wheel_positions = [
                 point![-hw * 0.75, -hh + 0.0045 * scale, 0.0]
             ];
@@ -148,12 +148,12 @@ impl RobotData {
                             wheel_pos_in_world.y,
                             wheel_pos_in_world.z
                         ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).soft_ccd_prediction(1.0).can_sleep(false)
-                        .angular_damping(500.0).linear_damping(50.0)
+                        .angular_damping(50.0).linear_damping(50.0)
                         .enabled_rotations(false, false, true)
                         .enabled_translations(false, false, false)
                 );
 
-                let collider = ColliderBuilder::cylinder(wheel_half_width * scale, 0.03  * scale).friction(0.8).density(10.0);
+                let collider = ColliderBuilder::cylinder(wheel_half_width, 0.03  * scale).friction(0.8).density(10.0);
                 //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
                 sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
 
@@ -180,13 +180,15 @@ impl RobotData {
                             wheel_pos_in_world.x,
                             wheel_pos_in_world.y,
                             wheel_pos_in_world.z
-                        ]).ccd_enabled(true)
-                        .can_sleep(false).angular_damping(15.0).linear_damping(5.0)
+                        ])
+                        .soft_ccd_prediction(0.5)
+                        .can_sleep(false)
+                        .angular_damping(15.0).linear_damping(5.0)
                         .enabled_translations(false, false, false)
                         .enabled_rotations(true, true, true)
                 );
 
-                let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.25);
+                let collider = ColliderBuilder::capsule_x(0.0, ball_wheel_radius).density(3.0).friction(0.25);
                 sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
 
                 let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
@@ -433,24 +435,15 @@ impl RobotData {
         let mut new_whisker_states = [false, false];
 
         // Check whiskers
-        for (c1, c2, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_l) {
+        for (_, _, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_l) {
             // Ignore non-intersections 
-            if !intersecting {
-                continue;
-            } 
-
-            new_whisker_states[0] = true;
+            new_whisker_states[0] |= intersecting;
         }
         
-        for (c1, c2, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_r) {
+        for (_, _, intersecting) in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_r) {
             // Ignore non-intersections 
-            if !intersecting {
-                continue;
-            } 
-
-            new_whisker_states[1] = true;
+            new_whisker_states[1] |= intersecting;
         }
-        
 
         // Send message if whisker changed
         if new_whisker_states != robot.whisker_states {

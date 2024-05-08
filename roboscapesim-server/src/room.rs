@@ -914,7 +914,7 @@ impl RoomData {
         }
         
         let mut rigid_body = if is_kinematic { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() }
-            .soft_ccd_prediction(1.0)
+            .soft_ccd_prediction(0.5)
             .translation(position)
             .build();
 
@@ -982,7 +982,7 @@ impl RoomData {
     pub(crate) async fn add_trigger(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
         let body_name = room.name.to_owned() + "_" + name;
         let rigid_body =  RigidBodyBuilder::kinematic_position_based()
-            .soft_ccd_prediction(1.0)
+            .soft_ccd_prediction(0.5)
             .translation(position)
             .rotation(rotation)
             .build();
