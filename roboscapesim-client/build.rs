@@ -75,8 +75,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     
     lines.push("\tscriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');");
     lines.push("\tdocument.head.appendChild(scriptElement);");
-    lines.push("\tdisableRetinaSupport();");
-
 
     // Restore end of document
     lines.push(end);

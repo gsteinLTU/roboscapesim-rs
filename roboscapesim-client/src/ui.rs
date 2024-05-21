@@ -4,7 +4,7 @@ use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_client_common::console_log;
 use roboscapesim_common::ClientMessage;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, HtmlElement, HtmlInputElement, Event};
+use web_sys::{window, Event, HtmlElement, HtmlInputElement};
 use roboscapesim_client_common::util::*;
 use js_sys::eval;
 use wasm_bindgen::{prelude::Closure, JsValue, JsCast};

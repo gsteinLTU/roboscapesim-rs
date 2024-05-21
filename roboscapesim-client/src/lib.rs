@@ -155,7 +155,6 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
             game.borrow().state_time.replace(instant::now());
         },
         Ok(UpdateMessage::DisplayText(id, text, timeout)) => {
-            // TODO: show on canvas
             console_log!("Display Text \"{}\" in position {} for {:?} s", text, id, timeout);
             add_or_update_text(&text, &id, timeout)
         },
