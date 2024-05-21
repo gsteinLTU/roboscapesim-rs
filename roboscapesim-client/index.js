@@ -219,4 +219,5 @@
 	};
 	scriptElement.setAttribute('src', 'https://preview.babylonjs.com/babylon.js');
 	document.head.appendChild(scriptElement);
+	disableRetinaSupport();
 })();
