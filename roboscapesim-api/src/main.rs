@@ -23,6 +23,11 @@ static ROOMS: Lazy<DashMap<String, RoomInfo>> = Lazy::new(|| DashMap::new());
 /// External IP address
 static EXTERNAL_IP: OnceCell<String> = OnceCell::new();
 
+/// Shared reqwest client for making HTTP requests
+pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| 
+    reqwest::ClientBuilder::new().timeout(std::time::Duration::from_secs(2)).build().unwrap()
+);
+
 #[tokio::main]
 async fn main() {
     // Setup logger
@@ -49,7 +54,8 @@ async fn main() {
                 // allow requests from any origin
                 .allow_origin(Any)
                 .allow_headers([header::CONTENT_TYPE]),
-        );
+        )
+        .layer(tower_http::timeout::TimeoutLayer::new(std::time::Duration::from_secs(10)));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
@@ -146,7 +152,7 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
 
     // Forward request to server
     let server = server.unwrap();
-    let response = reqwest::Client::new()
+    let response = REQWEST_CLIENT
         .post(format!("{}/rooms/create", server))
         .json(&data)
         .send()

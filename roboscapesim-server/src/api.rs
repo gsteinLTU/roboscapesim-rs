@@ -5,7 +5,7 @@ use roboscapesim_common::api::{CreateRoomRequestData, CreateRoomResponseData, Se
 use std::{net::SocketAddr, collections::HashMap, sync::Mutex};
 use axum_macros::debug_handler;
 use axum::{routing::{post, get}, Router, http::{Method, header}};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{cors::{Any, CorsLayer}, timeout::TimeoutLayer};
 
 use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::{DEFAULT_SCENARIOS_FILE, LOCAL_SCENARIOS}};
 
@@ -19,7 +19,7 @@ pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
 
 /// Shared reqwest client for making HTTP requests
 pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| 
-    reqwest::ClientBuilder::new().timeout(std::time::Duration::from_secs(3)).build().unwrap()
+    reqwest::ClientBuilder::new().timeout(std::time::Duration::from_secs(2)).build().unwrap()
 );
 
 /// Announce server to main API server
@@ -36,6 +36,7 @@ pub async fn announce_api() {
         max_rooms,
         address: get_server(),
     });
+    
     let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
     if let Err(err) = res {
         error!("Error initial announce to main server: {}", err);
@@ -80,7 +81,8 @@ pub async fn create_api() {
         .allow_methods([Method::GET, Method::POST])
         // allow requests from any origin
         .allow_origin(Any)
-	    .allow_headers([header::CONTENT_TYPE]));
+	    .allow_headers([header::CONTENT_TYPE]))
+    .layer(TimeoutLayer::new(std::time::Duration::from_secs(5)));
     
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
     let server = axum::serve(listener, app.into_make_service());
