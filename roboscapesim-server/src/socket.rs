@@ -5,6 +5,7 @@ use log::{info, trace, error, warn};
 use once_cell::sync::Lazy;
 
 use async_tungstenite::{WebSocketStream, tungstenite::Message};
+use async_listen::ListenExt;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::Arc;
 
@@ -45,7 +46,13 @@ pub struct SocketInfo {
 }
 
 pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
-    let addr = tcp_stream.peer_addr().expect("connected streams should have a peer address");
+    let addr = tcp_stream.peer_addr();
+    
+    if let Err(e) = addr {
+        return Err(format!("Error getting peer address: {:?}", e));
+    }
+
+    let addr = addr.unwrap();    
     info!("Peer address: {}", addr);
 
     let ws_stream = async_tungstenite::accept_async(tcp_stream).await;
@@ -196,22 +203,18 @@ pub async fn ws_tx() {
 pub async fn ws_accept() {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", LOCAL_WS_PORT.clone())).await.expect("Failed to bind WS port");
 
+    let mut incoming = listener.incoming()
+        .log_warnings(|e| warn!("Warning accepting connection: {:?}", e))
+        .handle_errors(Duration::from_millis(50));
     loop {
-        let conn = listener.accept().await;
+        while let Some(conn) = incoming.next().await {
+            let conn = accept_connection(conn).await;
 
-        if let Err(e) = conn {
-            error!("Error accepting connection: {:?}", e);
-            continue;
+            if let Err(e) = conn {
+                warn!("Error accepting connection: {:?}", e);
+                continue;
+            }
         }
-
-        let (conn, _) = conn.unwrap();
-
-        let conn = accept_connection(conn).await;
-
-        if let Err(e) = conn {
-            warn!("Error accepting connection: {:?}", e);
-        }
-
         sleep(Duration::from_millis(2)).await;
     }
 }
