@@ -28,7 +28,7 @@ rand = "0.8"
 axum = {version = "0.7"}
 tower-http = { version = "0.5", features = ["cors", "timeout"] }
 dashmap = { version = "5.5", features = ["serde", "rayon", "inline"] }
-once_cell = { version = "1.18", features = ["parking_lot"] }
+once_cell = { version = "1.19", features = ["parking_lot"] }
 nalgebra = { version = "0.32", features = ["serde", "serde-serialize", "rand"] }
 simple_logger = "5.0"
 log = "0.4"
@@ -46,7 +46,7 @@ gc-arena = "=0.4"
 crossbeam-channel = "0.5"
 async-tungstenite = { version = "0.25", features = ["tokio-rustls-native-certs"] }
 async-std = "1.12.0"
-rmp-serde = "1.1.2"
+rmp-serde = "1.3"
 atomic-instant = "0.1"
 no_deadlocks = "1.3"
 async-listen = "0.2.1"
