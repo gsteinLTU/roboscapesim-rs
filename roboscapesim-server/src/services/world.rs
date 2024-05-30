@@ -9,7 +9,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, util::util::{num_val, bool_val, str_val}, services::{*, proximity::ProximityConfig, lidar::DEFAULT_LIDAR_CONFIGS, waypoint::WaypointConfig}};
+use crate::{room::RoomData, services::{lidar::DEFAULT_LIDAR_CONFIGS, proximity::ProximityConfig, waypoint::WaypointConfig, *}, util::util::{bool_val, num_val, str_val, try_num_val}};
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
@@ -49,7 +49,7 @@ impl Service for WorldService {
 
                 let id = str_val(&msg.params[0]);
                 let text = str_val(&msg.params[1]);
-                let timeout = msg.params[2].as_f64();
+                let timeout = try_num_val(&msg.params[2]).ok().map(|t| t as f64);
                 RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
             },
             "removeEntity" => {

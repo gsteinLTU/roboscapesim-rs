@@ -239,9 +239,10 @@ pub(crate) fn set_title(title: &str) {
 /// Holds information about a text message displayed overlaying the 3D view
 pub(crate) struct TextBlock {
     pub id: Rc<RefCell<String>>,
-    pub js_value: RefCell<JsValue>,
+    pub js_value: JsValue,
     pub timeout: Cell<Option<i32>>,
 }
+
 impl TextBlock {
     fn create_timeout(&mut self, timeout: f64) {
         TEXT_BLOCKS.with(|text_blocks| {
@@ -267,7 +268,9 @@ impl TextBlock {
 impl Drop for TextBlock {
     fn drop(&mut self) {
         console_log!("Dropping {}", self.id.borrow());
-        js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "removeControl", &[&self.js_value.borrow()]).unwrap();
+        js_set(&self.js_value, "text", "").unwrap();
+        js_set(&self.js_value, "isVisible", false).unwrap();
+        js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "removeControl", &[&self.js_value]).unwrap();
         self.clear_timeout();
     }
 }
@@ -281,34 +284,35 @@ thread_local! {
 pub(crate) fn add_or_update_text(text: &str, id: &str, timeout: Option<f64>) {
     let id = "textblock_".to_owned() + id;
     TEXT_BLOCKS.with(|text_blocks| {
-        if !text_blocks.borrow().contains_key(&id) {
-            let text_block = RefCell::new(eval(&("let textBlock = new BABYLON.GUI.TextBlock('textblock_' + ('".to_owned() + &id + "' ?? Math.round(Math.random() * 10000000)));
+        let key = &("textblock_".to_owned() + &id);
+        if !text_blocks.borrow().contains_key(key) {
+            let text_block = eval(&("let textBlock = new BABYLON.GUI.TextBlock('textblock_' + ('".to_owned() + &id + "' ?? Math.round(Math.random() * 10000000)));
             textBlock.heightInPixels = 24;
             textBlock.outlineColor = '#2226';
             textBlock.outlineWidth = 3;
             textBlock.color = '#FFF';
             textBlock.fontSizeInPixels = 20;
-            textBlock;")).unwrap());
-            js_set(&text_block.borrow(), "text", text).unwrap();
-            js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "addControl", &[&text_block.borrow()]).unwrap();
+            textBlock;")).unwrap();
+            js_set(&text_block, "text", text).unwrap();
+            js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "addControl", &[&text_block]).unwrap();
             
-            let id = js_get(&text_block.borrow(), "name").unwrap().as_string().unwrap();
-
-            let block = Rc::new(RefCell::new(TextBlock { id: Rc::new(RefCell::new(id.clone())), js_value: text_block.clone(), timeout: Cell::new(None) }));
-
+            let id = js_get(&text_block, "name").unwrap().as_string().unwrap();
+        
+            let block = Rc::new(RefCell::new(TextBlock { id: Rc::new(RefCell::new(id.clone())), js_value: text_block, timeout: Cell::new(None) }));
+        
             if let Some(timeout) = timeout {
                 block.borrow_mut().create_timeout(timeout);                
             }
-
+        
             text_blocks.borrow_mut().insert(id, block);
         } else {
-            text_blocks.borrow_mut().get_mut(&id).unwrap().borrow_mut().clear_timeout();   
+            text_blocks.borrow_mut().get_mut(key).unwrap().borrow_mut().clear_timeout();   
             
             if let Some(timeout) = timeout {
-                text_blocks.borrow_mut().get_mut(&id).unwrap().borrow_mut().create_timeout(timeout);           
+                text_blocks.borrow_mut().get_mut(key).unwrap().borrow_mut().create_timeout(timeout);           
             }         
-
-            js_set(&text_blocks.borrow()[&id].borrow().js_value.borrow(), "text", text).unwrap();
+        
+            js_set(&text_blocks.borrow()[key].borrow().js_value, "text", text).unwrap();
         }
     });
 }

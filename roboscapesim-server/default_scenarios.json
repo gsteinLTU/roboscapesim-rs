@@ -68,5 +68,12 @@
         "host": "remote",
         "path": "gstein/Four%20Robots",
         "creator": "Gordon Stein"
+    },
+    "tugofwar": {
+        "name": "TugOfWar",
+        "description": "Tug of War scenario",
+        "host": "remote",
+        "path": "gstein/Tug%20of%20War",
+        "creator": "Gordon Stein"
     }
 }

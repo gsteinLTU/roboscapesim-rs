@@ -156,7 +156,7 @@ fn handle_update_message(msg: Result<UpdateMessage, rmp_serde::decode::Error>, g
         },
         Ok(UpdateMessage::DisplayText(id, text, timeout)) => {
             console_log!("Display Text \"{}\" in position {} for {:?} s", text, id, timeout);
-            add_or_update_text(&text, &id, timeout)
+            add_or_update_text(&text, &id, timeout);
         },
         Ok(UpdateMessage::ClearText) => {
             clear_all_text_blocks();
