@@ -78,6 +78,9 @@ pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
         sink: Arc::new(Mutex::new(sink)),
         stream: Arc::new(Mutex::new(stream)),
     });
+
+    info!("Connected clients: {}", CLIENTS.len());
+    
     Ok(id)
 }
 
