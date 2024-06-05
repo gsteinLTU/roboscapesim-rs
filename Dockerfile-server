@@ -25,12 +25,12 @@ RUN cp -r ../target/$(xx-cargo --print-target-triple)/release/roboscape* /robosc
 FROM --platform=${TARGETPLATFORM:-linux/amd64} debian:bookworm-slim
 
 RUN apt-get update
-RUN apt-get install -y libssl-dev ca-certificates
+RUN apt-get install -y libssl-dev ca-certificates curl
 RUN update-ca-certificates
 
 WORKDIR /roboscape
-#COPY --from=builder /roboscape_build/target/release/roboscapesim-server .
+
 COPY --from=builder /roboscape_release .
 EXPOSE 3000
-#CMD [ "ls", "-al" ]
+
 CMD [ "./roboscapesim-server" ]
