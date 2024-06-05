@@ -11,6 +11,7 @@ use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::{DEFAULT_SCENARIOS_F
 
 pub static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
+/// SystemTime when API server was started
 pub static LAUNCH_TIME: Lazy<std::time::SystemTime> = Lazy::new(|| std::time::SystemTime::now());
 
 pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
