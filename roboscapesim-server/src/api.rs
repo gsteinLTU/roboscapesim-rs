@@ -11,6 +11,8 @@ use crate::{ROOMS, MAX_ROOMS, room::create_room, scenarios::{DEFAULT_SCENARIOS_F
 
 pub static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 
+pub static LAUNCH_TIME: Lazy<std::time::SystemTime> = Lazy::new(|| std::time::SystemTime::now());
+
 pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
     .unwrap_or_else(|_| "3000".to_string())
     .parse::<u16>()
@@ -76,6 +78,7 @@ pub async fn create_api() {
     .route("/rooms/create", post(post_create))
     .route("/rooms/info", get(get_room_info))
     .route("/environments/list", get(get_environments_list))
+    .route("/server/healthcheck", get(get_healthcheck))
 	.layer(CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -88,6 +91,10 @@ pub async fn create_api() {
     let server = axum::serve(listener, app.into_make_service());
 
     info!("API server listening on {}", addr);
+
+    // Make sure launch time is set
+    let _ = LAUNCH_TIME.clone();
+    info!("API server launched at {:?}", LAUNCH_TIME);
 
     if let Err(err) = server.await {
         error!("server error: {}", err);
@@ -166,6 +173,23 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
         rooms.push(r.get_room_info());
     }
     rooms
+}
+
+#[debug_handler]
+pub(crate) async fn get_healthcheck() -> impl IntoResponse {
+    // If uptime is less than 10 hours, return 200 OK
+    if LAUNCH_TIME.elapsed().unwrap().as_secs() < 60 * 60 * 10 {
+        return (axum::http::StatusCode::OK, "Too new");
+    }
+
+    // Check if any rooms active
+    if ROOMS.len() == 0 {
+        return (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Can restart, no rooms active");
+    }
+
+    // TODO: Create room and test WS connection, may need to be done in a separate program
+
+    (axum::http::StatusCode::OK, "Rooms active, don't restart")
 }
 
 #[debug_handler]
