@@ -62,12 +62,12 @@ async fn main() {
     let server = axum::serve(listener, app.into_make_service());
     debug!("listening on {}", addr);
 
-    // Clean up servers not updated in 5 minutes
+    // Clean up servers not updated in 6 minutes
     tokio::spawn(async move {
         loop {
             let mut servers_to_remove = Vec::new();
             for server in SERVERS.iter() {
-                if server.value().last_update.elapsed().unwrap().as_secs() > 300 {
+                if server.value().last_update.elapsed().unwrap().as_secs() > 360 {
                     servers_to_remove.push(server.key().clone());
                 }
             }

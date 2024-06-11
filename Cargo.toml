@@ -2,3 +2,4 @@
 
 members = ["roboscapesim-server", "roboscapesim-client", "roboscapesim-client-common", "roboscapesim-common", "roboscapesim-api", "roboscapesim-testclient", "roboscapesim-preflight"]
 
+resolver = "2"
