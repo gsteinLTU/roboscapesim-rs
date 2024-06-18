@@ -9,7 +9,7 @@ use roboscapesim_common::api::{
 use tower_http::cors::{Any, CorsLayer};
 use simple_logger::SimpleLogger;
 
-use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
+use std::{collections::HashMap, net::SocketAddr, time::{Duration, SystemTime}};
 
 /// Known servers
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
@@ -72,6 +72,14 @@ async fn main() {
                 }
             }
             for server in servers_to_remove {
+                // Attempt API call to server to check if it's still alive
+                let res = REQWEST_CLIENT.get(format!("{}/server/status", server)).timeout(Duration::from_secs(2)).send().await;
+
+                // If error, remove server
+                if !res.is_err() {
+                    continue;
+                }
+
                 SERVERS.remove(&server);
 
                 // Remove rooms on server
