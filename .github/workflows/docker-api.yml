@@ -18,7 +18,7 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Build and push API
-      uses: docker/build-push-action@v6.0.0
+      uses: docker/build-push-action@v6.1.0
       with:
         context: .
         platforms: linux/amd64
