@@ -900,13 +900,14 @@ impl RoomData {
     }
 
     /// Add a physics object to the room
-    pub(crate) fn add_shape(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool) -> String {
+    pub(crate) fn add_shape(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool, visual_only: bool) -> String {
+        let is_kinematic = is_kinematic || visual_only;
         let body_name = room.name.to_owned() + "_" + name;
         let mut position = position;
 
         // Apply jitter with extra objects to prevent lag from overlap
         let count_non_robots = room.count_non_robots();
-        if count_non_robots > 10 {
+        if !visual_only && count_non_robots > 10 {
             let mut rng = rand::thread_rng();
             let mult = if count_non_robots > 40 { 2.0 } else if count_non_robots > 20 { 1.5 } else { 1.0 };
             let jitter = vector![rng.gen_range(-0.0015..0.0015) * mult, rng.gen_range(-0.0025..0.0025) * mult, rng.gen_range(-0.0015..0.0015) * mult];
@@ -934,27 +935,31 @@ impl RoomData {
             _ => Shape::Box
         };
 
-        let collider = match shape {
-            Shape::Box => ColliderBuilder::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
-            Shape::Sphere => {
-                size.y = size.x;
-                size.z = size.x;
-                ColliderBuilder::ball(size.x / 2.0)
-            },
-            Shape::Cylinder => {
-                size.z = size.x;
-                ColliderBuilder::cylinder(size.y / 2.0, size.x / 2.0)
-            },
-            Shape::Capsule => {
-                size.z = size.x;
-                ColliderBuilder::capsule_y(size.y / 2.0, size.x / 2.0)
-            },
-        };
-
-        let collider = collider.restitution(0.3).density(0.045).friction(0.6).build();
-        let cube_body_handle = room.sim.rigid_body_set.write().unwrap().insert(rigid_body);
         let rigid_body_set = room.sim.rigid_body_set.clone();
-        room.sim.collider_set.write().unwrap().insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.write().unwrap());
+        let cube_body_handle = rigid_body_set.write().unwrap().insert(rigid_body);
+
+        if !visual_only {
+            let collider = match shape {
+                Shape::Box => ColliderBuilder::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
+                Shape::Sphere => {
+                    size.y = size.x;
+                    size.z = size.x;
+                    ColliderBuilder::ball(size.x / 2.0)
+                },
+                Shape::Cylinder => {
+                    size.z = size.x;
+                    ColliderBuilder::cylinder(size.y / 2.0, size.x / 2.0)
+                },
+                Shape::Capsule => {
+                    size.z = size.x;
+                    ColliderBuilder::capsule_y(size.y / 2.0, size.x / 2.0)
+                },
+            };
+
+            let collider = collider.restitution(0.3).density(0.045).friction(0.6).build();
+            room.sim.collider_set.write().unwrap().insert_with_parent(collider, cube_body_handle, &mut rigid_body_set.write().unwrap());
+        }
+
         room.sim.rigid_body_labels.insert(body_name.clone(), cube_body_handle);
 
         room.objects.insert(body_name.clone(), ObjectData {

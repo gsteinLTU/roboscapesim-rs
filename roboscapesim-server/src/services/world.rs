@@ -13,9 +13,10 @@ use crate::{room::RoomData, services::{lidar::DEFAULT_LIDAR_CONFIGS, proximity::
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
-// TODO: Separate kinematic limit from dynamic entity limit
 const DYNAMIC_ENTITY_LIMIT: usize = 25;
 const KINEMATIC_ENTITY_LIMIT: usize = 100;
+// TODO: Give visual only entities a separate limit
+const VISUAL_ONLY_ENTITY_LIMIT: usize = 250;
 const ROBOT_LIMIT: usize = 4;
 
 pub struct WorldService {
@@ -166,7 +167,7 @@ impl Service for WorldService {
                     info!("Entity limit already reached");
                     response = vec![false.into()];
                 } else {
-                    let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic);
+                    let id = RoomData::add_shape(room, &name, vector![x, y, z], AngVector::new(0.0, heading, 0.0), Some(parsed_visualinfo), Some(vector![width, height, depth]), kinematic, false);
                     response = vec![id.into()];            
                 }
             },
@@ -837,6 +838,8 @@ impl WorldService {
 
         // Check for each option
         let kinematic = options.get("kinematic").map(bool_val).unwrap_or(false);
+        let visual_only = options.get("visualonly").map(bool_val).unwrap_or(false);
+
         let mut size = vec![];
 
         if options.contains_key("size") {
@@ -888,7 +891,7 @@ impl WorldService {
                     size = vec![1.0, 1.0, 1.0];
                 }
 
-                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic))
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[1], size[2]]), kinematic, visual_only))
             },
             "ball" | "sphere" | "orb" | "spheroid" => {
                 let name = "ball".to_string() + &name_num;
@@ -897,7 +900,7 @@ impl WorldService {
                     size = vec![1.0];
                 }
 
-                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic))
+                Some(RoomData::add_shape(room, &name, vector![x, y, z], rotation, Some(parsed_visualinfo), Some(vector![size[0], size[0], size[0]]), kinematic, visual_only))
             },
             "trigger" => {
                 let name = "trigger".to_string() + &name_num;
