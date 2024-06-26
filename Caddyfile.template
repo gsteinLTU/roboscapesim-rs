@@ -1,5 +1,5 @@
 {
-        cert_issuer zerossl ZEROSSL_API_KEY
+        email gstein@ltu.edu
 }
 
 DASH_IP.roboscapeonlineservers.netsblox.org {
