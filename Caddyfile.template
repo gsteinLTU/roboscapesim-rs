@@ -1,3 +1,7 @@
+{
+        cert_issuer zerossl ZEROSSL_API_KEY
+}
+
 DASH_IP.roboscapeonlineservers.netsblox.org {
         reverse_proxy :15000
 }
