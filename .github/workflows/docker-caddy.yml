@@ -8,7 +8,7 @@ on:
       - 'Dockerfile-caddy'
 
 jobs:
-  build-server:
+  build-caddy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
