@@ -179,7 +179,7 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
 #[debug_handler]
 pub(crate) async fn get_healthcheck() -> impl IntoResponse {
     // If uptime is less than 10 hours, return 200 OK
-    if LAUNCH_TIME.elapsed().unwrap().as_secs() < 60 * 60 * 10 {
+    if LAUNCH_TIME.elapsed().unwrap().as_secs() < 60 * 60 * 16 {
         return (axum::http::StatusCode::OK, "Too new");
     }
 

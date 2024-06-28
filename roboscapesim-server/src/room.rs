@@ -107,7 +107,7 @@ impl RoomData {
             environment: environment.clone().unwrap_or("Default".to_owned()),
             password,
             hibernate_timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
-            full_timeout:  8 * 60 * 60,
+            full_timeout:  9 * 60 * 60,
             last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
             hibernating: Arc::new(AtomicBool::new(false)),
             sockets: DashMap::new(),
