@@ -9,10 +9,9 @@ sed -i -e "s/DASH_IP/$DASH_IP/" Caddyfile
 
 # Check if CERT and KEY environment variables are set
 if [[ -n "$CERT" && -n "$KEY" ]]; then
-  # Write the CERT and KEY to files
-  echo "$CERT" > cert.pem
-  echo "$KEY" > key.pem
-
+  # Decode and write the CERT and KEY to files
+  echo "$CERT" | base64 -d > cert.pem
+  echo "$KEY" | base64 -d > key.pem
 
   # Replace the placeholder with TLS configuration
   sed -i -e "s/EXTRA/tls cert.pem key.pem/" Caddyfile
