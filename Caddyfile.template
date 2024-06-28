@@ -1,7 +1,9 @@
 DASH_IP.roboscapeonlineservers.netsblox.org {
         reverse_proxy :15000
+        EXTRA
 }
 
 DASH_IP.roboscapeonlineservers.netsblox.org:3000 {
         reverse_proxy :13000
+        EXTRA
 }

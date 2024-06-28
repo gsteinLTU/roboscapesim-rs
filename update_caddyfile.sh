@@ -13,8 +13,10 @@ if [[ -n "$CERT" && -n "$KEY" ]]; then
   echo "$CERT" > cert.pem
   echo "$KEY" > key.pem
 
-  # Append the TLS configuration to the Caddyfile
-  echo "
-tls cert.pem key.pem
-" >> Caddyfile
+
+  # Replace the placeholder with TLS configuration
+  sed -i -e "s/EXTRA/tls cert.pem key.pem/" Caddyfile
+else
+  # Replace the placeholder with no TLS configuration
+  sed -i -e "s/EXTRA//" Caddyfile
 fi
