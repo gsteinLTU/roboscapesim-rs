@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Get the current IP address in the DASH_IP format
 DASH_IP="`curl -s http://checkip.amazonaws.com | tr . -`"
 
