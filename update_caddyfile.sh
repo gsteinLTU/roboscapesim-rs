@@ -9,11 +9,12 @@ sed -i -e "s/DASH_IP/$DASH_IP/" Caddyfile
 
 # Check if CERT and KEY environment variables are set
 if [[ -n "$CERT" && -n "$KEY" ]]; then
+  # Write the CERT and KEY to files
+  echo "$CERT" > cert.pem
+  echo "$KEY" > key.pem
+
   # Append the TLS configuration to the Caddyfile
   echo "
-tls {
-    certificate \"$CERT\"
-    key \"$KEY\"
-}
+tls cert.pem key.pem
 " >> Caddyfile
 fi
