@@ -25,8 +25,8 @@ if [[ -n "$CERT" && -n "$KEY" ]]; then
   echo "TLS certificate and key are provided"
 
   # Decode and write the CERT and KEY to files
-  echo "$CERT" | jq -r ".SecretBinary" | base64 -d > cert.pem
-  echo "$KEY"  | jq -r ".SecretBinary" | base64 -d > key.pem
+  echo "$CERT" | base64 -d > cert.pem
+  echo "$KEY" | base64 -d > key.pem
 
   # Verify the certificate is still valid
   EXPIRY_DATE=`openssl x509 -enddate -noout -in cert.pem | cut -d= -f2 | sed 's/ GMT//g'`
