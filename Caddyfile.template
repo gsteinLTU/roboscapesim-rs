@@ -1,7 +1,3 @@
-{
-       EXTRA
-}
-
 DASH_IP.roboscapeonlineservers.netsblox.org {
         EXTRA
         reverse_proxy :15000

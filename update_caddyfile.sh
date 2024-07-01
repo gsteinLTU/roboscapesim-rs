@@ -1,3 +1,5 @@
+echo "Updating Caddyfile"
+
 # Get the current IP address in the DASH_IP format
 DASH_IP="`curl -s http://checkip.amazonaws.com | tr . -`"
 
@@ -13,8 +15,15 @@ if [[ -n "$CERT" && -n "$KEY" ]]; then
   echo "$CERT" | base64 -d > cert.pem
   echo "$KEY" | base64 -d > key.pem
 
-  # Replace the placeholder with TLS configuration
-  sed -i -e "s/EXTRA/tls cert.pem key.pem/" Caddyfile
+  # Verify the certificate is still valid
+  EXPIRY_DATE=`openssl x509 -enddate -noout -in cert.pem | cut -d= -f2 | sed 's/ GMT//g'`
+  if [[ `date -d "$EXPIRY_DATE" +%s` -lt `date +%s` ]]; then
+    echo "Certificate has expired"
+    sed -i -e "s/EXTRA//" Caddyfile
+  else
+    # Replace the placeholder with TLS configuration
+    sed -i -e "s/EXTRA/tls cert.pem key.pem/" Caddyfile
+  fi
 else
   # Replace the placeholder with no TLS configuration
   sed -i -e "s/EXTRA//" Caddyfile
