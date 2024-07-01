@@ -1,6 +1,6 @@
 FROM caddy:2-alpine
 
-RUN apk add --no-cache curl nss-tools openssl
+RUN apk add --no-cache curl nss-tools openssl jq
 
 COPY update_caddyfile.sh .
 COPY Caddyfile.template .
