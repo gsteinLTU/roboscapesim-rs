@@ -1,5 +1,12 @@
 echo "Updating Caddyfile"
 
+# Check if we are running in a container and source the environment variables
+if [[ -f /proc/1/environ ]]; then
+  echo "Sourcing environment variables"
+  for I in `cat /proc/1/environ  | strings`; do echo "export $I"; done > /srv/.profile
+  source /srv/.profile
+fi
+
 # Get the current IP address in the DASH_IP format
 DASH_IP="`curl -s http://checkip.amazonaws.com | tr . -`"
 echo "DASH_IP: $DASH_IP"
