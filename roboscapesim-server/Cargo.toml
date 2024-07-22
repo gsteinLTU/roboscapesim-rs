@@ -44,7 +44,7 @@ color-name = "1.1.0"
 colorsys = "0.6"
 gc-arena = "=0.5.3"
 crossbeam-channel = "0.5"
-async-tungstenite = { version = "0.26", features = ["tokio-rustls-native-certs"] }
+async-tungstenite = { version = "0.27", features = ["tokio-rustls-native-certs"] }
 async-std = "1.12.0"
 rmp-serde = "1.3"
 atomic-instant = "0.1"
