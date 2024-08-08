@@ -593,7 +593,7 @@ impl RoomData {
 
             if time - self.last_full_update_sent.load(Ordering::Relaxed) < 60 {
                 if (now - *self.last_update_sent.read().unwrap()) > Duration::from_millis(120) {
-                    trace!("Sending incremental state to clients");
+                    //trace!("Sending incremental state to clients");
                     // Send incremental state to clients
                     self.send_state_to_all_clients(false);
                     *self.last_update_sent.write().unwrap() = now;
@@ -1113,7 +1113,7 @@ impl RoomData {
         
                 let update_time = get_timestamp();
 
-                trace!("Updating room {}", &m.name);
+                //trace!("Updating room {}", &m.name);
                 if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
                     // Check timeout
                     if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.hibernate_timeout {

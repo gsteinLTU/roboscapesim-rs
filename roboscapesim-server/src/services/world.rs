@@ -50,7 +50,7 @@ impl Service for WorldService {
 
                 let id = str_val(&msg.params[0]);
                 let text = str_val(&msg.params[1]);
-                let timeout = try_num_val(&msg.params[2]).ok().map(|t| t as f64);
+                let timeout = if msg.params.len() > 2 { try_num_val(&msg.params[2]).ok().map(|t| t as f64) } else { None };
                 RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
             },
             "removeEntity" => {

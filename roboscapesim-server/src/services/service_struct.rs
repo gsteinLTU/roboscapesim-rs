@@ -4,7 +4,7 @@ use atomic_instant::AtomicInstant;
 use derivative::Derivative;
 use futures::FutureExt;
 use iotscape::{IoTScapeServiceAsync, ServiceDefinition, Request};
-use log::error;
+use log::{error, trace};
 use serde_json::Value;
 
 use crate::room::RoomData;
@@ -83,6 +83,9 @@ impl ServiceInfo {
     fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<IoTScapeServiceAsync> {
         let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
         let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
+
+        trace!("Connecting to IoTScape server {} on port {}", server, port);
+
         let service = Arc::new(IoTScapeServiceAsync::new(
             override_name.unwrap_or(service_type.into()),
             definition,
