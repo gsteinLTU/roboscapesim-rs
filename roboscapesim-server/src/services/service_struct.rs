@@ -1,14 +1,19 @@
-use std::{sync::Arc, time::Duration, hash::Hash};
+use std::{hash::Hash, sync::{Arc, LazyLock}, time::Duration};
 
 use atomic_instant::AtomicInstant;
 use derivative::Derivative;
 use futures::FutureExt;
 use iotscape::{IoTScapeServiceAsync, ServiceDefinition, Request};
-use log::{error, trace};
+use log::{error, info, trace};
 use serde_json::Value;
 
 use crate::room::RoomData;
 use super::HandleMessageResult;
+
+static SERVER: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string()));
+static PORT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string()));
+static ANNOUNCE_ENDPOINT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_ANNOUNCE_ENDPOINT").unwrap_or("https://services.netsblox.org/routes/iotscape/announce".to_string()));
+static RESPONSE_ENDPOINT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_RESPONSE_ENDPOINT").unwrap_or("https://services.netsblox.org/routes/iotscape/response".to_string()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
@@ -64,6 +69,8 @@ impl ServiceInfo {
     pub async fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
         let service = Self::setup_service(definition, service_type, None);
 
+        let announce = service.announce_http(&ANNOUNCE_ENDPOINT).now_or_never();
+
         if let Err(e) = service
             .announce()
             .await
@@ -81,15 +88,12 @@ impl ServiceInfo {
     }
 
     fn setup_service(definition: ServiceDefinition, service_type: ServiceType, override_name: Option<&str>) -> Arc<IoTScapeServiceAsync> {
-        let server = std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
-        let port = std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string());
-
-        trace!("Connecting to IoTScape server {} on port {}", server, port);
+        trace!("Connecting to IoTScape server {} on port {}", SERVER.to_owned(), PORT.to_owned());
 
         let service = Arc::new(IoTScapeServiceAsync::new(
             override_name.unwrap_or(service_type.into()),
             definition,
-            (server + ":" + &port).parse().unwrap(),
+            (SERVER.to_owned() + ":" + &PORT).parse().unwrap(),
         ).now_or_never().unwrap());
         service.into()
     }
@@ -132,6 +136,22 @@ impl PartialEq for ServiceInfo {
 impl ServiceInfo {
     /// Enqueue a response to a request
     pub fn enqueue_response_to(&self, request: &Request, params: Result<Vec<Value>, String>) {
+        // Check size of response
+        if let Ok(p) = params.clone() {
+            let size = p.iter().map(|v| v.to_string().len()).sum::<usize>();
+            if size > 10 {
+                // Send response via HTTP
+                let service = self.service.clone();
+                let request = request.clone();
+                tokio::spawn(async move {
+                    let enqueued = service.enqueue_response_to_http(&RESPONSE_ENDPOINT, request, Ok(vec![p.into()])).await;
+                    if let Err(e) = enqueued {
+                        error!("Could not enqueue (HTTP) response: {}", e);
+                    }
+                });
+                return; 
+            } 
+        }
         if let Err(e) = self.service.enqueue_response_to(request.clone(), params).now_or_never().unwrap_or_else(|| Err(std::io::Error::new(std::io::ErrorKind::Other, "Could not enqueue response".to_string()))) {
             error!("Could not enqueue response: {}", e);
         }
@@ -144,7 +164,7 @@ impl ServiceInfo {
         // Re-announce to server regularly
         if self.last_announce.elapsed() > self.announce_period {
             if let Err(e) = self.service
-                .announce()
+                .announce_lite()
                 .await {
                 error!("Could not announce service: {:?}", e);
             }
