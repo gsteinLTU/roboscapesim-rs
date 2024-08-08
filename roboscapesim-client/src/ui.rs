@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, cell::{RefCell, Cell}, rc::Rc};
 
+use js_helpers::js;
 use neo_babylon::prelude::{Color3, Vector3};
 use roboscapesim_client_common::console_log;
 use roboscapesim_common::ClientMessage;
@@ -296,7 +297,7 @@ pub(crate) fn add_or_update_text(text: &str, id: &str, timeout: Option<f64>) {
             js_set(&text_block, "text", text).unwrap();
             js_call_member(&get_nb_externalvar("roboscapesim-textStackPanel").unwrap(), "addControl", &[&text_block]).unwrap();
             
-            let id = js_get(&text_block, "name").unwrap().as_string().unwrap();
+            let id = js!(text_block.name).unwrap().as_string().unwrap();
         
             let block = Rc::new(RefCell::new(TextBlock { id: Rc::new(RefCell::new(id.clone())), js_value: text_block, timeout: Cell::new(None) }));
         

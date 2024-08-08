@@ -5,7 +5,8 @@ pub mod util;
 
 use gloo_timers::future::sleep;
 use instant::Duration;
-use js_sys::{Reflect, Array, eval, Uint8Array};
+use js_helpers::js;
+use js_sys::{Reflect, Array, Uint8Array};
 use netsblox_extension_macro::*;
 use netsblox_extension_util::*;
 use roboscapesim_common::{UpdateMessage, ClientMessage, Interpolatable};
@@ -323,18 +324,18 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 if obj.name.starts_with("robot_") {
                     let tag = create_label(&obj.name[(obj.name.len() - 4)..], None, None, None);
                     
-                    js_set(&tag, "billboardMode", &eval("BABYLON.TransformNode.BILLBOARDMODE_ALL").unwrap()).unwrap();
+                    js!(tag.billboardMode = window.BABYLON.TransformNode.BILLBOARDMODE_ALL).unwrap();
                     js_call_member(&tag, "setParent", &[(*m).as_ref()]).unwrap();
                     
                     // Set tag transform
-                    let tag_scaling = js_get(&tag, "scaling").unwrap();
+                    let tag_scaling = js!(tag.scaling).unwrap();
                     js_set(&tag_scaling, "x", 0.04).unwrap(); 
                     js_set(&tag_scaling, "y", 0.035).unwrap(); 
-                    let tag_position = js_get(&tag, "position").unwrap();
+                    let tag_position = js!(tag.position).unwrap();
                     js_set(&tag_position, "z", 0.0).unwrap();
                     js_set(&tag_position, "y", 0.175).unwrap();
                     js_set(&tag_position, "x", 0.0).unwrap();
-                    let tag_rotation = js_get(&tag, "rotation").unwrap();
+                    let tag_rotation = js!(tag.rotation).unwrap();
                     js_set(&tag_rotation, "x", 0.0).unwrap();
                     js_set(&tag_rotation, "y", 0.0).unwrap();
                     js_set(&tag_rotation, "z", 0.0).unwrap();
@@ -477,7 +478,7 @@ pub async fn connect(server: &String) {
             GAME.with(|game| { 
                 let gc = game.clone();
                 let mut msg = None;
-                let data = js_get(&evt, "data").unwrap();
+                let data = js!(evt.data).unwrap();
 
                 if data.is_string() {
                     let parsed = serde_json::from_str(&data.as_string().unwrap());

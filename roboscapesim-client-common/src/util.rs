@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use js_helpers::{js, JsMacroError};
 use js_sys::{Function, Reflect, Array};
 use neo_babylon::prelude::{BabylonMesh, Vector3, Quaternion};
 use wasm_bindgen::{JsValue, JsCast};
@@ -13,14 +14,20 @@ macro_rules! console_log {
 }
 
 /// Set a property on a JsValue
-pub fn js_set<T>(target: &JsValue, prop: &str, val: T) -> Result<bool, JsValue>
+pub fn js_set<T>(target: &JsValue, prop: &str, val: T) -> Result<bool, JsMacroError>
 where JsValue: From<T> {
-    Reflect::set(target, &prop.into(), &JsValue::from(val))
+    let val = JsValue::from(val);
+    let target = target.clone();
+    match js!(target[prop] = val) {
+        Ok(_) => Ok(true),
+        Err(e) => Err(e),
+    }
 }
 
 /// Get a property from a JsValue
-pub fn js_get(target: &JsValue, prop: &str) -> Result<JsValue, JsValue> {
-    Reflect::get(target, &prop.into())
+pub fn js_get(target: &JsValue, prop: &str) -> Result<JsValue, JsMacroError> {
+    let target = target.clone();
+    js!(target[prop])
 }
 
 /// Construct a new object
@@ -38,13 +45,10 @@ pub fn document() -> Document {
     window().unwrap().document().unwrap()
 }
 
-
 /// Try to get a function from the window
-pub fn get_window_fn(name: &str) -> Result<Function, JsValue>
+pub fn get_window_fn(name: &str) -> Result<Function, JsMacroError>
 {
-    let result = Reflect::get(&window().unwrap(), &name.into());
-
-    match result {
+    match js!(window[name]) {
         Ok(f) => Ok(f.unchecked_into::<Function>()),
         Err(e) => Err(e),
     }
