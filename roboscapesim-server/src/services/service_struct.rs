@@ -69,14 +69,20 @@ impl ServiceInfo {
     pub async fn new(id: &str, definition: ServiceDefinition, service_type: ServiceType) -> Self {
         let service = Self::setup_service(definition, service_type, None);
 
-        let announce = service.announce_http(&ANNOUNCE_ENDPOINT).now_or_never();
-
         if let Err(e) = service
             .announce()
             .await
         {
             error!("Could not announce service: {:?}", e);
         }
+
+        let service2 = service.clone();
+        tokio::spawn(async move {
+            match service2.announce_http(&ANNOUNCE_ENDPOINT).await {
+                Ok(_) => {},
+                Err(e) => error!("Could not announce (HTTP) service: {:?}", e),
+            }
+        });
 
         Self {
             id: id.to_owned(),
@@ -137,14 +143,17 @@ impl ServiceInfo {
     /// Enqueue a response to a request
     pub fn enqueue_response_to(&self, request: &Request, params: Result<Vec<Value>, String>) {
         // Check size of response
-        if let Ok(p) = params.clone() {
+        if let Ok(mut p) = params.clone() {
             let size = p.iter().map(|v| v.to_string().len()).sum::<usize>();
-            if size > 10 {
+            if size > 500 {
+                if p.len() > 1 || (p.len() >= 1 && p[0].is_array()) {
+                    p = vec![p.into()];
+                }
                 // Send response via HTTP
                 let service = self.service.clone();
                 let request = request.clone();
                 tokio::spawn(async move {
-                    let enqueued = service.enqueue_response_to_http(&RESPONSE_ENDPOINT, request, Ok(vec![p.into()])).await;
+                    let enqueued = service.enqueue_response_to_http(&RESPONSE_ENDPOINT, request, Ok(p)).await;
                     if let Err(e) = enqueued {
                         error!("Could not enqueue (HTTP) response: {}", e);
                     }

@@ -12,12 +12,11 @@ use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageRe
 
 pub struct TriggerService {
     pub service_info: Arc<ServiceInfo>,
-    pub rigid_body: RigidBodyHandle,
     pub collider: ColliderHandle,
 }
 
 impl TriggerService {
-    pub async fn create(id: &str, rigid_body: &RigidBodyHandle, collider: &ColliderHandle) -> Box<dyn Service> {
+    pub async fn create(id: &str, collider: &ColliderHandle) -> Box<dyn Service> {
         // Create definition struct
         let mut definition = ServiceDefinition {
             id: id.to_owned(),
@@ -52,7 +51,6 @@ impl TriggerService {
 
         Box::new(TriggerService {
             service_info: Arc::new(ServiceInfo::new(id, definition, ServiceType::Trigger).await),
-            rigid_body: *rigid_body,
             collider: *collider,
         }) as Box<dyn Service>
     }

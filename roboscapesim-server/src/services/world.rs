@@ -199,11 +199,12 @@ impl Service for WorldService {
 
                 // Check if object exists
                 if !room.robots.contains_key(&object) && !room.objects.contains_key(&object) {
+                    info!("Object {} not found", object);
                     response = vec![false.into()];
                 } else {
                     let is_robot = room.robots.contains_key(&object);
                     let options = msg.params.get(2).unwrap_or(&serde_json::Value::Null);
-            
+                    
                     // Options for proximity sensor
                     let mut targetpos = None;
                     let mut multiplier = 1.0;
@@ -253,6 +254,7 @@ impl Service for WorldService {
 
                     let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.rigid_body_labels.get(&object).unwrap().clone() };
 
+                    trace!("Creating sensor of type {} for object {} with options {:?}", service_type, object, options);
                     response = vec![
                         block_on(async move { 
                         match service_type.as_str() {
@@ -288,6 +290,8 @@ impl Service for WorldService {
                             false.into()
                         }
                     }})];
+
+                    trace!("Created sensor: {:?}", response);
                 }
             },
             "listTextures" => {

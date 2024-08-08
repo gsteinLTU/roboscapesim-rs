@@ -1011,7 +1011,7 @@ impl RoomData {
 
         room.reseters.insert(body_name.clone(), Box::new(RigidBodyResetter::new(cube_body_handle, room.sim.clone())));
 
-        let service = Arc::new(TriggerService::create(&body_name, &cube_body_handle, &collider_handle).await);
+        let service = Arc::new(TriggerService::create(&body_name, &collider_handle).await);
         let service_id = service.get_service_info().id.clone();
         room.services.insert((service_id.clone(), ServiceType::Trigger), service);
         room.sim.sensors.insert((service_id, collider_handle), DashSet::new());
