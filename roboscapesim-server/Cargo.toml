@@ -20,7 +20,7 @@ lto = "fat"
 
 [dependencies]
 async-std = "1.12"
-async-tungstenite = { version = "0.27", features = ["tokio-rustls-native-certs"] }
+async-tungstenite = { version = "0.28", features = ["tokio-rustls-native-certs"] }
 atomic-instant = "0.1"
 axum = {version = "0.7"}
 axum-macros = "0.4"
