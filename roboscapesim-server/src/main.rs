@@ -14,9 +14,7 @@ use tokio::{
 };
 use util::util::get_timestamp;
 
-use crate::api::EXTERNAL_IP;
-use crate::api::create_api;
-use crate::api::get_external_ip;
+use crate::api::{create_api, get_external_ip, EXTERNAL_IP};
 use crate::socket::{ws_accept, ws_rx, ws_tx};
 
 mod api;
@@ -25,22 +23,25 @@ mod room;
 mod simulation;
 mod vm;
 mod scenarios;
+mod socket;
 
 #[path = "./util/mod.rs"]
 mod util;
 
 #[path = "./services/mod.rs"]
 mod services;
-mod socket;
 
 pub const MAX_ROOMS: usize = 64;
+pub const UPDATE_FPS: f64 = 60.0;
+const UPDATE_INTERVAL_MILLIS: u64 = (1000.0 / UPDATE_FPS) as u64;
+const ROOM_CLEANUP_INTERVAL_SECS: u64 = 120; // 2 minutes
 
 pub static ROOMS: Lazy<DashMap<String, Arc<RoomData>>> = Lazy::new(|| DashMap::new());
-
 pub static CLIENTS: Lazy<DashMap<u128, SocketInfo>> = Lazy::new(|| DashMap::new());
 
 #[tokio::main]
 async fn main() {
+    // Load environment variables
     dotenvy::dotenv().ok();
 
     // Setup logger
@@ -67,6 +68,9 @@ async fn main() {
     // Update simulations
     let _update_loop = task::spawn(update_fn());
 
+    // Cleanup dead rooms
+    let _cleanup_loop = task::spawn(cleanup_dead_rooms());
+
     // Announce to master server
     let _announce_api = task::spawn(api::announce_api());
 
@@ -75,17 +79,23 @@ async fn main() {
     api.await;
 }
 
-pub const UPDATE_FPS: f64 = 60.0;
-
 async fn update_fn() {
-    let mut interval = time::interval(Duration::from_millis((1000.0 / UPDATE_FPS) as u64));
+    let mut interval = time::interval(Duration::from_millis(UPDATE_INTERVAL_MILLIS));
     interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
     
     loop {
         interval.tick().await;
         SHARED_CLOCK.update();
+    }
+}
 
-        // Check for dead rooms
+async fn cleanup_dead_rooms() {
+    let mut interval = time::interval(Duration::from_secs(ROOM_CLEANUP_INTERVAL_SECS));
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+    
+    loop {
+        interval.tick().await;
+        
         let mut dead_rooms = vec![];
         let timestamp = get_timestamp();
         for kvp in ROOMS.iter() {
