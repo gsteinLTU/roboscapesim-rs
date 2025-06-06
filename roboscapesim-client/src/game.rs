@@ -1,12 +1,13 @@
-use std::{cell::{RefCell, Cell}, rc::Rc, collections::HashMap};
+use std::{cell::{Cell, RefCell}, collections::HashMap, rc::Rc, sync::Arc};
+use js_helpers::js;
 use js_sys::{Reflect, Function};
 use neo_babylon::prelude::*;
-use roboscapesim_client_common::console_log;
+use roboscapesim_client_common::{console_log, util::{js_call_member, js_set}};
 use roboscapesim_common::{ObjectData, RoomState};
 use wasm_bindgen::{JsValue, JsCast};
 use web_sys::{HtmlElement, window, Node};
 
-use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, TEXT_BLOCKS}, util::get_nb_externalvar};
+use crate::{ui::{clear_robots_menu, update_robot_buttons_visibility, create_label, TEXT_BLOCKS}, util::get_nb_externalvar};
 
 /// Stores information relevant to the current state
 pub struct Game {
@@ -157,6 +158,29 @@ impl Game {
         for name in names {
             self.remove_object(name.to_owned());
         }
+    }
+
+    pub fn create_name_tag(&self, obj: Arc<ObjectData>, m: Rc<BabylonMesh>){
+        // Create tag
+        let tag = create_label(&obj.name[(obj.name.len() - 4)..], None, None, None);
+        
+        js!(tag.billboardMode = window.BABYLON.TransformNode.BILLBOARDMODE_ALL).unwrap();
+        js_call_member(&tag, "setParent", &[(*m).as_ref()]).unwrap();
+        
+        // Set tag transform
+        let tag_scaling = js!(tag.scaling).unwrap();
+        js_set(&tag_scaling, "x", 0.04).unwrap(); 
+        js_set(&tag_scaling, "y", 0.035).unwrap(); 
+        let tag_position = js!(tag.position).unwrap();
+        js_set(&tag_position, "z", 0.0).unwrap();
+        js_set(&tag_position, "y", 0.175).unwrap();
+        js_set(&tag_position, "x", 0.0).unwrap();
+        let tag_rotation = js!(tag.rotation).unwrap();
+        js_set(&tag_rotation, "x", 0.0).unwrap();
+        js_set(&tag_rotation, "y", 0.0).unwrap();
+        js_set(&tag_rotation, "z", 0.0).unwrap();
+        
+        self.name_tags.borrow_mut().insert(obj.name.to_owned(), tag);
     }
 
     // After disconnect, cleanup will remove all models from the scene and perform other cleanup tasks

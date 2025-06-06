@@ -5,4 +5,4 @@ build-debug:
 	wasm-pack build --debug --target web
 
 serve:
-	http-server -p 4000 --cors
+	just-serve -p 4000

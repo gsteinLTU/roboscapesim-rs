@@ -324,25 +324,7 @@ fn create_object(obj: &roboscapesim_common::ObjectData, game: &Rc<RefCell<Game>>
                 if obj.name.starts_with("robot_") {
                     if ID_BILLBOARDS_ENABLED.get() {
                         // Create tag
-                        let tag = create_label(&obj.name[(obj.name.len() - 4)..], None, None, None);
-                        
-                        js!(tag.billboardMode = window.BABYLON.TransformNode.BILLBOARDMODE_ALL).unwrap();
-                        js_call_member(&tag, "setParent", &[(*m).as_ref()]).unwrap();
-                        
-                        // Set tag transform
-                        let tag_scaling = js!(tag.scaling).unwrap();
-                        js_set(&tag_scaling, "x", 0.04).unwrap(); 
-                        js_set(&tag_scaling, "y", 0.035).unwrap(); 
-                        let tag_position = js!(tag.position).unwrap();
-                        js_set(&tag_position, "z", 0.0).unwrap();
-                        js_set(&tag_position, "y", 0.175).unwrap();
-                        js_set(&tag_position, "x", 0.0).unwrap();
-                        let tag_rotation = js!(tag.rotation).unwrap();
-                        js_set(&tag_rotation, "x", 0.0).unwrap();
-                        js_set(&tag_rotation, "y", 0.0).unwrap();
-                        js_set(&tag_rotation, "z", 0.0).unwrap();
-                        
-                        game_rc.borrow().name_tags.borrow_mut().insert(obj.name.to_owned(), tag);
+                        game_rc.borrow().create_name_tag(obj.clone(), m.clone());
                     }
 
                     let robotmenu: Node = get_nb_externalvar("roboscapedialog-robotmenu").unwrap().unchecked_into();
