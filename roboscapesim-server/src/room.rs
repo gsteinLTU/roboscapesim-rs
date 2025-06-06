@@ -11,7 +11,7 @@ use log::{error, info, trace, warn};
 use nalgebra::{vector, Vector3, UnitQuaternion};
 use netsblox_vm::real_time::OffsetDateTime;
 use netsblox_vm::{runtime::{SimpleValue, ErrorCause, CommandStatus, Command, RequestStatus, Config, Key, System}, std_util::Clock, project::{ProjectStep, IdleAction}, real_time::UtcOffset, std_system::StdSystem};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::Rng;
 use rapier3d::geometry::ColliderHandle;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
@@ -27,7 +27,7 @@ use std::sync::{Mutex, RwLock};
 
 use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
-use crate::{CLIENTS, ROOMS};
+use crate::{CLIENTS};
 use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
 use crate::simulation::{Simulation, SCALE};
@@ -36,6 +36,8 @@ use crate::robot::RobotData;
 use crate::util::traits::resettable::{Resettable, RigidBodyResetter};
 use crate::vm::{STEPS_PER_IO_ITER, open_project, YIELDS_BEFORE_IDLE_SLEEP, IDLE_SLEEP_TIME, DEFAULT_BASE_URL, C, get_env};
 pub(crate) mod netsblox_api;
+pub(crate) mod management;
+mod messages;
 
 const COLLECT_PERIOD: Duration = Duration::from_secs(60);
 
@@ -82,9 +84,12 @@ pub struct RoomData {
     pub edit_mode: bool,
     /// Thread with VM if not in edit mode
     #[derivative(Debug = "ignore")]
-    pub vm_thread: Option<JoinHandle<()>>,
+    pub vm_thread: OnceCell<JoinHandle<()>>,
     /// Next object ID to use
     pub next_object_id: Arc<AtomicI64>,
+    /// Message handler for this room
+    #[derivative(Debug = "ignore")]
+    message_handler: OnceCell<Arc<messages::MessageHandler>>,
 }
 
 pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
@@ -92,7 +97,7 @@ pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
 });
 
 impl RoomData {
-    pub async fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> RoomData {
+    pub async fn new(name: Option<String>, environment: Option<String>, password: Option<String>, edit_mode: bool) -> Arc<RoomData> {
         let (netsblox_msg_tx, netsblox_msg_rx) = mpsc::channel();
         let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
@@ -100,7 +105,7 @@ impl RoomData {
         let vm_netsblox_msg_rx = netsblox_msg_rx.clone();
         let iotscape_netsblox_msg_rx = netsblox_msg_rx.clone();
 
-        let mut obj = RoomData {
+        let mut obj = Arc::new(RoomData {
             is_alive: Arc::new(AtomicBool::new(true)),
             objects: DashMap::new(),
             name: name.unwrap_or(Self::generate_room_id(None)),
@@ -124,10 +129,14 @@ impl RoomData {
             netsblox_msg_tx,
             netsblox_msg_rx,
             edit_mode,
-            vm_thread: None,
+            vm_thread: OnceCell::new(),
             hibernating_since: Arc::new(AtomicI64::default()),
             next_object_id: Arc::new(AtomicI64::new(0)),
-        };
+            message_handler: OnceCell::new(),
+        });
+
+        // Initialize message handler
+        obj.message_handler.set(Arc::new(messages::MessageHandler::new(Arc::downgrade(&obj)))).unwrap();
 
         info!("Creating Room {}", obj.name);
 
@@ -181,7 +190,7 @@ impl RoomData {
             let robots = obj.robots.clone();
             let is_alive = obj.is_alive.clone();
 
-            obj.vm_thread = Some(thread::spawn(move || {
+            obj.vm_thread.set(thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -311,7 +320,7 @@ impl RoomData {
                         }
                     }
                 });
-            })); 
+            })).unwrap();
         } else {
             // In edit mode, send IoTScape messages to NetsBlox server
             let services = obj.services.clone();
@@ -508,7 +517,7 @@ impl RoomData {
             }
 
             for (msg, client_username, client_id) in msgs {
-                self.handle_client_message(msg, &mut needs_reset, &mut robot_resets, &client_username, client_id);
+                self.message_handler.get().unwrap().handle_client_message(msg, &mut needs_reset, &mut robot_resets, &client_username, client_id);
             }
 
             if needs_reset {
@@ -522,9 +531,9 @@ impl RoomData {
             let time = get_timestamp();
 
             self.update_robots(delta_time);
-            
-            self.get_iotscape_messages();
-            
+
+            self.message_handler.get().unwrap().get_iotscape_messages();
+
             self.sim.update(delta_time);
 
             // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
@@ -609,7 +618,7 @@ impl RoomData {
             *self.last_update_run.write().unwrap() = now;
         } else {
             // Still do IoTScape handling
-            self.get_iotscape_messages();
+            self.message_handler.get().unwrap().get_iotscape_messages();
         }
 
         // Check if room empty/not empty
@@ -669,120 +678,6 @@ impl RoomData {
         
         if any_robot_updated {
             self.last_interaction_time.store(get_timestamp(), Ordering::Relaxed);
-        }
-    }
-
-    fn get_iotscape_messages(&self) {
-        let mut msgs: Vec<(iotscape::Request, Option<<StdSystem<C> as System<C>>::RequestKey>)> = vec![];
-
-        while let Ok(msg) = self.iotscape_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-            if msg.0.function != "heartbeat" {
-                // TODO: figure out which interactions should keep room alive
-                //self.last_interaction_time = get_timestamp();
-                msgs.push(msg);
-            }
-        }
-            
-        for (msg, key) in msgs {
-            trace!("{:?}", msg);
-
-            let response = self.handle_iotscape_message(msg);
-
-            if let Some(key) = key {
-                key.complete(response.0.map_err(|e| e.into()));
-            }
-
-            // If an IoTScape event was included in the response, send it to the NetsBlox server
-            if let Some(iotscape) = response.1 {
-                self.netsblox_msg_tx.send(iotscape).unwrap();
-            }
-        }
-    }
-
-    fn handle_iotscape_message(&self, msg: iotscape::Request) -> (Result<SimpleValue, String>, Option<((String, ServiceType), String, BTreeMap<String, String>)>) {
-        let mut response = None;
-
-        let service = self.services.get(&(msg.device.clone(), msg.service.clone().into())).map(|s| s.value().clone());
-
-        if let Some(service) = service {
-            response = Some(service.handle_message(self, &msg));
-
-            // Update entities if position or rotation changed
-            if ServiceType::Entity == msg.service.clone().into() {
-                if msg.function == "setPosition" || msg.function == "setRotation" {
-                    if let Some(mut obj) = self.objects.get_mut(msg.device.as_str()) {
-                        obj.value_mut().updated = true;
-                    }
-                }
-            }
-        }
-        
-        response.unwrap_or((Err(format!("Service type {:?} not yet implemented.", &msg.service)), None))
-    }
-
-    fn handle_client_message(&self, msg: ClientMessage, needs_reset: &mut bool, robot_resets: &mut Vec<String>, client_username: &String, client_id: u128) {
-        let client = CLIENTS.get(&client_id);
-
-        if let Some(client) = client {
-            match msg {
-                ClientMessage::ResetAll => { *needs_reset = true; },
-                ClientMessage::ResetRobot(robot_id) => {
-                    if self.is_authorized(*client.key(), &robot_id) {
-                        robot_resets.push(robot_id);
-                    } else {
-                        info!("Client {} not authorized to reset robot {}", client_username, robot_id);
-                    }
-                },
-                ClientMessage::ClaimRobot(robot_id) => {
-                    // Check if robot is free
-                    if self.is_authorized(*client.key(), &robot_id) {
-                        // Claim robot
-                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                            if robot.claimed_by.is_none() {
-                                robot.claimed_by = Some(client_username.clone());
-
-                                // Send claim message to clients
-                                self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
-                            } else {
-                                info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
-                            }
-                        }
-                    } else {
-                        info!("Client {} not authorized to claim robot {}", client_username, robot_id);
-                    }
-                },
-                ClientMessage::UnclaimRobot(robot_id) => {
-                    // Check if robot is free
-                    if self.is_authorized(*client.key(), &robot_id) {
-                        // Claim robot
-                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                            if robot.claimed_by.clone().is_some_and(|claimed_by| &claimed_by == client_username) {
-                                robot.claimed_by = None;
-
-                                // Send Unclaim message to clients
-                                self.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
-                            } else {
-                                info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
-                            }
-                        }
-                    } else {
-                        info!("Client {} not authorized to unclaim robot {}", client_username, robot_id);
-                    }
-                },
-                ClientMessage::EncryptRobot(robot_id) => {
-                    if self.is_authorized(*client.key(), &robot_id) {
-                        if let Some(mut robot) = self.robots.get_mut(&robot_id) {
-                            robot.send_roboscape_message(&[b'P', 0]).unwrap();
-                            robot.send_roboscape_message(&[b'P', 1]).unwrap();
-                        }
-                    } else {
-                        info!("Client {} not authorized to encrypt robot {}", client_username, robot_id);
-                    }
-                },
-                _ => {
-                    warn!("Unhandled client message: {:?}", msg);
-                }
-            }
         }
     }
 
@@ -1136,65 +1031,4 @@ impl Drop for RoomData {
     fn drop(&mut self) {
         self.is_alive.store(false, Ordering::Relaxed);
     }
-}
-
-pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -> Result<(), String> {
-    info!("User {} (peer id {}), attempting to join room {}", username, peer_id, room_id);
-
-    if !ROOMS.contains_key(room_id) {
-        return Err(format!("Room {} does not exist!", room_id));
-    }
-
-    let room = ROOMS.get(room_id).unwrap();
-    
-    // Check password
-    if room.password.clone().is_some_and(|pass| pass != password) {
-        error!("User {} attempted to join room {} with wrong password", username, room_id);
-        return Err("Wrong password!".to_owned());
-    }
-    
-    // Setup connection to room
-    if !room.visitors.contains(&username.to_owned()) {
-        room.visitors.insert(username.to_owned());
-    }
-
-    if !room.sockets.contains_key(username) {
-        room.sockets.insert(username.to_string(), DashSet::new());
-    }
-
-    room.sockets.get_mut(username).unwrap().insert(peer_id);
-    room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
-    
-    // Give client initial update
-    room.send_info_to_client(peer_id);
-    room.send_state_to_client(true, peer_id);
-
-    // Send room info to API
-    room.announce();
-
-    // Initial robot claim data
-    for robot in room.robots.iter() {
-        if robot.value().claimed_by.is_some() {   
-            RoomData::send_to_client(&UpdateMessage::RobotClaimed(robot.key().clone(), robot.value().claimed_by.clone().unwrap_or("".to_owned())), peer_id);
-        }
-    }
-
-    // Send user join event
-    let world_service_id = room.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
-    room.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userJoined".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
-
-    Ok(())
-}
-
-pub async fn create_room(environment: Option<String>, password: Option<String>, edit_mode: bool) -> String {
-    let room = Arc::new(RoomData::new(None, environment, password, edit_mode).await);
-    
-    // Set last interaction to creation time
-    room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
-
-    let room_id = room.name.clone();
-    ROOMS.insert(room_id.to_string(), room.clone());
-    RoomData::launch(room.clone());
-    
-    room_id
 }

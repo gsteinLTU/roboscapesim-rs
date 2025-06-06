@@ -19,7 +19,7 @@ use crossbeam_channel::{Sender, Receiver, self};
 use tokio::time::{Duration, sleep};
 use futures::{SinkExt, FutureExt};
 
-use crate::{CLIENTS, room::join_room};
+use crate::{CLIENTS, room::management::join_room};
 
 /// Local WebSocket port number
 pub static LOCAL_WS_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_WS_PORT")
