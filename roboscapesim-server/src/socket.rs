@@ -108,7 +108,7 @@ pub async fn ws_rx() {
                             } 
                         },
                         Message::Binary(msg) => {
-                            if let Ok(msg) = rmp_serde::from_slice(msg.as_slice()) {
+                            if let Ok(msg) = rmp_serde::from_slice(msg.iter().as_slice()) {
                                 deserialized_msg = Some(msg);
                             } 
                         },
@@ -190,7 +190,7 @@ pub async fn ws_tx() {
                 let r = rmp_serde::to_vec(&msg);
 
                 if let Ok(buf) = r {
-                    sink.feed(Message::Binary(buf)).now_or_never();
+                    sink.feed(Message::Binary(buf.into())).now_or_never();
                 } else if let Err(e) = r {
                     info!("Error serializing message: {:?}", e);
                 }

@@ -1,12 +1,12 @@
 use async_once_cell::OnceCell;
-use axum::{extract::Query, http::{header, Method}, response::IntoResponse, routing::{get, post, put}, Json, Router};
+use axum::{body::Body, extract::Query, http::{HeaderValue, Request}, middleware::Next, response::{IntoResponse, Response}, routing::{get, post, put}, Json, Router};
 use dashmap::DashMap;
 use log::{debug, error, info, trace};
 use once_cell::sync::Lazy;
 use roboscapesim_common::api::{
     CreateRoomRequestData, CreateRoomResponseData, EnvironmentInfo, RoomInfo, ServerStatus, ServerInfo
 };
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use simple_logger::SimpleLogger;
 
 use std::{collections::HashMap, net::SocketAddr, time::{Duration, SystemTime}};
@@ -38,6 +38,17 @@ async fn main() {
         .init()
         .expect("Failed to initialize logger");
     
+    async fn additional_cors(req: Request<Body>, next: Next) -> Result<Response, axum::http::StatusCode> {
+        let mut response = next.run(req).await;
+        
+        // Overwrite or insert the PNA header unconditionally
+        response.headers_mut().insert(
+            "Access-Control-Allow-Private-Network",
+            HeaderValue::from_static("true"),
+        );
+        Ok(response)
+    }
+
     let app = Router::new()
         .route("/server/status", get(get_server_status))
         .route("/rooms/list", get(get_rooms_list))
@@ -48,13 +59,9 @@ async fn main() {
         .route("/server/environments", put(put_server_environments))
         .route("/environments/list", get(get_environments_list))
         .layer(
-            CorsLayer::new()
-                // allow `GET` and `POST` when accessing the resource
-                .allow_methods([Method::GET, Method::POST])
-                // allow requests from any origin
-                .allow_origin(Any)
-                .allow_headers([header::CONTENT_TYPE]),
+            CorsLayer::very_permissive()
         )
+        .layer(axum::middleware::from_fn(additional_cors))
         .layer(tower_http::timeout::TimeoutLayer::new(std::time::Duration::from_secs(10)));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
@@ -139,6 +146,8 @@ async fn get_rooms_list(Query(params): Query<HashMap<String, String>>) -> impl I
 
 /// Create a new room
 async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoResponse {
+    info!("Request to create room for user {} with environment {:?} (edit mode: {})", data.username, data.environment, data.edit_mode);
+
     // Pick server to forward request to
     let active_rooms_per_server = get_active_rooms_per_server();
     // Sort servers by number of active rooms
