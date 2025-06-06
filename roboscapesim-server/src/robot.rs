@@ -327,7 +327,11 @@ impl RobotData {
                 continue;
             } 
 
-            new_whisker_states[0] = true;
+            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
+                if !other.is_sensor() && other.is_enabled() {
+                    new_whisker_states[0] = true;
+                }
+            }
         }
         
         for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_r) {
@@ -336,7 +340,11 @@ impl RobotData {
                 continue;
             } 
 
-            new_whisker_states[1] = true;
+            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
+                if !other.is_sensor() && other.is_enabled() {
+                    new_whisker_states[1] = true;
+                }
+            }
         }
         
 
