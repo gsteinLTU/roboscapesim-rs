@@ -49,7 +49,6 @@ pub(crate) mod metadata;
 
 const COLLECT_PERIOD: Duration = Duration::from_secs(60);
 
-
 #[derive(Derivative)]
 #[derivative(Debug)]
 /// Holds the data for a single room
@@ -100,23 +99,11 @@ impl RoomData {
         let (iotscape_tx, iotscape_rx) = mpsc::channel();
         let netsblox_msg_rx = Arc::new(Mutex::new(netsblox_msg_rx));
         let iotscape_rx = Arc::new(Mutex::new(iotscape_rx));
-        let vm_netsblox_msg_rx = netsblox_msg_rx.clone();
-        let iotscape_netsblox_msg_rx = netsblox_msg_rx.clone();
 
         let obj = Arc::new(RoomData {
             is_alive: Arc::new(AtomicBool::new(true)),
             objects: DashMap::new(),
-            metadata: metadata::RoomMetadata {
-                name: name.clone().unwrap_or_else(|| Self::generate_room_id(None)),
-                environment: environment.clone().unwrap_or("Default".to_owned()),
-                password,
-                hibernate_timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
-                full_timeout: 9 * 60 * 60,
-                visitors: DashSet::new(),
-                edit_mode,
-                hibernating: Arc::new(AtomicBool::new(false)),
-                hibernating_since: Arc::new(AtomicI64::default()),
-            },
+            metadata: RoomMetadata::new(name.clone().unwrap_or_else(|| Self::generate_room_id(None)), environment.clone().unwrap_or("Default".to_owned()), password, if edit_mode { 60 * 30 } else { 60 * 15 }, 9 * 60 * 60, edit_mode),
             last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
             last_update_run: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             last_update_sent: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
@@ -144,73 +131,13 @@ impl RoomData {
         info!("Creating Room {}", obj.metadata.name);
 
         // Create IoTScape service
-        let service = Arc::new(WorldService::create(obj.metadata.name.as_str()).await);
-        let service_id = service.get_service_info().id.clone();
-        service.get_service_info().service.announce().await.unwrap();
-        obj.services.insert((service_id, ServiceType::World), service);
+        setup_world_service(&obj).await;
         
         // Create IoTScape network I/O Task
-        let net_iotscape_tx = iotscape_tx.clone();
-        let services = obj.services.clone();
-        let hibernating = obj.metadata.hibernating.clone();
-        let hibernating_since = obj.metadata.hibernating_since.clone();
-        let is_alive = obj.is_alive.clone();
-        spawn(async move {
-            loop {
-                if !is_alive.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
-                    sleep(Duration::from_millis(50)).await;
-                } else {
-                    for service in services.iter().map(|s| s.key().clone()).collect::<Vec<_>>() {
-                        let service = services.get(&service).unwrap().clone();
-                        
-                        // Handle messages
-                        if service.get_service_info().update().await > 0 {
-                            let service_info = service.get_service_info().clone();
-                            let mut rx = service_info.service.rx_queue.lock().unwrap();
-                            while !rx.is_empty() {
-                                let msg = rx.pop_front().unwrap();
-                                net_iotscape_tx.send((msg, None)).unwrap();
-                            }
-                        }
-                    }
-
-                    sleep(Duration::from_millis(3)).await;
-                }
-            }
-        });
-        
+        setup_networking(&iotscape_tx, &obj);
+         
         // Create VM Task
-        if !edit_mode {
-            obj.vm_manager.get().unwrap().start(iotscape_tx, vm_netsblox_msg_rx);
-        } else {
-            // In edit mode, send IoTScape messages to NetsBlox server
-            let services = obj.services.clone();
-            let mut event_id: u32 = rand::random();
-            let hibernating = obj.metadata.hibernating.clone();
-            let hibernating_since = obj.metadata.hibernating_since.clone();
-            spawn(async move {
-                loop {
-                    while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
-                        if !hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
-                            let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
-                            if let Some(service) = service {
-                                if let Err(e) = service.value().get_service_info().service.send_event(event_id.to_string().as_str(), &msg_type, values).now_or_never().unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send event to NetsBlox server"))) {
-                                    error!("Error sending event to NetsBlox server: {:?}", e);
-                                }
-                                event_id += 1;
-                            } else {
-                                info!("Service {} not found", service_id);
-                            }
-                        }
-                    }
-                    sleep(Duration::from_millis(3)).await;
-                }
-            });
-        }
+        setup_vm(&iotscape_tx, &obj);
 
         info!("Room {} created", obj.metadata.name);
         obj
@@ -340,17 +267,19 @@ impl RoomData {
             for other in in_sensor.iter() {
                 // Check if object left sensor
                 if !new_in_sensor.contains(other.key()) {
-                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerExit".into(), BTreeMap::from([("entity".to_owned(), other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
+                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerExit".into(), BTreeMap::from([("entity".to_owned(), other.key().clone()),("trigger".to_owned(), name.clone())])))
+                        .map_err(|e| error!("Error sending triggerExit message: {:?}", e)).unwrap();
                 }
             }
     
             for new_other in new_in_sensor.iter() {
                 // Check if new object
                 if !in_sensor.contains(new_other.key()) {
-                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerEnter".into(), BTreeMap::from([("entity".to_owned(), new_other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
+                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerEnter".into(), BTreeMap::from([("entity".to_owned(), new_other.key().clone()),("trigger".to_owned(), name.clone())])))
+                        .map_err(|e| error!("Error sending triggerEnter message: {:?}", e)).unwrap();
                 }
             }
-    
+
             *in_sensor = new_in_sensor;
         }
     }
@@ -569,6 +498,86 @@ impl RoomData {
             }
         });
     }
+}
+
+fn setup_vm(iotscape_tx: &mpsc::Sender<(iotscape::Request, Option<netsblox_vm::std_util::AsyncKey<Result<SimpleValue, netsblox_vm::compact_str::CompactString>>>)>, obj: &Arc<RoomData>) {
+    let vm_netsblox_msg_rx = obj.netsblox_msg_rx.clone();
+    let iotscape_netsblox_msg_rx = obj.netsblox_msg_rx.clone();
+
+    if !obj.metadata.edit_mode {
+        obj.vm_manager.get().unwrap().start(&iotscape_tx, vm_netsblox_msg_rx);
+    } else {
+        // In edit mode, send IoTScape messages to NetsBlox server
+        let services = obj.services.clone();
+        let mut event_id: u32 = rand::random();
+        let hibernating = obj.metadata.hibernating.clone();
+        let hibernating_since = obj.metadata.hibernating_since.clone();
+        spawn(async move {
+            loop {
+                while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
+                    if !hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
+                        let service = services.iter().find(|s| s.key().0 == service_id && s.key().1 == service_type);
+                        if let Some(service) = service {
+                            if let Err(e) = service.value().get_service_info().service.send_event(event_id.to_string().as_str(), &msg_type, values).now_or_never().unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to send event to NetsBlox server"))) {
+                                error!("Error sending event to NetsBlox server: {:?}", e);
+                            }
+                            event_id += 1;
+                        } else {
+                            info!("Service {} not found", service_id);
+                        }
+                    }
+                }
+                sleep(Duration::from_millis(3)).await;
+            }
+        });
+    }
+}
+
+fn setup_networking(iotscape_tx: &mpsc::Sender<(iotscape::Request, Option<netsblox_vm::std_util::AsyncKey<Result<SimpleValue, netsblox_vm::compact_str::CompactString>>>)>, obj: &Arc<RoomData>) {
+    let net_iotscape_tx = iotscape_tx.clone();
+    let services = obj.services.clone();
+    let hibernating = obj.metadata.hibernating.clone();
+    let hibernating_since = obj.metadata.hibernating_since.clone();
+    let is_alive = obj.is_alive.clone();
+    spawn(async move {
+        loop {
+            if !is_alive.load(Ordering::Relaxed) {
+                break;
+            }
+
+            if hibernating.load(Ordering::Relaxed) && hibernating_since.load(Ordering::Relaxed) < get_timestamp() + 2 {
+                sleep(Duration::from_millis(50)).await;
+            } else {
+                for service in services.iter().map(|s| s.key().clone()).collect::<Vec<_>>() {
+                    let service = services.get(&service).unwrap().clone();
+                
+                    // Handle messages
+                    if service.get_service_info().update().await > 0 {
+                        let service_info = service.get_service_info().clone();
+                        let mut rx = service_info.service.rx_queue.lock().unwrap();
+                        while !rx.is_empty() {
+                            let msg = rx.pop_front().unwrap();
+                            net_iotscape_tx.send((msg, None)).unwrap();
+                        }
+                    }
+                }
+
+                sleep(Duration::from_millis(3)).await;
+            }
+        }
+    });
+}
+
+async fn setup_world_service(obj: &Arc<RoomData>) {
+    if obj.services.contains_key(&(obj.metadata.name.clone(), ServiceType::World)) {
+        warn!("World service already exists for room {}", obj.metadata.name);
+        return;
+    }
+
+    let service = Arc::new(WorldService::create(obj.metadata.name.as_str()).await);
+    let service_id = service.get_service_info().id.clone();
+    service.get_service_info().service.announce().await.unwrap();
+    obj.services.insert((service_id, ServiceType::World), service);
 }
 
 impl Drop for RoomData {

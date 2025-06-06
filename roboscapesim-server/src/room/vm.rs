@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak, mpsc::Sender};
+use std::sync::{Arc, Weak};
 
 use iotscape::Request;
 use netsblox_vm::{compact_str::CompactString, std_util::AsyncKey};
@@ -26,7 +26,7 @@ impl VMManager {
         self.room.upgrade().map(|room| f(&*room))
     }
 
-    pub fn start(&self, iotscape_tx: Sender<(Request, Option<AsyncKey<Result<SimpleValue, CompactString>>>)>, vm_netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<((String, ServiceType), String, BTreeMap<String, String>)>>>) {
+    pub fn start(&self, iotscape_tx: &mpsc::Sender<(Request, Option<AsyncKey<Result<SimpleValue, CompactString>>>)>, vm_netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<((String, ServiceType), String, BTreeMap<String, String>)>>>) {
         if self.vm_thread.get().is_some() {
             warn!("VM thread already started");
             return;
