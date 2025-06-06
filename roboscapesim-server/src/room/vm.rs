@@ -179,3 +179,15 @@ impl VMManager {
         });
     }
 }
+
+impl Drop for VMManager {
+    fn drop(&mut self) {
+        if let Some(handle) = self.vm_thread.take() {
+            info!("Stopping VM thread");
+            handle.join().unwrap();
+            info!("VM thread stopped");
+        } else {
+            warn!("VM thread was not started or already stopped");
+        }
+    }
+}
