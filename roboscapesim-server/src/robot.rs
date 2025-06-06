@@ -7,9 +7,11 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{Point3,UnitQuaternion, Vector3};
+use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
+use crate::room::clients::ClientsManager;
 use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
@@ -470,7 +472,7 @@ impl RobotData {
                     let duration = u16::from_le_bytes([buf[3], buf[4]]);
     
                     // Beep is only on client-side
-                    RoomData::send_to_clients(&UpdateMessage::Beep(self.id.clone(), freq, duration), clients.iter().map(|c| c.value().clone().into_iter()).flatten());
+                    ClientsManager::send_to_clients(&UpdateMessage::Beep(self.id.clone(), freq, duration), clients.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             },
             b'L' => { 

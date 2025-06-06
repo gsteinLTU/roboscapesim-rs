@@ -25,6 +25,7 @@ use no_deadlocks::{Mutex, RwLock};
 #[cfg(not(feature = "no_deadlocks"))]
 use std::sync::{Mutex, RwLock};
 
+use crate::room::clients::ClientsManager;
 use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS};
@@ -40,6 +41,7 @@ pub(crate) mod management;
 mod messages;
 mod vm;
 pub(crate) mod objects;
+pub(crate) mod clients;
 
 const COLLECT_PERIOD: Duration = Duration::from_secs(60);
 
@@ -57,7 +59,6 @@ pub struct RoomData {
     pub full_timeout: i64,
     pub last_interaction_time: Arc<AtomicI64>,
     pub hibernating: Arc<AtomicBool>,
-    pub sockets: DashMap<String, DashSet<u128>>,
     /// List of usernames of users who have visited the room
     pub visitors: DashSet<String>,
     #[derivative(Debug = "ignore")]
@@ -92,6 +93,7 @@ pub struct RoomData {
     /// VM Manager
     #[derivative(Debug = "ignore")]
     pub vm_manager: OnceCell<Arc<vm::VMManager>>,
+    pub clients_manager: clients::ClientsManager,
 }
 
 pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
@@ -117,7 +119,6 @@ impl RoomData {
             full_timeout:  9 * 60 * 60,
             last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
             hibernating: Arc::new(AtomicBool::new(false)),
-            sockets: DashMap::new(),
             visitors: DashSet::new(),
             last_update_run: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             last_update_sent: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
@@ -135,6 +136,7 @@ impl RoomData {
             next_object_id: Arc::new(AtomicI64::new(0)),
             message_handler: OnceCell::new(),
             vm_manager: OnceCell::new(),
+            clients_manager: clients::ClientsManager::new(),
         });
 
         // Initialize message handler
@@ -218,109 +220,6 @@ impl RoomData {
         obj
     }
 
-    /// Send UpdateMessage to a client
-    pub fn send_to_client(msg: &UpdateMessage, client_id: u128) {
-        let client = CLIENTS.get(&client_id);
-
-        if let Some(client) = client {
-            client.value().tx.send(msg.clone()).unwrap();
-        } else {
-            error!("Client {} not found!", client_id);
-        }
-    }
-
-    /// Send UpdateMessage to all clients in list
-    pub fn send_to_clients(msg: &UpdateMessage, clients: impl Iterator<Item = u128>) {
-        for client_id in clients {
-            let client = CLIENTS.get(&client_id);
-            
-            if let Some(client) = client {
-                client.value().tx.send(msg.clone()).unwrap();
-            } else {
-                error!("Client {} not found!", client_id);
-            }
-        }
-    }
-
-    /// Send the room's current state data to a specific client
-    pub fn send_info_to_client(&self, client: u128) {
-        Self::send_to_client(
-            &UpdateMessage::RoomInfo(
-                RoomState { name: self.name.clone(), roomtime: self.roomtime.read().unwrap().clone(), users: self.visitors.clone().into_iter().collect() }
-            ),
-            client,
-        );
-    }
-
-    /// Send the room's current state data to a specific client
-    pub fn send_state_to_client(&self, full_update: bool, client: u128) {
-        if full_update {
-            Self::send_to_client(
-                &UpdateMessage::Update(self.roomtime.read().unwrap().clone(), true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect()),
-                client,
-            );
-        } else {
-            Self::send_to_client(
-                &UpdateMessage::Update(
-                    self.roomtime.read().unwrap().clone(),
-                    false,
-                    self.objects
-                        .iter()
-                        .filter(|mvp| mvp.value().updated)
-                        .map(|mvp| {
-                            let mut val = mvp.value().clone();
-                            val.visual_info = None;
-                            (mvp.key().clone(), val)
-                        })
-                        .collect::<HashMap<String, ObjectData>>(),
-                ),
-                client,
-            );
-        }
-    }
-
-    /// Send an UpdateMessage to all clients in the room
-    pub fn send_to_all_clients(&self, msg: &UpdateMessage) {
-        for client in &self.sockets {
-            for client_id in client.iter() {
-                Self::send_to_client(
-                    msg,
-                    client_id.to_owned(),
-                );
-            }
-        }
-    }
-
-    /// Send the room's current state data to all clients
-    pub fn send_state_to_all_clients(&self, full_update: bool) {
-        let update_msg: UpdateMessage;
-        if full_update {
-            update_msg = UpdateMessage::Update(self.roomtime.read().unwrap().clone(), true, self.objects.iter().map(|kvp| (kvp.key().to_owned(), kvp.value().to_owned())).collect());
-        } else {
-            update_msg = UpdateMessage::Update(
-                self.roomtime.read().unwrap().clone(),
-                false,
-                self.objects
-                    .iter()
-                    .filter(|mvp| mvp.value().updated)
-                    .map(|mvp| {
-                        let mut val = mvp.value().clone();
-                        val.visual_info = None;
-                        (mvp.key().clone(), val)
-                    })
-                    .collect::<HashMap<String, ObjectData>>(),
-            );
-        }
-
-        self.send_to_all_clients(
-            &update_msg
-        );
-
-        for mut obj in self.objects.iter_mut() {
-            obj.value_mut().updated = false;
-        }
-    }
-
     /// Generate a random hexstring room ID of the given length (default 5)
     fn generate_room_id(length: Option<usize>) -> String {
         let s: String = rand::thread_rng()
@@ -341,25 +240,12 @@ impl RoomData {
             let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
             
             // Check for disconnected clients
-            self.remove_disconnected_clients();
+            self.clients_manager.remove_disconnected_clients(&self);
 
             // Handle client messages
             let mut needs_reset = false;
             let mut robot_resets = vec![];
-            let mut msgs = vec![];
-            for client in self.sockets.iter() {
-                let client_username = client.key().to_owned();
-
-                for client in client.value().iter() {
-                    let client = CLIENTS.get(&client);
-
-                    if let Some(client) = client {
-                        while let Ok(msg) = client.rx.recv_timeout(Duration::ZERO) {
-                            msgs.push((msg, client_username.clone(), client.key().to_owned()));
-                        }
-                    }
-                }
-            }
+            let msgs = self.clients_manager.get_messages();
 
             for (msg, client_username, client_id) in msgs {
                 self.message_handler.get().unwrap().handle_client_message(msg, &mut needs_reset, &mut robot_resets, &client_username, client_id);
@@ -408,13 +294,13 @@ impl RoomData {
                 if (now - *self.last_update_sent.read().unwrap()) > Duration::from_millis(120) {
                     //trace!("Sending incremental state to clients");
                     // Send incremental state to clients
-                    self.send_state_to_all_clients(false);
+                    self.clients_manager.send_state_to_all_clients(self, false);
                     *self.last_update_sent.write().unwrap() = now;
                 }
             } else {
                 // Send full state to clients
                 trace!("Sending full state to clients");
-                self.send_state_to_all_clients(true);
+                self.clients_manager.send_state_to_all_clients(self, true);
                 self.last_full_update_sent.store(time, Ordering::Relaxed);
                 *self.last_update_sent.write().unwrap() = now;
             }
@@ -428,7 +314,7 @@ impl RoomData {
         // Check if room empty/not empty
         self.check_hibernation_state();
     }
-
+    
     fn update_triggers(&self) {
         for mut entry in self.sim.sensors.iter_mut() {
             let ((name, sensor), in_sensor) = entry.pair_mut();
@@ -472,39 +358,13 @@ impl RoomData {
         }
     }
     
-    fn remove_disconnected_clients(&self) {
-        let mut disconnected = vec![];
-        for client_ids in self.sockets.iter() {
-            for client_id in client_ids.value().iter() {
-                if !CLIENTS.contains_key(&client_id) {
-                    disconnected.push((client_ids.key().clone(), client_id.to_owned()));
-                }
-            }
-        }
-        
-        // Remove disconnected clients from the room
-        for (username, client_id) in disconnected {
-            info!("Removing client {} from room {}", client_id, &self.name);
-            self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
-    
-            if self.sockets.get(&username).unwrap().value().is_empty() {
-                self.sockets.remove(&username);
-            }
-    
-            // Send leave message to clients
-            // TODO: handle multiple clients from one username better?
-            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
-            self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
-        }
-    }
-    
     /// Check if the room should hibernate or wake up
     fn check_hibernation_state(&self) {
-        if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
+        if !self.hibernating.load(Ordering::Relaxed) && self.clients_manager.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
             self.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
             info!("{} is now hibernating", self.name);
-        } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
+        } else if self.hibernating.load(Ordering::Relaxed) && !self.clients_manager.sockets.is_empty() {
             self.hibernating.store(false, Ordering::Relaxed);
             info!("{} is no longer hibernating", self.name);
         }
@@ -523,28 +383,28 @@ impl RoomData {
         let mut any_robot_updated = false;
 
         for mut robot in self.robots.iter_mut() {
-            let (updated, msg) = RobotData::robot_update(robot.value_mut(), self.sim.clone(), &self.sockets, delta_time);
+            let (updated, msg) = RobotData::robot_update(robot.value_mut(), self.sim.clone(), &self.clients_manager.sockets, delta_time);
     
             any_robot_updated |= updated;
 
             // Check if claimed by user not in room
             if let Some(claimant) = &robot.value().claimed_by {
-                if !self.sockets.contains_key(claimant) {
+                if !self.clients_manager.sockets.contains_key(claimant) {
                     info!("Robot {} claimed by {} but not in room, unclaiming", robot.key(), claimant);
                     robot.value_mut().claimed_by = None;
-                    RoomData::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                    ClientsManager::send_to_clients(&UpdateMessage::RobotClaimed(robot.key().clone(), "".to_owned()), self.clients_manager.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             }
 
             // Check if message to send
             if let Some(msg) = msg {
                 if let Some(claimant) = &robot.value().claimed_by {
-                    if let Some(client) = self.sockets.get(claimant) {
+                    if let Some(client) = self.clients_manager.sockets.get(claimant) {
                         // Only send to owner
-                        RoomData::send_to_clients(&msg, client.value().clone().into_iter());
+                        ClientsManager::send_to_clients(&msg, client.value().clone().into_iter());
                     }
                 } else {
-                    RoomData::send_to_clients(&msg, self.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
+                    ClientsManager::send_to_clients(&msg, self.clients_manager.sockets.iter().map(|c| c.value().clone().into_iter()).flatten());
                 }
             }
         }
@@ -602,7 +462,7 @@ impl RoomData {
             if let Some(claimant) = &robot.claimed_by {
                 // Make sure not only claim matches but also that claimant is still in-room
                 // Get client username
-                let client = self.sockets.iter().find(|c| c.value().contains(&client));
+                let client = self.clients_manager.sockets.iter().find(|c| c.value().contains(&client));
 
                 // Only test if client is still in room
                 if let Some(client) = client {
@@ -641,7 +501,7 @@ impl RoomData {
             self.robots.remove(id);
         }
 
-        self.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));
+        self.clients_manager.send_to_all_clients(&UpdateMessage::RemoveObject(id.to_string()));
     }
 
     pub(crate) fn remove_all(&self) {
@@ -664,7 +524,7 @@ impl RoomData {
             self.sim.cleanup_robot(r.value());
         }
         self.robots.clear();
-        self.send_to_all_clients(&UpdateMessage::RemoveAll());
+        self.clients_manager.send_to_all_clients(&UpdateMessage::RemoveAll());
         info!("All entities removed from {}", self.name);
     }
 
@@ -729,8 +589,8 @@ impl RoomData {
                         m.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
 
                         // Kick all users out
-                        m.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
-                        m.sockets.clear();
+                        m.clients_manager.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
+                        m.clients_manager.sockets.clear();
                         info!("{} is now hibernating", &m.name);
                     }
                 }

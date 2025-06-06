@@ -95,7 +95,7 @@ impl MessageHandler {
                                     robot.claimed_by = Some(client_username.clone());
 
                                     // Send claim message to clients
-                                    room.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
+                                    room.clients_manager.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), client_username.clone()));
                                 } else {
                                     info!("Robot {} already claimed by {}, but {} tried to claim it", robot_id, robot.claimed_by.clone().unwrap(), client_username.clone());
                                 }
@@ -113,7 +113,7 @@ impl MessageHandler {
                                     robot.claimed_by = None;
 
                                     // Send Unclaim message to clients
-                                    room.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
+                                    room.clients_manager.send_to_all_clients(&UpdateMessage::RobotClaimed(robot_id.clone(), "".to_owned()));
                                 } else {
                                     info!("Robot {} not claimed by {} who tried to unclaim it", robot_id, client_username);
                                 }

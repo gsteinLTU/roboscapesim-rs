@@ -4,7 +4,7 @@ use super::RoomData;
 
 use std::sync::atomic::Ordering;
 
-use crate::services::ServiceType;
+use crate::{room::clients::ClientsManager, services::ServiceType};
 use crate::util::util::get_timestamp;
 
 use dashmap::DashSet;
@@ -33,16 +33,16 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
         room.visitors.insert(username.to_owned());
     }
 
-    if !room.sockets.contains_key(username) {
-        room.sockets.insert(username.to_string(), DashSet::new());
+    if !room.clients_manager.sockets.contains_key(username) {
+        room.clients_manager.sockets.insert(username.to_string(), DashSet::new());
     }
 
-    room.sockets.get_mut(username).unwrap().insert(peer_id);
+    room.clients_manager.sockets.get_mut(username).unwrap().insert(peer_id);
     room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
 
     // Give client initial update
-    room.send_info_to_client(peer_id);
-    room.send_state_to_client(true, peer_id);
+    room.clients_manager.send_info_to_client(&room, peer_id);
+    room.clients_manager.send_state_to_client(&room, true, peer_id);
 
     // Send room info to API
     room.announce();
@@ -50,7 +50,7 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     // Initial robot claim data
     for robot in room.robots.iter() {
         if robot.value().claimed_by.is_some() {   
-            RoomData::send_to_client(&UpdateMessage::RobotClaimed(robot.key().clone(), robot.value().claimed_by.clone().unwrap_or("".to_owned())), peer_id);
+            ClientsManager::send_to_client(&UpdateMessage::RobotClaimed(robot.key().clone(), robot.value().claimed_by.clone().unwrap_or("".to_owned())), peer_id);
         }
     }
 

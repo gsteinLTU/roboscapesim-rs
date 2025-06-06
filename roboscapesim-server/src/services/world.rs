@@ -9,7 +9,7 @@ use rapier3d::prelude::AngVector;
 use roboscapesim_common::{UpdateMessage, VisualInfo, Shape};
 use serde_json::{Number, Value};
 
-use crate::{room::RoomData, services::{lidar::DEFAULT_LIDAR_CONFIGS, proximity::ProximityConfig, waypoint::WaypointConfig, *}, util::util::{bool_val, num_val, str_val, try_num_val}};
+use crate::{room::{clients::ClientsManager, RoomData}, services::{lidar::DEFAULT_LIDAR_CONFIGS, proximity::ProximityConfig, waypoint::WaypointConfig, *}, util::util::{bool_val, num_val, str_val, try_num_val}};
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo}, HandleMessageResult};
 
@@ -51,7 +51,7 @@ impl Service for WorldService {
                 let id = str_val(&msg.params[0]);
                 let text = str_val(&msg.params[1]);
                 let timeout = if msg.params.len() > 2 { try_num_val(&msg.params[2]).ok().map(|t| t as f64) } else { None };
-                RoomData::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
+                ClientsManager::send_to_clients(&UpdateMessage::DisplayText(id, text, timeout), room.clients_manager.sockets.iter().map(|p| p.clone().into_iter()).flatten());
             },
             "removeEntity" => {
                 let id = str_val(&msg.params[0]).to_owned();
@@ -66,7 +66,7 @@ impl Service for WorldService {
                 room.remove_all();
             },
             "clearText" => {
-                RoomData::send_to_clients(&UpdateMessage::ClearText, room.sockets.iter().map(|p| p.clone().into_iter()).flatten());
+                ClientsManager::send_to_clients(&UpdateMessage::ClearText, room.clients_manager.sockets.iter().map(|p| p.clone().into_iter()).flatten());
             },
             "addEntity" => {
                 response = vec![Self::add_entity(None, &msg.params, room).into()];
@@ -382,7 +382,7 @@ impl Service for WorldService {
                 ];
             },
             "listUsers" => {
-                response = room.sockets.iter().map(|kvp| Value::from(kvp.key().clone())).collect::<Vec<_>>();
+                response = room.clients_manager.sockets.iter().map(|kvp| Value::from(kvp.key().clone())).collect::<Vec<_>>();
             },
             f => {
                 info!("Unrecognized function {}", f);
