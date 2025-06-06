@@ -25,7 +25,11 @@ static EXTERNAL_IP: OnceCell<String> = OnceCell::new();
 
 /// Shared reqwest client for making HTTP requests
 pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| 
-    reqwest::ClientBuilder::new().timeout(std::time::Duration::from_secs(2)).build().unwrap()
+    reqwest::ClientBuilder::new()
+        .timeout(std::time::Duration::from_secs(3))
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap()
 );
 
 #[tokio::main]
@@ -83,21 +87,20 @@ async fn main() {
                 let res = REQWEST_CLIENT.get(format!("{}/server/status", server)).timeout(Duration::from_secs(2)).send().await;
 
                 // If error, remove server
-                if !res.is_err() {
-                    continue;
-                }
+                if res.is_err() {
+                    info!("Removing server {} due to timeout", server);
+                    SERVERS.remove(&server);
 
-                SERVERS.remove(&server);
-
-                // Remove rooms on server
-                let mut rooms_to_remove = Vec::new();
-                for room in ROOMS.iter() {
-                    if room.value().server == server {
-                        rooms_to_remove.push(room.key().clone());
+                    // Remove rooms on server
+                    let mut rooms_to_remove = Vec::new();
+                    for room in ROOMS.iter() {
+                        if room.value().server == server {
+                            rooms_to_remove.push(room.key().clone());
+                        }
                     }
-                }
-                for room in rooms_to_remove {
-                    ROOMS.remove(&room);
+                    for room in rooms_to_remove {
+                        ROOMS.remove(&room);
+                    }
                 }
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
@@ -149,17 +152,7 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
     info!("Request to create room for user {} with environment {:?} (edit mode: {})", data.username, data.environment, data.edit_mode);
 
     // Pick server to forward request to
-    let active_rooms_per_server = get_active_rooms_per_server();
-    // Sort servers by number of active rooms
-    let mut active_rooms_per_server = active_rooms_per_server.iter().map(|x| (x.0.clone(), x.1.clone())).collect::<Vec<_>>();
-    active_rooms_per_server.sort_by(|a, b| a.1.cmp(&b.1));
-    active_rooms_per_server = active_rooms_per_server.iter().take_while(|r| r.1 == active_rooms_per_server[0].1).map(|r| r.to_owned()).collect();
-
-    // Pick server with fewest active rooms
-    let mut server = None;
-    if active_rooms_per_server.len() > 0 {
-        server = Some(active_rooms_per_server[rand::random::<usize>() % active_rooms_per_server.len()].0.clone());
-    }
+    let server = get_best_server();
 
     // Return error when no servers available
     if server.is_none() {
@@ -201,6 +194,24 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
     // If success, return created room's info
     let parsed_response: CreateRoomResponseData = parsed_response.unwrap();
     (axum::http::StatusCode::OK, Json(Some(parsed_response)))
+}
+
+/// Get the best server to create a room on
+/// This is the server with the fewest active rooms
+/// If multiple servers have the same number of active rooms, one is picked at random
+fn get_best_server() -> Option<String> {
+    let active_rooms_per_server = get_active_rooms_per_server();
+    // Sort servers by number of active rooms
+    let mut active_rooms_per_server = active_rooms_per_server.iter().map(|x| (x.0.clone(), x.1.clone())).collect::<Vec<_>>();
+    active_rooms_per_server.sort_by(|a, b| a.1.cmp(&b.1));
+    active_rooms_per_server = active_rooms_per_server.iter().take_while(|r| r.1 == active_rooms_per_server[0].1).map(|r| r.to_owned()).collect();
+
+    // Pick server with fewest active rooms
+    let mut server = None;
+    if active_rooms_per_server.len() > 0 {
+        server = Some(active_rooms_per_server[rand::random::<usize>() % active_rooms_per_server.len()].0.clone());
+    }
+    server
 }
 
 /// Get info about a room
@@ -271,7 +282,9 @@ async fn put_server_environments(Json(data): Json<Vec<EnvironmentInfo>>) -> impl
 
 /// Get list of environments
 async fn get_environments_list() -> impl IntoResponse {
-    serde_json::to_string(&ENVIRONMENTS.iter().map(|x| x.value().clone()).collect::<Vec<_>>()).unwrap()
+    serde_json::to_string(&ENVIRONMENTS.iter().map(|x| x.value().clone()).collect::<Vec<_>>()).unwrap_or(
+        "[]".to_owned()
+    )
 }
 
 /// Get number of non-hibernating rooms per server
