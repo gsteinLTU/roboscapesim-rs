@@ -339,31 +339,9 @@ impl RoomData {
             // Calculate delta time
             let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
             let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
-            //info!("{}", delta_time);
             
             // Check for disconnected clients
-            let mut disconnected = vec![];
-            for client_ids in self.sockets.iter() {
-                for client_id in client_ids.value().iter() {
-                    if !CLIENTS.contains_key(&client_id) {
-                        disconnected.push((client_ids.key().clone(), client_id.to_owned()));
-                    }
-                }
-            }
-            // Remove disconnected clients
-            for (username, client_id) in disconnected {
-                info!("Removing client {} from room {}", client_id, &self.name);
-                self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
-
-                if self.sockets.get(&username).unwrap().value().is_empty() {
-                    self.sockets.remove(&username);
-                }
-
-                // Send leave message to clients
-                // TODO: handle multiple clients from one username better?
-                let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
-                self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
-            }
+            self.remove_disconnected_clients();
 
             // Handle client messages
             let mut needs_reset = false;
@@ -397,53 +375,13 @@ impl RoomData {
 
             let time = get_timestamp();
 
+            // Do updates
             self.update_robots(delta_time);
-
             self.message_handler.get().unwrap().get_iotscape_messages();
-
             self.sim.update(delta_time);
 
             // Check for trigger events, this may need to be optimized in the future, possible switching to event-based
-            for mut entry in self.sim.sensors.iter_mut() {
-                let ((name, sensor), in_sensor) = entry.pair_mut();
-                let new_in_sensor = DashSet::new();
-
-                for (mut c1, mut c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersections_with(*sensor) {
-
-                    // Check which handle is the sensor
-                    if c2 == *sensor {
-                        std::mem::swap(&mut c1, &mut c2);
-                    }
-
-                    // Find if other object has name
-                    let other_name = self.get_rigid_body_name_from_collider(c2);
-
-
-                    if let Some(other_name) = other_name {
-                        trace!("Sensor {:?} ({name}) intersecting {:?} {other_name} = {}", c1, c2, intersecting);
-                        if intersecting {
-                            new_in_sensor.insert(other_name);
-                        }
-                    }
-
-                }
-
-                for other in in_sensor.iter() {
-                    // Check if object left sensor
-                    if !new_in_sensor.contains(other.key()) {
-                        self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerExit".into(), BTreeMap::from([("entity".to_owned(), other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
-                    }
-                }
-
-                for new_other in new_in_sensor.iter() {
-                    // Check if new object
-                    if !in_sensor.contains(new_other.key()) {
-                        self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerEnter".into(), BTreeMap::from([("entity".to_owned(), new_other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
-                    }
-                }
-
-                *in_sensor = new_in_sensor;
-            }
+            self.update_triggers();
 
             // Update data before send
             for mut o in self.objects.iter_mut()  {
@@ -464,7 +402,6 @@ impl RoomData {
                 }
             }
             
-
             *self.roomtime.write().unwrap() += delta_time;
 
             if time - self.last_full_update_sent.load(Ordering::Relaxed) < 60 {
@@ -489,23 +426,92 @@ impl RoomData {
         }
 
         // Check if room empty/not empty
+        self.check_hibernation_state();
+    }
+
+    fn update_triggers(&self) {
+        for mut entry in self.sim.sensors.iter_mut() {
+            let ((name, sensor), in_sensor) = entry.pair_mut();
+            let new_in_sensor = DashSet::new();
+    
+            for (mut c1, mut c2, intersecting) in self.sim.narrow_phase.lock().unwrap().intersections_with(*sensor) {
+    
+                // Check which handle is the sensor
+                if c2 == *sensor {
+                    std::mem::swap(&mut c1, &mut c2);
+                }
+    
+                // Find if other object has name
+                let other_name = self.get_rigid_body_name_from_collider(c2);
+    
+    
+                if let Some(other_name) = other_name {
+                    trace!("Sensor {:?} ({name}) intersecting {:?} {other_name} = {}", c1, c2, intersecting);
+                    if intersecting {
+                        new_in_sensor.insert(other_name);
+                    }
+                }
+    
+            }
+    
+            for other in in_sensor.iter() {
+                // Check if object left sensor
+                if !new_in_sensor.contains(other.key()) {
+                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerExit".into(), BTreeMap::from([("entity".to_owned(), other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
+                }
+            }
+    
+            for new_other in new_in_sensor.iter() {
+                // Check if new object
+                if !in_sensor.contains(new_other.key()) {
+                    self.netsblox_msg_tx.send(((name.clone(), ServiceType::Trigger),  "triggerEnter".into(), BTreeMap::from([("entity".to_owned(), new_other.key().clone()),("trigger".to_owned(), name.clone())]))).unwrap();
+                }
+            }
+    
+            *in_sensor = new_in_sensor;
+        }
+    }
+    
+    fn remove_disconnected_clients(&self) {
+        let mut disconnected = vec![];
+        for client_ids in self.sockets.iter() {
+            for client_id in client_ids.value().iter() {
+                if !CLIENTS.contains_key(&client_id) {
+                    disconnected.push((client_ids.key().clone(), client_id.to_owned()));
+                }
+            }
+        }
+        
+        // Remove disconnected clients from the room
+        for (username, client_id) in disconnected {
+            info!("Removing client {} from room {}", client_id, &self.name);
+            self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
+    
+            if self.sockets.get(&username).unwrap().value().is_empty() {
+                self.sockets.remove(&username);
+            }
+    
+            // Send leave message to clients
+            // TODO: handle multiple clients from one username better?
+            let world_service_id = self.services.iter().find(|s| s.key().1 == ServiceType::World).unwrap().value().get_service_info().id.clone();
+            self.netsblox_msg_tx.send(((world_service_id, ServiceType::World), "userLeft".to_string(), BTreeMap::from([("username".to_owned(), username.to_owned())]))).unwrap();
+        }
+    }
+    
+    /// Check if the room should hibernate or wake up
+    fn check_hibernation_state(&self) {
         if !self.hibernating.load(Ordering::Relaxed) && self.sockets.is_empty() {
             self.hibernating.store(true, Ordering::Relaxed);
             self.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
             info!("{} is now hibernating", self.name);
-            self.announce();
-            return;
         } else if self.hibernating.load(Ordering::Relaxed) && !self.sockets.is_empty() {
             self.hibernating.store(false, Ordering::Relaxed);
             info!("{} is no longer hibernating", self.name);
-            self.announce();
         }
-
-        if self.hibernating.load(Ordering::Relaxed) {
-            return;
-        }
+    
+        self.announce();
     }
-
+    
     /// If the given collider's parent is a named rigid body, return the name of the rigid body
     pub(crate) fn get_rigid_body_name_from_collider(&self, c: ColliderHandle) -> Option<String> {
         let other_body = self.sim.collider_set.read().unwrap().get(c).unwrap().parent().unwrap_or_default();
