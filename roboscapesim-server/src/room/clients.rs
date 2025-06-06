@@ -52,7 +52,7 @@ impl ClientsManager {
     pub fn send_info_to_client(&self, room: &RoomData, client: u128) {
         Self::send_to_client(
             &UpdateMessage::RoomInfo(
-                RoomState { name: room.name.clone(), roomtime: room.roomtime.read().unwrap().clone(), users: room.visitors.clone().into_iter().collect() }
+                RoomState { name: room.metadata.name.clone(), roomtime: room.roomtime.read().unwrap().clone(), users: room.metadata.visitors.clone().into_iter().collect() }
             ),
             client,
         );
@@ -149,7 +149,7 @@ impl ClientsManager {
         
         // Remove disconnected clients from the room
         for (username, client_id) in disconnected {
-            info!("Removing client {} from room {}", client_id, &room.name);
+            info!("Removing client {} from room {}", client_id, &room.metadata.name);
             self.sockets.get(&username).and_then(|c| c.value().remove(&client_id));
     
             if self.sockets.get(&username).unwrap().value().is_empty() {

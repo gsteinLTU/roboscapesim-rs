@@ -58,7 +58,7 @@ pub async fn announce_api() {
         tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         let data = (server.clone(), ServerStatus {
             active_rooms: ROOMS.len(),
-            hibernating_rooms: ROOMS.iter().filter(|r| r.hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
+            hibernating_rooms: ROOMS.iter().filter(|r| r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
             max_rooms,
             address: get_server(),
         });
@@ -107,7 +107,7 @@ pub(crate) async fn server_status() -> impl IntoResponse {
     let mut hibernating_rooms: usize = 0;
 
     for r in ROOMS.iter() {
-        if r.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+        if r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             hibernating_rooms += 1;
         }
     }
@@ -140,16 +140,16 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
     let server = get_server().to_owned();
     let room = room.unwrap().clone();
 
-    let visitors = room.visitors.clone().into_iter().collect();
+    let visitors = room.metadata.visitors.clone().into_iter().collect();
     
     
     (axum::http::StatusCode::OK, Json(Some(RoomInfo{
-        id: room.name.clone(),
-        environment: room.environment.clone(),
+        id: room.metadata.name.clone(),
+        environment: room.metadata.environment.clone(),
         server,
         creator: "TODO".to_owned(),
-        has_password: room.password.is_some(),
-        is_hibernating: room.hibernating.load(std::sync::atomic::Ordering::Relaxed),
+        has_password: room.metadata.password.is_some(),
+        is_hibernating: room.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed),
         visitors,
     })))
 }
@@ -163,15 +163,15 @@ fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<Room
     for r in ROOMS.iter() {
 
         // Skip if user not in visitors
-        if !user_filter.is_empty() && !r.visitors.contains(&user_filter) {
+        if !user_filter.is_empty() && !r.metadata.visitors.contains(&user_filter) {
             continue;
         }
 
-        if !include_hibernating && r.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+        if !include_hibernating && r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
             continue;
         }
 
-        rooms.push(r.get_room_info());
+        rooms.push(r.metadata.get_room_info());
     }
     rooms
 }

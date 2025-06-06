@@ -34,13 +34,13 @@ impl VMManager {
 
         self.with_room(|room| {
             let vm_iotscape_tx = iotscape_tx.clone();
-            let hibernating = room.hibernating.clone();
-            let hibernating_since = room.hibernating_since.clone();
-            let id_clone = room.name.clone();
-            let id_clone2 = room.name.clone();
+            let hibernating = room.metadata.hibernating.clone();
+            let hibernating_since = room.metadata.hibernating_since.clone();
+            let id_clone = room.metadata.name.clone();
+            let id_clone2 = room.metadata.name.clone();
             let robots = room.robots.clone();
             let is_alive = room.is_alive.clone();
-            let environment = room.environment.clone();
+            let environment = room.metadata.environment.clone();
 
             self.vm_thread.set(thread::spawn(move || {
                 tokio::runtime::Builder::new_current_thread()

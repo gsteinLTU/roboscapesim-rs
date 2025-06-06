@@ -23,14 +23,14 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     let room = ROOMS.get(room_id).unwrap();
 
     // Check password
-    if room.password.clone().is_some_and(|pass| pass != password) {
+    if room.metadata.password.clone().is_some_and(|pass| pass != password) {
         error!("User {} attempted to join room {} with wrong password", username, room_id);
         return Err("Wrong password!".to_owned());
     }
 
     // Setup connection to room
-    if !room.visitors.contains(&username.to_owned()) {
-        room.visitors.insert(username.to_owned());
+    if !room.metadata.visitors.contains(&username.to_owned()) {
+        room.metadata.visitors.insert(username.to_owned());
     }
 
     if !room.clients_manager.sockets.contains_key(username) {
@@ -67,7 +67,7 @@ pub async fn create_room(environment: Option<String>, password: Option<String>, 
     // Set last interaction to creation time
     room.last_interaction_time.store(get_timestamp(),Ordering::Relaxed);
 
-    let room_id = room.name.clone();
+    let room_id = room.metadata.name.clone();
     ROOMS.insert(room_id.to_string(), room.clone());
     RoomData::launch(room);
 

@@ -91,7 +91,7 @@ async fn update_fn() {
         for kvp in ROOMS.iter() {
             let room = kvp.value();
 
-            if timestamp - room.last_interaction_time.load(Ordering::Relaxed) > room.full_timeout {
+            if timestamp - room.last_interaction_time.load(Ordering::Relaxed) > room.metadata.full_timeout {
                 dead_rooms.push(kvp.key().clone());
                 room.is_alive.store(false, Ordering::Relaxed);
             }

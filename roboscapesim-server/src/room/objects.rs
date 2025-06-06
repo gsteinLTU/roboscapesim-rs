@@ -44,7 +44,7 @@ impl RoomData {
     /// Add a physics object to the room
     pub(crate) fn add_shape(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, visual_info: Option<VisualInfo>, size: Option<Vector3<Real>>, is_kinematic: bool, visual_only: bool) -> String {
         let is_kinematic = is_kinematic || visual_only;
-        let body_name = room.name.to_owned() + "_" + name;
+        let body_name = room.metadata.name.to_owned() + "_" + name;
         let mut position = position;
 
         // Apply jitter with extra objects to prevent lag from overlap
@@ -127,7 +127,7 @@ impl RoomData {
 
     /// Specialized add_shape for triggers
     pub(crate) async fn add_trigger(room: &RoomData, name: &str, position: Vector3<Real>, rotation: AngVector<Real>, size: Option<Vector3<Real>>) -> String {
-        let body_name = room.name.to_owned() + "_" + name;
+        let body_name = room.metadata.name.to_owned() + "_" + name;
         let rigid_body =  RigidBodyBuilder::kinematic_position_based()
             .ccd_enabled(true)
             .translation(position)

@@ -15,7 +15,7 @@ use once_cell::sync::{Lazy, OnceCell};
 use rand::Rng;
 use rapier3d::geometry::ColliderHandle;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder, AngVector, Real};
-use roboscapesim_common::{*, api::RoomInfo};
+use roboscapesim_common::*;
 use tokio::time;
 use tokio::{spawn, time::sleep};
 use std::sync::{Arc, mpsc};
@@ -26,10 +26,13 @@ use no_deadlocks::{Mutex, RwLock};
 use std::sync::{Mutex, RwLock};
 
 use crate::room::clients::ClientsManager;
+use crate::room::messages::MessageHandler;
+use crate::room::metadata::RoomMetadata;
+use crate::room::vm::VMManager;
 use crate::{services::*, UPDATE_FPS};
 use crate::util::util::get_timestamp;
 use crate::{CLIENTS};
-use crate::api::{get_server, REQWEST_CLIENT, get_main_api_server};
+use crate::api::{REQWEST_CLIENT, get_main_api_server};
 use crate::scenarios::load_environment;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::UpperHexadecimal;
@@ -42,8 +45,10 @@ mod messages;
 mod vm;
 pub(crate) mod objects;
 pub(crate) mod clients;
+pub(crate) mod metadata;
 
 const COLLECT_PERIOD: Duration = Duration::from_secs(60);
+
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -52,22 +57,13 @@ pub struct RoomData {
     #[derivative(Debug = "ignore")]
     pub is_alive: Arc<AtomicBool>,
     pub objects: DashMap<String, ObjectData>,
-    pub name: String,
-    pub environment: String,
-    pub password: Option<String>,
-    pub hibernate_timeout: i64,
-    pub full_timeout: i64,
+    pub metadata: RoomMetadata,
     pub last_interaction_time: Arc<AtomicI64>,
-    pub hibernating: Arc<AtomicBool>,
-    /// List of usernames of users who have visited the room
-    pub visitors: DashSet<String>,
     #[derivative(Debug = "ignore")]
     pub last_update_run: Arc<RwLock<OffsetDateTime>>,
     #[derivative(Debug = "ignore")]
     pub last_update_sent: Arc<RwLock<OffsetDateTime>>,
     pub last_full_update_sent: Arc<AtomicI64>,
-    #[derivative(Debug = "ignore")]
-    pub hibernating_since: Arc<AtomicI64>,
     #[derivative(Debug = "ignore")]
     pub roomtime: Arc<RwLock<f64>>,
     pub robots: Arc<DashMap<String, RobotData>>,
@@ -83,17 +79,15 @@ pub struct RoomData {
     pub netsblox_msg_tx: mpsc::Sender<((String, ServiceType), String, BTreeMap<String, String>)>,
     #[derivative(Debug = "ignore")]
     pub netsblox_msg_rx: Arc<Mutex<mpsc::Receiver<((String, ServiceType), String, BTreeMap<String, String>)>>>,
-    /// Whether the room is in edit mode, if so, IoTScape messages are sent to NetsBlox server instead of being handled locally by VM
-    pub edit_mode: bool,
     /// Next object ID to use
     pub next_object_id: Arc<AtomicI64>,
     /// Message handler for this room
     #[derivative(Debug = "ignore")]
-    message_handler: OnceCell<Arc<messages::MessageHandler>>,
+    message_handler: OnceCell<Arc<MessageHandler>>,
     /// VM Manager
     #[derivative(Debug = "ignore")]
-    pub vm_manager: OnceCell<Arc<vm::VMManager>>,
-    pub clients_manager: clients::ClientsManager,
+    pub vm_manager: OnceCell<Arc<VMManager>>,
+    pub clients_manager: ClientsManager,
 }
 
 pub static SHARED_CLOCK: Lazy<Arc<Clock>> = Lazy::new(|| {
@@ -112,14 +106,18 @@ impl RoomData {
         let obj = Arc::new(RoomData {
             is_alive: Arc::new(AtomicBool::new(true)),
             objects: DashMap::new(),
-            name: name.unwrap_or(Self::generate_room_id(None)),
-            environment: environment.clone().unwrap_or("Default".to_owned()),
-            password,
-            hibernate_timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
-            full_timeout:  9 * 60 * 60,
+            metadata: metadata::RoomMetadata {
+                name: name.clone().unwrap_or_else(|| Self::generate_room_id(None)),
+                environment: environment.clone().unwrap_or("Default".to_owned()),
+                password,
+                hibernate_timeout: if edit_mode { 60 * 30 } else { 60 * 15 },
+                full_timeout: 9 * 60 * 60,
+                visitors: DashSet::new(),
+                edit_mode,
+                hibernating: Arc::new(AtomicBool::new(false)),
+                hibernating_since: Arc::new(AtomicI64::default()),
+            },
             last_interaction_time: Arc::new(AtomicI64::new(get_timestamp())),
-            hibernating: Arc::new(AtomicBool::new(false)),
-            visitors: DashSet::new(),
             last_update_run: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             last_update_sent: Arc::new(RwLock::new(SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium))),
             last_full_update_sent: Arc::new(AtomicI64::new(0)),
@@ -131,8 +129,6 @@ impl RoomData {
             iotscape_rx,
             netsblox_msg_tx,
             netsblox_msg_rx,
-            edit_mode,
-            hibernating_since: Arc::new(AtomicI64::default()),
             next_object_id: Arc::new(AtomicI64::new(0)),
             message_handler: OnceCell::new(),
             vm_manager: OnceCell::new(),
@@ -145,10 +141,10 @@ impl RoomData {
         // Initialize VM manager
         obj.vm_manager.set(Arc::new(vm::VMManager::new(Arc::downgrade(&obj)))).unwrap();
 
-        info!("Creating Room {}", obj.name);
+        info!("Creating Room {}", obj.metadata.name);
 
         // Create IoTScape service
-        let service = Arc::new(WorldService::create(obj.name.as_str()).await);
+        let service = Arc::new(WorldService::create(obj.metadata.name.as_str()).await);
         let service_id = service.get_service_info().id.clone();
         service.get_service_info().service.announce().await.unwrap();
         obj.services.insert((service_id, ServiceType::World), service);
@@ -156,8 +152,8 @@ impl RoomData {
         // Create IoTScape network I/O Task
         let net_iotscape_tx = iotscape_tx.clone();
         let services = obj.services.clone();
-        let hibernating = obj.hibernating.clone();
-        let hibernating_since = obj.hibernating_since.clone();
+        let hibernating = obj.metadata.hibernating.clone();
+        let hibernating_since = obj.metadata.hibernating_since.clone();
         let is_alive = obj.is_alive.clone();
         spawn(async move {
             loop {
@@ -194,8 +190,8 @@ impl RoomData {
             // In edit mode, send IoTScape messages to NetsBlox server
             let services = obj.services.clone();
             let mut event_id: u32 = rand::random();
-            let hibernating = obj.hibernating.clone();
-            let hibernating_since = obj.hibernating_since.clone();
+            let hibernating = obj.metadata.hibernating.clone();
+            let hibernating_since = obj.metadata.hibernating_since.clone();
             spawn(async move {
                 loop {
                     while let Ok(((service_id, service_type), msg_type, values)) = iotscape_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
@@ -216,7 +212,7 @@ impl RoomData {
             });
         }
 
-        info!("Room {} created", obj.name);
+        info!("Room {} created", obj.metadata.name);
         obj
     }
 
@@ -234,7 +230,7 @@ impl RoomData {
         //let now = SHARED_CLOCK.read(netsblox_vm::runtime::Precision::Medium);
         let now = OffsetDateTime::now_utc();
         
-        if !self.hibernating.load(Ordering::Relaxed) {
+        if !self.metadata.hibernating.load(Ordering::Relaxed) {
             // Calculate delta time
             let delta_time = (now - *self.last_update_run.read().unwrap()).as_seconds_f64();
             let delta_time = delta_time.clamp(0.5 / UPDATE_FPS, 2.0 / UPDATE_FPS);
@@ -312,7 +308,8 @@ impl RoomData {
         }
 
         // Check if room empty/not empty
-        self.check_hibernation_state();
+        self.metadata.check_hibernation_state(&self.clients_manager);
+        self.announce();
     }
     
     fn update_triggers(&self) {
@@ -356,20 +353,6 @@ impl RoomData {
     
             *in_sensor = new_in_sensor;
         }
-    }
-    
-    /// Check if the room should hibernate or wake up
-    fn check_hibernation_state(&self) {
-        if !self.hibernating.load(Ordering::Relaxed) && self.clients_manager.sockets.is_empty() {
-            self.hibernating.store(true, Ordering::Relaxed);
-            self.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
-            info!("{} is now hibernating", self.name);
-        } else if self.hibernating.load(Ordering::Relaxed) && !self.clients_manager.sockets.is_empty() {
-            self.hibernating.store(false, Ordering::Relaxed);
-            info!("{} is no longer hibernating", self.name);
-        }
-    
-        self.announce();
     }
     
     /// If the given collider's parent is a named rigid body, return the name of the rigid body
@@ -416,7 +399,7 @@ impl RoomData {
 
     /// Reset entire room
     pub(crate) fn reset(&self){
-        info!("Resetting room {}", self.name);
+        info!("Resetting room {}", self.metadata.name);
 
         // Reset robots
         for mut r in self.robots.iter_mut() {
@@ -505,7 +488,7 @@ impl RoomData {
     }
 
     pub(crate) fn remove_all(&self) {
-        info!("Removing all entities from {}", self.name);
+        info!("Removing all entities from {}", self.metadata.name);
         self.objects.clear();
 
         // Remove non-world services
@@ -525,7 +508,7 @@ impl RoomData {
         }
         self.robots.clear();
         self.clients_manager.send_to_all_clients(&UpdateMessage::RemoveAll());
-        info!("All entities removed from {}", self.name);
+        info!("All entities removed from {}", self.metadata.name);
     }
 
     pub(crate) fn count_non_robots(&self) -> usize {
@@ -540,20 +523,8 @@ impl RoomData {
         self.objects.iter().filter(|o| !o.value().is_kinematic).count() - self.robots.len()
     }
 
-    pub(crate) fn get_room_info(&self) -> RoomInfo {
-        RoomInfo{
-            id: self.name.clone(),
-            environment: self.environment.clone(),
-            server: get_server().to_owned(),
-            creator: "TODO".to_owned(),
-            has_password: self.password.is_some(),
-            is_hibernating: self.hibernating.load(std::sync::atomic::Ordering::Relaxed),
-            visitors: self.visitors.clone().into_iter().collect(),
-        }
-    }
-
     pub fn announce(&self) {
-        let room_info = self.get_room_info();
+        let room_info = self.metadata.get_room_info();
         tokio::task::spawn(async move {
             let response = REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
             .json(&vec![room_info])
@@ -582,16 +553,16 @@ impl RoomData {
                 let update_time = get_timestamp();
 
                 //trace!("Updating room {}", &m.name);
-                if !m.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
+                if !m.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
                     // Check timeout
-                    if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.hibernate_timeout {
-                        m.hibernating.store(true, Ordering::Relaxed);
-                        m.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
+                    if update_time - m.last_interaction_time.load(Ordering::Relaxed) > m.metadata.hibernate_timeout {
+                        m.metadata.hibernating.store(true, Ordering::Relaxed);
+                        m.metadata.hibernating_since.store(get_timestamp(), Ordering::Relaxed);
 
                         // Kick all users out
                         m.clients_manager.send_to_all_clients(&roboscapesim_common::UpdateMessage::Hibernating);
                         m.clients_manager.sockets.clear();
-                        info!("{} is now hibernating", &m.name);
+                        info!("{} is now hibernating", &m.metadata.name);
                     }
                 }
                 m.update();
