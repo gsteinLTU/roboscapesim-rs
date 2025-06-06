@@ -14,6 +14,9 @@ pub static EXTERNAL_IP: Mutex<Option<String>> = Mutex::new(None);
 /// SystemTime when API server was started
 pub static LAUNCH_TIME: Lazy<std::time::SystemTime> = Lazy::new(|| std::time::SystemTime::now());
 
+const ANNOUNCEMENT_INTERVAL_SECS: u64 = 60 * 5;
+const HEALTHCHECK_MINIMUM_UPTIME: u64 = 60 * 60 * 16;
+
 pub static API_PORT: Lazy<u16> = Lazy::new(|| std::env::var("LOCAL_API_PORT")
     .unwrap_or_else(|_| "3000".to_string())
     .parse::<u16>()
@@ -41,21 +44,31 @@ pub async fn announce_api() {
     });
     
     let res = REQWEST_CLIENT.post(&url).json(&data).send().await;
-    if let Err(err) = res {
-        error!("Error initial announce to main server: {}", err);
+    match res {
+        Ok(response) => {
+            if !response.status().is_success() {
+                error!("Failed to announce to main server: HTTP {}", response.status());
+            }
+        }
+        Err(err) => error!("Error announcing to main server: {}", err),
     }
 
     // Send environment list
     let res = REQWEST_CLIENT.put(format!("{}/server/environments", get_main_api_server()))
         .json(&LOCAL_SCENARIOS.values().cloned().map(|s| s.into()).collect::<Vec<EnvironmentInfo>>())
         .send().await;
-    if let Err(err) = res {
-        error!("Error sending environments to main server: {}", err);
+    match res {
+        Ok(response) => {
+            if !response.status().is_success() {
+                error!("Failed to announce environments to main server: HTTP {}", response.status());
+            }
+        }
+        Err(err) => error!("Error announcing environments to main server: {}", err),
     }
 
     // Loop sending announcement every 5 minutes
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(ANNOUNCEMENT_INTERVAL_SECS)).await;
         let data = (server.clone(), ServerStatus {
             active_rooms: ROOMS.len(),
             hibernating_rooms: ROOMS.iter().filter(|r| r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed)).count(),
@@ -156,30 +169,23 @@ pub(crate) async fn get_room_info(Query(params): Query<HashMap<String, String>>)
 
 /// Get list of rooms, optionally filtering to a specific user
 fn get_rooms(user_filter: Option<String>, include_hibernating: bool) -> Vec<RoomInfo> {
-    let mut rooms = vec![];
-    
-    let user_filter = user_filter.unwrap_or_default();
-
-    for r in ROOMS.iter() {
-
-        // Skip if user not in visitors
-        if !user_filter.is_empty() && !r.metadata.visitors.contains(&user_filter) {
-            continue;
+    ROOMS.iter().filter(|r| {
+        if let Some(ref user) = user_filter {
+            // Skip if user not in visitors
+            if !user.is_empty() && !r.metadata.visitors.contains(user) {
+                return false;
+            }
         }
 
-        if !include_hibernating && r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed) {
-            continue;
-        }
-
-        rooms.push(r.metadata.get_room_info());
-    }
-    rooms
+        // Skip if hibernating and not requested
+        include_hibernating || !r.metadata.hibernating.load(std::sync::atomic::Ordering::Relaxed)
+    }).map(|r| r.metadata.get_room_info()).collect()
 }
 
 #[debug_handler]
 pub(crate) async fn get_healthcheck() -> impl IntoResponse {
-    // If uptime is less than 10 hours, return 200 OK
-    if LAUNCH_TIME.elapsed().unwrap().as_secs() < 60 * 60 * 16 {
+    // If uptime is less than 16 hours, return 200 OK
+    if LAUNCH_TIME.elapsed().unwrap().as_secs() < HEALTHCHECK_MINIMUM_UPTIME {
         return (axum::http::StatusCode::OK, "Too new");
     }
 
@@ -222,7 +228,9 @@ pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     #[cfg(not(debug_assertions))]
     {
         let url = "http://checkip.amazonaws.com";
-        REQWEST_CLIENT.get(url).send().await?.text().await
+        let response = REQWEST_CLIENT.get(url).send().await?;
+        let text = response.text().await?;
+        Ok(text.trim().to_string())
     }
 }
 
