@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use std::collections::BTreeMap;
 
 use super::RoomData;
