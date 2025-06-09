@@ -6,7 +6,8 @@ use log::{error, trace};
 use roboscapesim_common::UpdateMessage;
 use rapier3d::prelude::*;
 
-use crate::robot::{DriveState, RobotData, SET_DISTANCE_DRIVE_SPEED};
+use crate::robot::motor::{DriveState, SET_DISTANCE_DRIVE_SPEED};
+use crate::robot::RobotData;
 use crate::room::clients::ClientsManager;
 use crate::simulation::Simulation;
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -180,8 +181,8 @@ fn process_set_speed_message(robot: &mut RobotData, buf: [u8; 512], had_messages
         let s1 = i16::from_le_bytes([buf[1], buf[2]]);
         let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-        robot.motor_data.speed_l = -s2 as f32 * robot.speed_scale / 32.0;
-        robot.motor_data.speed_r = -s1 as f32 * robot.speed_scale / 32.0;
+        robot.motor_data.speed_l = -s2 as f32 * robot.motor_data.speed_scale / 32.0;
+        robot.motor_data.speed_r = -s1 as f32 * robot.motor_data.speed_scale / 32.0;
     }
 }    
 
@@ -202,11 +203,11 @@ fn process_drive_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &m
     
         // Check prevents robots from inching forwards from "drive 0 0"
         if f64::abs(robot.motor_data.distance_l) > f64::EPSILON {
-            robot.motor_data.speed_l = f64::signum(robot.motor_data.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
+            robot.motor_data.speed_l = f64::signum(robot.motor_data.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.motor_data.speed_scale;
         }
 
         if f64::abs(robot.motor_data.distance_r) > f64::EPSILON {
-            robot.motor_data.speed_r = f64::signum(robot.motor_data.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
+            robot.motor_data.speed_r = f64::signum(robot.motor_data.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.motor_data.speed_scale;
         }
     }
 }

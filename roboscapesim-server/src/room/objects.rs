@@ -9,7 +9,7 @@ impl RoomData {
         let scale: f32 = scale.unwrap_or(1.0).clamp(1.0, 5.0);
 
         let mut robot = RobotPhysics::create_robot_body(room.sim.clone(), None, Some(position), Some(orientation), Some(scale));
-        robot.speed_scale = speed_mult;
+        robot.motor_data.speed_scale = speed_mult;
         let robot_id: String = "robot_".to_string() + robot.id.as_str();
         room.sim.rigid_body_labels.insert(robot_id.clone(), robot.physics.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {

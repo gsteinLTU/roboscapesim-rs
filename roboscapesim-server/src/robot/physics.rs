@@ -1,12 +1,12 @@
 use std::{sync::Arc, time::SystemTime};
 
-use log::info;
+use log::{error, info, trace};
 use nalgebra::{Point3, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
 use roboscapesim_common::{Transform, Orientation};
 use std::f32::consts::FRAC_PI_2;
 
-use crate::{robot::{RobotData, RobotMotorData}, simulation::{Simulation, SCALE}, util::{extra_rand::generate_random_mac_address, util::bytes_to_hex_string}};
+use crate::{robot::{messages::send_roboscape_message, RobotData, RobotMotorData}, simulation::{Simulation, SCALE}, util::{extra_rand::generate_random_mac_address, util::bytes_to_hex_string}};
 
 
 /// Physics data for the robot, used for simulation
@@ -151,7 +151,6 @@ impl RobotPhysics {
                 claimed_by: None,
                 claimable: true,
                 start_time: SystemTime::now(),
-                speed_scale: 1.0,
                 last_message_time: SystemTime::UNIX_EPOCH,
                 min_message_spacing: 10,
             }
@@ -206,4 +205,59 @@ impl RobotPhysics {
             }
         }
     }
+
+    pub fn set_wheel_speeds(robot: &mut RobotData, sim: &Arc<Simulation>, speed_l: f32, speed_r: f32) {
+        let jointset = &mut sim.multibody_joint_set.write().unwrap();
+        let joint1 = jointset.get_mut(robot.physics.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
+        joint1.joint.data.set_motor_velocity(JointAxis::AngZ, speed_l, 4.0);
+
+        let joint2 = jointset.get_mut(robot.physics.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
+        joint2.joint.data.set_motor_velocity(JointAxis::AngZ, speed_r, 4.0);
+    }
+
+    pub fn check_whiskers(robot: &mut RobotData, sim: Arc<Simulation>) {
+        let mut new_whisker_states = [false, false];
+
+        // Check whiskers
+        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_l) {
+            // Ignore non-intersections 
+            if !c.2 {
+                continue;
+            } 
+
+            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
+                if !other.is_sensor() && other.is_enabled() {
+                    new_whisker_states[0] = true;
+                }
+            }
+        }
+            
+        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_r) {
+            // Ignore non-intersections 
+            if !c.2 {
+                continue;
+            } 
+
+            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
+                if !other.is_sensor() && other.is_enabled() {
+                    new_whisker_states[1] = true;
+                }
+            }
+        }
+            
+
+        // Send message if whisker changed
+        if new_whisker_states != robot.whisker_states {
+            robot.whisker_states = new_whisker_states;
+            // Whiskers in message are inverted
+            let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
+
+            trace!("Whisker states: {:?}", robot.whisker_states);
+
+            if let Err(e) = send_roboscape_message(robot, &message) {
+                error!("{}", e);
+            }
+        }
+    }
+
 }

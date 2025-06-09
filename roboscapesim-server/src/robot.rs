@@ -4,11 +4,12 @@ use std::time::{SystemTime, Duration};
 
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
-use log::{error, trace};
+use log::error;
 use roboscapesim_common::{UpdateMessage, Transform};
 use rapier3d::prelude::*;
 
 use crate::robot::messages::send_roboscape_message;
+use crate::robot::motor::RobotMotorData;
 use crate::robot::physics::RobotPhysics;
 use crate::simulation::Simulation;
 use crate::util::traits::resettable::Resettable;
@@ -16,29 +17,13 @@ use crate::util::util::get_timestamp;
 
 pub mod messages;
 pub mod physics;
-
-/// Data for robot motors, used for controlling speed and distance
-#[derive(Default, Debug)]
-pub struct RobotMotorData {
-    /// Speed of left wheel
-    pub speed_l: f32,
-    /// Speed of right wheel
-    pub speed_r: f32,
-    /// Ticks for left wheel
-    pub ticks: [f64; 2],
-    /// Current drive state
-    pub drive_state: DriveState,
-    /// Distance to travel for left wheel
-    pub distance_l: f64,
-    /// Distance to travel for right wheel
-    pub distance_r: f64,
-}
+pub mod motor;
 
 /// Represents a robot in the simulation
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct RobotData {
-    /// Main body of robot
+    /// Physics data for the robot
     pub physics: RobotPhysics,
     /// Socket to NetsBlox server, or None if not connected
     pub socket: Option<UdpSocket>,
@@ -58,28 +43,9 @@ pub struct RobotData {
     /// Whether this robot can be claimed, non-claimable robots are intended for scenario controlled robots
     pub claimable: bool,
     pub start_time: SystemTime,
-    pub speed_scale: f32,
     pub last_message_time: SystemTime,
     pub min_message_spacing: u128,
 }
-
-/// Possible drive modes
-#[derive(Debug, PartialEq, Eq)]
-pub enum DriveState {
-    /// Run wheels at requested speed
-    SetSpeed,
-    /// Drive until distance reached
-    SetDistance
-}
-
-impl Default for DriveState {
-    fn default() -> Self {
-        DriveState::SetSpeed
-    }
-}
-
-/// Speed used when using SetDistance
-const SET_DISTANCE_DRIVE_SPEED: f32 = 75.0 / -32.0;
 
 impl RobotData {
     pub fn setup_robot_socket(robot: &mut RobotData) {
@@ -115,31 +81,7 @@ impl RobotData {
             }
         }
 
-        if robot.motor_data.drive_state == DriveState::SetDistance {
-
-            // Stop robot if distance reached
-            if f64::abs(robot.motor_data.distance_l) < f64::abs(robot.motor_data.speed_l as f64 * -32.0 * dt) {
-                trace!("Distance reached L");
-                robot.motor_data.speed_l = 0.0;
-            } else {
-                robot.motor_data.distance_l -= (robot.motor_data.speed_l * -32.0) as f64 * dt;
-            }
-
-            if f64::abs(robot.motor_data.distance_r) < f64::abs(robot.motor_data.speed_r as f64 * -32.0 * dt) {
-                trace!("Distance reached R");
-                robot.motor_data.speed_r = 0.0;
-            } else {
-                robot.motor_data.distance_r -= (robot.motor_data.speed_r * -32.0) as f64 * dt;
-            }
-
-            if robot.motor_data.speed_l == 0.0 && robot.motor_data.speed_r == 0.0 {
-                robot.motor_data.drive_state = DriveState::SetSpeed;
-            }
-        }
-
-        // Update ticks
-        robot.motor_data.ticks[0] += (robot.motor_data.speed_l * robot.speed_scale * -32.0) as f64 * dt;
-        robot.motor_data.ticks[1] += (robot.motor_data.speed_r * robot.speed_scale * -32.0) as f64 * dt;
+        robot.motor_data.update_wheel_state(dt);
 
         let mut msg = None;
         
@@ -152,58 +94,8 @@ impl RobotData {
             }
         }
 
-        // Apply calculated speeds to wheels
-        {
-            let jointset = &mut sim.multibody_joint_set.write().unwrap();
-            let joint1 = jointset.get_mut(robot.physics.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
-            joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.motor_data.speed_l, 4.0);
-
-            let joint2 = jointset.get_mut(robot.physics.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
-            joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.motor_data.speed_r, 4.0);
-        }
-        
-        let mut new_whisker_states = [false, false];
-
-        // Check whiskers
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_l) {
-            // Ignore non-intersections 
-            if !c.2 {
-                continue;
-            } 
-
-            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
-                if !other.is_sensor() && other.is_enabled() {
-                    new_whisker_states[0] = true;
-                }
-            }
-        }
-        
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_r) {
-            // Ignore non-intersections 
-            if !c.2 {
-                continue;
-            } 
-
-            if let Some(other) = sim.collider_set.read().unwrap().get(c.0) {
-                if !other.is_sensor() && other.is_enabled() {
-                    new_whisker_states[1] = true;
-                }
-            }
-        }
-        
-
-        // Send message if whisker changed
-        if new_whisker_states != robot.whisker_states {
-            robot.whisker_states = new_whisker_states;
-            // Whiskers in message are inverted
-            let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
-
-            trace!("Whisker states: {:?}", robot.whisker_states);
-
-            if let Err(e) = send_roboscape_message(robot, &message) {
-                error!("{}", e);
-            }
-        }
+        RobotPhysics::set_wheel_speeds(robot, &sim, robot.motor_data.speed_l, robot.motor_data.speed_r);
+        RobotPhysics::check_whiskers(robot, sim);
 
         (had_messages, msg)
     }
