@@ -150,32 +150,53 @@ impl PartialEq for ServiceInfo {
 impl ServiceInfo {
     /// Enqueue a response to a request
     pub fn enqueue_response_to(&self, request: &Request, params: Result<Vec<Value>, String>) {
-        // Check size of response
-        if let Ok(mut p) = params.clone() {
-            let size: usize = p.iter().map(|v| v.to_string().len()).sum();
+        let params = match params {
+            Ok(p) => p,
+            Err(e) => return self.enqueue_udp_response(request, Err(e)),
+        };
 
-            // If response is too large, send via HTTP
-            if size > MAX_UDP_RESPONSE_SIZE {
-                if p.len() > 1 || (p.len() >= 1 && p[0].is_array()) {
-                    p = vec![p.into()];
-                }
-                // Send response via HTTP
-                let service = self.service.clone();
-                let request = request.clone();
-                tokio::spawn(async move {
-                    let enqueued = service.enqueue_response_to_http(&RESPONSE_ENDPOINT, request, Ok(p)).await;
-                    if let Err(e) = enqueued {
-                        error!("Could not enqueue (HTTP) response: {}", e);
-                    }
-                });
-                return; 
-            } 
-        }
-        if let Err(e) = self.service.enqueue_response_to(request.clone(), params).now_or_never().unwrap_or_else(|| Err(std::io::Error::new(std::io::ErrorKind::Other, "Could not enqueue response".to_string()))) {
-            error!("Could not enqueue response: {}", e);
+        // Check size of response
+        let size: usize = params.iter().map(|v| v.to_string().len()).sum();
+
+        // If response is too large, send via HTTP
+        if size > MAX_UDP_RESPONSE_SIZE {
+            self.enqueue_http_response(request, params);
+        } else {
+            // Otherwise, send via UDP
+            self.enqueue_udp_response(request, Ok(params));
+        } 
+    }
+
+    fn enqueue_udp_response(&self, request: &Request, params: Result<Vec<Value>, String>) {
+        if let Err(e) = self.service
+            .enqueue_response_to(request.clone(), params)
+            .now_or_never()
+            .unwrap_or_else(|| Err(std::io::Error::new(
+                std::io::ErrorKind::Other, 
+                "Could not enqueue response"
+            ))) {
+            error!("Could not enqueue UDP response: {}", e);
         }
     }
-    
+
+    fn enqueue_http_response(&self, request: &Request, mut params: Vec<Value>) {
+        // Wrap in array if needed to reduce size
+        if params.len() > 1 || (params.len() >= 1 && params[0].is_array()) {
+            params = vec![params.into()];
+        }
+
+        let service = self.service.clone();
+        let request = request.clone();
+        tokio::spawn(async move {
+            if let Err(e) = service
+                .enqueue_response_to_http(&RESPONSE_ENDPOINT, request, Ok(params))
+                .await 
+            {
+                error!("Could not enqueue HTTP response: {}", e);
+            }
+        });
+    }
+
     /// Update the service, return number of messages in queue
     pub async fn update(&self) -> usize {
         self.service.poll().await;
