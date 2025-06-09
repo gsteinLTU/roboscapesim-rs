@@ -7,16 +7,15 @@ use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
 use log::{error, info, trace};
 use nalgebra::{Point3,UnitQuaternion, Vector3};
-use reqwest::Client;
 use roboscapesim_common::{UpdateMessage, Transform, Orientation};
 use rapier3d::prelude::*;
 
-use crate::room::clients::ClientsManager;
-use crate::room::RoomData;
 use crate::simulation::{Simulation, SCALE};
 use crate::util::extra_rand::generate_random_mac_address;
 use crate::util::traits::resettable::Resettable;
 use crate::util::util::{bytes_to_hex_string, get_timestamp};
+
+mod messages;
 
 /// Represents a robot in the simulation
 #[derive(Derivative)]
@@ -306,7 +305,7 @@ impl RobotData {
 
         if let Ok(size) = size {
             if size > 0 {
-                robot.process_roboscape_message(buf, &mut had_messages, clients, &sim, &mut msg, size);
+                messages::process_roboscape_message(robot, buf, &mut had_messages, clients, &sim, &mut msg, size);
             }
         }
 
@@ -409,141 +408,6 @@ impl RobotData {
             }
         }
     }
-
-    fn process_roboscape_message(&mut self, buf: [u8; 512], had_messages: &mut bool, clients: &DashMap<String, DashSet<u128>>, sim: &Arc<Simulation>, msg: &mut Option<UpdateMessage>, size: usize) {
-        match &buf[0] {
-            b'n' | b'L' | b'I' | b'R' | b'T' => {
-                // Message should not be rejected no matter the timing of last message
-            },
-            _ => {
-                if self.min_message_spacing > 0 && self.last_message_time.elapsed().unwrap().as_millis() < self.min_message_spacing {
-                    // Reject message if too soon after last message
-                    trace!("Rejecting message due to timing");
-                    return;
-                }
-            }
-        }
-
-        match &buf[0] {
-            b'D' => { 
-                trace!("OnDrive");
-                *had_messages = true;
-    
-                if buf.len() > 4 {
-                    self.drive_state = DriveState::SetDistance;
-    
-                    let d1 = i16::from_le_bytes([buf[1], buf[2]]);
-                    let d2 = i16::from_le_bytes([buf[3], buf[4]]);
-    
-                    self.distance_l = d2 as f64;
-                    self.distance_r = d1 as f64;
-    
-                    trace!("OnDrive {} {}", d1, d2);
-    
-                    // Check prevents robots from inching forwards from "drive 0 0"
-                    if f64::abs(self.distance_l) > f64::EPSILON {
-                        self.speed_l = f64::signum(self.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * self.speed_scale;
-                    }
-    
-                    if f64::abs(self.distance_r) > f64::EPSILON {
-                        self.speed_r = f64::signum(self.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * self.speed_scale;
-                    }                    
-                }
-            },
-            b'S' => { 
-                trace!("OnSetSpeed");
-                self.drive_state = DriveState::SetSpeed;
-                *had_messages = true;
-    
-                if buf.len() > 4 {
-                    let s1 = i16::from_le_bytes([buf[1], buf[2]]);
-                    let s2 = i16::from_le_bytes([buf[3], buf[4]]);
-    
-                    self.speed_l = -s2 as f32 * self.speed_scale / 32.0;
-                    self.speed_r = -s1 as f32 * self.speed_scale / 32.0;
-                }
-            },
-            b'B' => { 
-                trace!("OnBeep");
-                *had_messages = true;
-            
-                if buf.len() > 4 {
-                    let freq = u16::from_le_bytes([buf[1], buf[2]]);
-                    let duration = u16::from_le_bytes([buf[3], buf[4]]);
-    
-                    // Beep is only on client-side
-                    ClientsManager::send_to_clients(&UpdateMessage::Beep(self.id.clone(), freq, duration), clients.iter().map(|c| c.value().clone().into_iter()).flatten());
-                }
-            },
-            b'L' => { 
-                trace!("OnSetLED");
-                *had_messages = true;
-            },
-            b'R' => { 
-                trace!("OnGetRange");
-                *had_messages = true;
-    
-                // Setup raycast
-                let rigid_body_set = &sim.rigid_body_set.read().unwrap();
-                let body = rigid_body_set.get(self.body_handle).unwrap();
-                let body_pos = body.translation();
-                let offset = body.rotation() * vector![0.17, 0.05, 0.0];
-                let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
-                let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
-                let max_toi = 3.0;
-                let solid = true;
-                let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(self.body_handle);
-    
-                let mut distance = (max_toi * 100.0) as u16;
-                if let Some((handle, toi)) = sim.query_pipeline.lock().unwrap().cast_ray(rigid_body_set,
-                    &sim.collider_set.read().unwrap(), &ray, max_toi, solid, filter
-                ) {
-                    // The first collider hit has the handle `handle` and it hit after
-                    // the ray travelled a distance equal to `ray.dir * toi`.
-                    let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-                    distance = (toi * 100.0) as u16;
-                    trace!("Collider {:?} hit at point {}", handle, hit_point);
-                }
-    
-                // Send result message
-                let dist_bytes = u16::to_le_bytes(distance);
-                if let Err(e) = self.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
-                    error!("{}", e);
-                }
-            },
-            b'T' => { 
-                trace!("OnGetTicks");
-                *had_messages = true;
-                let left_ticks = (self.ticks[0] as i32).to_le_bytes();
-                let right_ticks = (self.ticks[1] as i32).to_le_bytes();
-                let mut message: [u8; 9] = [0; 9];
-    
-                // Create message
-                message[0] = b'T';
-                message[1..5].copy_from_slice(&right_ticks);
-                message[5..9].copy_from_slice(&left_ticks);
-    
-                if let Err(e) = self.send_roboscape_message(&message) {
-                    error!("{}", e);
-                }
-            },
-            b'n' => { 
-                trace!("OnSetNumeric");
-                // TODO: Decide on supporting this better, for now show encrypt numbers
-                *had_messages = true;
-                *msg = Some(UpdateMessage::DisplayText(self.id.clone(), buf[1].to_string(), Some(1.0)));
-            },
-            b'P' => {
-                trace!("OnButtonPress");         
-            },
-            _ => {}
-        }
-
-        self.last_message_time = SystemTime::now();
-        
-        // Return to sender
-        self.send_roboscape_message(&buf[0..size]).unwrap();
-    }    
 }
 
 impl Resettable for RobotData {
