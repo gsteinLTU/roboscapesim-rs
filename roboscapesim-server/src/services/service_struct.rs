@@ -10,19 +10,26 @@ use serde_json::Value;
 use crate::room::RoomData;
 use super::HandleMessageResult;
 
-static SERVER: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_SERVER").unwrap_or("52.73.65.98".to_string()));
-static PORT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_PORT").unwrap_or("1978".to_string()));
-static ANNOUNCE_ENDPOINT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_ANNOUNCE_ENDPOINT").unwrap_or("https://services.netsblox.org/routes/iotscape/announce".to_string()));
-static RESPONSE_ENDPOINT: LazyLock<String> = LazyLock::new(|| std::env::var("IOTSCAPE_RESPONSE_ENDPOINT").unwrap_or("https://services.netsblox.org/routes/iotscape/response".to_string()));
+static SERVER: LazyLock<String> = LazyLock::new(|| 
+    std::env::var("IOTSCAPE_SERVER").unwrap_or_else(|_| "52.73.65.98".to_string()));
+static PORT: LazyLock<String> = LazyLock::new(|| 
+    std::env::var("IOTSCAPE_PORT").unwrap_or_else(|_| "1978".to_string()));
+static ANNOUNCE_ENDPOINT: LazyLock<String> = LazyLock::new(|| 
+    std::env::var("IOTSCAPE_ANNOUNCE_ENDPOINT").unwrap_or_else(|_| "https://services.netsblox.org/routes/iotscape/announce".to_string()));
+static RESPONSE_ENDPOINT: LazyLock<String> = LazyLock::new(|| 
+    std::env::var("IOTSCAPE_RESPONSE_ENDPOINT").unwrap_or_else(|_| "https://services.netsblox.org/routes/iotscape/response".to_string()));
+
+pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(225);
+const MAX_UDP_RESPONSE_SIZE: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceType {
     World, Entity, PositionSensor, LIDAR, ProximitySensor, Trigger, WaypointList, Unknown
 }
 
-impl Into<ServiceType> for String {
-    fn into(self) -> ServiceType {
-        match self.as_str() {
+impl From<String> for ServiceType {
+    fn from(value: String) -> ServiceType {
+        match value.as_str() {
             "RoboScapeWorld" => ServiceType::World,
             "RoboScapeEntity" => ServiceType::Entity,
             "PositionSensor" => ServiceType::PositionSensor,
@@ -31,24 +38,24 @@ impl Into<ServiceType> for String {
             "RoboScapeTrigger" => ServiceType::Trigger,
             "WaypointList" => ServiceType::WaypointList,
             _ => {
-                error!("Unrecognized service type {}", self);
+                error!("Unrecognized service type {}", value);
                 ServiceType::Unknown
             },
         }
     }
 }
 
-impl Into<&'static str> for ServiceType {
-    fn into(self) -> &'static str {
-        match self {
-            Self::World => "RoboScapeWorld",
-            Self::Entity => "RoboScapeEntity",
-            Self::PositionSensor => "PositionSensor",
-            Self::LIDAR => "LIDARSensor",
-            Self::ProximitySensor => "ProximitySensor",
-            Self::Trigger => "RoboScapeTrigger",
-            Self::WaypointList => "WaypointList",
-            Self::Unknown => "Unknown",
+impl From<ServiceType> for &'static str {
+    fn from(value: ServiceType) -> &'static str {
+        match value {
+            ServiceType::World => "RoboScapeWorld",
+            ServiceType::Entity => "RoboScapeEntity",
+            ServiceType::PositionSensor => "PositionSensor",
+            ServiceType::LIDAR => "LIDARSensor",
+            ServiceType::ProximitySensor => "ProximitySensor",
+            ServiceType::Trigger => "RoboScapeTrigger",
+            ServiceType::WaypointList => "WaypointList",
+            ServiceType::Unknown => "Unknown",
         }
     }
 }
@@ -101,6 +108,7 @@ impl ServiceInfo {
             definition,
             (SERVER.to_owned() + ":" + &PORT).parse().unwrap(),
         ).now_or_never().unwrap());
+        
         service.into()
     }
 }
@@ -144,8 +152,10 @@ impl ServiceInfo {
     pub fn enqueue_response_to(&self, request: &Request, params: Result<Vec<Value>, String>) {
         // Check size of response
         if let Ok(mut p) = params.clone() {
-            let size = p.iter().map(|v| v.to_string().len()).sum::<usize>();
-            if size > 500 {
+            let size: usize = p.iter().map(|v| v.to_string().len()).sum();
+
+            // If response is too large, send via HTTP
+            if size > MAX_UDP_RESPONSE_SIZE {
                 if p.len() > 1 || (p.len() >= 1 && p[0].is_array()) {
                     p = vec![p.into()];
                 }
@@ -183,5 +193,3 @@ impl ServiceInfo {
         self.service.rx_queue.lock().unwrap().len()
     }
 }
-
-pub const DEFAULT_ANNOUNCE_PERIOD: Duration = Duration::from_secs(225);
