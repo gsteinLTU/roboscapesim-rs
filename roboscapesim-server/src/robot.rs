@@ -1,38 +1,47 @@
 use std::net::UdpSocket;
 use std::sync::Arc;
 use std::time::{SystemTime, Duration};
-use std::f32::consts::FRAC_PI_2;
 
 use dashmap::{DashMap, DashSet};
 use derivative::Derivative;
-use log::{error, info, trace};
-use nalgebra::{Point3,UnitQuaternion, Vector3};
-use roboscapesim_common::{UpdateMessage, Transform, Orientation};
+use log::{error, trace};
+use roboscapesim_common::{UpdateMessage, Transform};
 use rapier3d::prelude::*;
 
-use crate::simulation::{Simulation, SCALE};
-use crate::util::extra_rand::generate_random_mac_address;
+use crate::robot::messages::send_roboscape_message;
+use crate::robot::physics::RobotPhysics;
+use crate::simulation::Simulation;
 use crate::util::traits::resettable::Resettable;
-use crate::util::util::{bytes_to_hex_string, get_timestamp};
+use crate::util::util::get_timestamp;
 
-mod messages;
+pub mod messages;
+pub mod physics;
+
+/// Data for robot motors, used for controlling speed and distance
+#[derive(Default, Debug)]
+pub struct RobotMotorData {
+    /// Speed of left wheel
+    pub speed_l: f32,
+    /// Speed of right wheel
+    pub speed_r: f32,
+    /// Ticks for left wheel
+    pub ticks: [f64; 2],
+    /// Current drive state
+    pub drive_state: DriveState,
+    /// Distance to travel for left wheel
+    pub distance_l: f64,
+    /// Distance to travel for right wheel
+    pub distance_r: f64,
+}
 
 /// Represents a robot in the simulation
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct RobotData {
     /// Main body of robot
-    pub body_handle: RigidBodyHandle,
-    /// Joints connecting wheels to body
-    pub wheel_joints: Vec<MultibodyJointHandle>,
-    /// Physics bodies for wheels
-    pub wheel_bodies: Vec<RigidBodyHandle>,
+    pub physics: RobotPhysics,
     /// Socket to NetsBlox server, or None if not connected
     pub socket: Option<UdpSocket>,
-    /// Desired speed of left wheel
-    pub speed_l: f32,
-    /// Desired speed of right wheel
-    pub speed_r: f32,
     /// Last time a heartbeat was sent
     pub last_heartbeat: i64,
     /// String representation of MAC address
@@ -42,13 +51,7 @@ pub struct RobotData {
     pub whisker_l: ColliderHandle,
     pub whisker_r: ColliderHandle,
     pub whisker_states: [bool; 2],
-    /// Distance traveled by each wheel
-    pub ticks: [f64; 2],
-    pub drive_state: DriveState,
-    /// Distance to travel for SetDistance
-    pub distance_l: f64,
-    /// Distance to travel for SetDistance
-    pub distance_r: f64,
+    pub motor_data: RobotMotorData,
     pub initial_transform: Transform,
     /// Username of user who claimed this robot, or None if unclaimed
     pub claimed_by: Option<String>,
@@ -69,176 +72,16 @@ pub enum DriveState {
     SetDistance
 }
 
+impl Default for DriveState {
+    fn default() -> Self {
+        DriveState::SetSpeed
+    }
+}
+
 /// Speed used when using SetDistance
 const SET_DISTANCE_DRIVE_SPEED: f32 = 75.0 / -32.0;
 
 impl RobotData {
-    /// Send a RoboScape message to NetsBlox server
-    pub fn send_roboscape_message(&mut self, message: &[u8]) -> Result<usize, std::io::Error> {
-        if self.socket.is_none() {
-            return Err(std::io::Error::new(std::io::ErrorKind::NotConnected, "Socket not connected"));
-        }
-
-        let mut buf = Vec::<u8>::new();
-
-        // MAC address
-        let mut mac = Vec::from(self.mac);
-        buf.append(&mut mac);
-
-        // Timestamp
-        let time = SystemTime::now().duration_since(self.start_time).unwrap().as_secs() as u32;
-        buf.append(&mut Vec::from(time.to_be_bytes()));
-
-        // Message
-        buf.append(&mut Vec::from(message));
-
-        self.socket.as_mut().unwrap().send(buf.as_slice())
-    }
-
-    /// Create physics body for robot, returns RobotData for the robot
-    pub fn create_robot_body(sim: Arc<Simulation>, mac: Option<[u8; 6]>, position: Option<Vector3<Real>>, orientation: Option<UnitQuaternion<Real>>, scale: Option<Real>) -> RobotData {
-        let mut robot = {
-            let mac = mac.unwrap_or_else(generate_random_mac_address);
-            let id = bytes_to_hex_string(&mac).to_owned();
-            info!("Creating robot {}", id);
-
-            let scale = scale.unwrap_or(1.0) * SCALE;
-
-            // Size of robot
-            let hw: f32 = 0.07 * scale;
-            let hh: f32 = 0.03 * scale;
-            let hd: f32 = 0.03 * scale;
-
-            let box_center: Point3<f32> = Point3::new(0.0, 1.0 + hh * 2.0, 0.0);
-            let box_rotation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
-
-            let rigid_body = RigidBodyBuilder::dynamic()
-                .translation(vector![box_center.x * scale, box_center.y * scale, box_center.z * scale])
-                .angular_damping(5.0)
-                .linear_damping(5.0)
-                .ccd_enabled(true)
-                .can_sleep(false);
-            
-            let bodies = &mut sim.rigid_body_set.write().unwrap();
-            let vehicle_handle = bodies.insert(rigid_body);
-            
-            let collider = ColliderBuilder::cuboid(hw, hh, hd).density(25.0);
-            sim.collider_set.write().unwrap().insert_with_parent(collider, vehicle_handle, bodies);
-
-            let wheel_half_width = 0.01;
-            let wheel_positions = [
-                point![hw * 0.5, -hh + 0.015 * scale, hd + wheel_half_width * scale],
-                point![hw * 0.5, -hh + 0.015 * scale, -hd - wheel_half_width * scale],
-            ];
-
-            let ball_wheel_radius: f32 = 0.015 * scale;
-            let ball_wheel_positions = [
-                point![-hw * 0.75, -hh, 0.0]
-            ];
-
-            let mut wheel_bodies: Vec<RigidBodyHandle> = Vec::with_capacity(2);
-            let mut wheel_joints: Vec<MultibodyJointHandle> = Vec::with_capacity(2);
-
-            for pos in wheel_positions {
-                //vehicle.add_wheel(pos, -Vector::y(), Vector::z(), hh, hh / 4.0, &tuning);
-                
-                let wheel_pos_in_world = Point3::new(box_center.x + pos.x, box_center.y + pos.y, box_center.z + pos.z);
-
-                let wheel_rb = bodies.insert(
-                    RigidBodyBuilder::dynamic()
-                        .translation(vector![
-                            wheel_pos_in_world.x,
-                            wheel_pos_in_world.y,
-                            wheel_pos_in_world.z
-                        ]).rotation(vector![FRAC_PI_2, 0.0, 0.0]).ccd_enabled(true).can_sleep(false)
-                        .angular_damping(500.0).linear_damping(50.0)
-                        .enabled_rotations(false, false, true)
-                        .enabled_translations(false, false, false)
-                );
-
-                let collider = ColliderBuilder::cylinder(wheel_half_width * scale, 0.03  * scale).friction(0.8).density(10.0);
-                //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
-                sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
-
-                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
-                    .local_anchor1(pos)
-                    .local_anchor2(point![0.0, 0.01 * scale * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
-                    .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
-                    .motor_max_force(JointAxis::AngZ, 300.0 * scale * scale)
-                    .motor_model(JointAxis::AngZ, MotorModel::ForceBased)
-                    .motor_velocity(JointAxis::AngZ, 0.0, 0.0)
-                    .build();
-
-                wheel_joints.push(sim.multibody_joint_set.write().unwrap().insert(vehicle_handle, wheel_rb, joint, true).unwrap());
-                wheel_bodies.push(wheel_rb);
-            }
-
-
-            for pos in ball_wheel_positions {        
-                let wheel_pos_in_world = Point3::new(box_center.x + pos.x, box_center.y + pos.y, box_center.z + pos.z);
-
-                let wheel_rb = bodies.insert(
-                    RigidBodyBuilder::dynamic()
-                        .translation(vector![
-                            wheel_pos_in_world.x,
-                            wheel_pos_in_world.y,
-                            wheel_pos_in_world.z
-                        ]).ccd_enabled(true)
-                        .can_sleep(false).angular_damping(15.0).linear_damping(5.0)
-                        .enabled_translations(false, false, false)
-                );
-
-                let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.25);
-                sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
-
-                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
-                    .local_anchor1(pos)
-                    .local_anchor2(point![0.0, 0.0, 0.0])
-                    .build();
-                
-                wheel_bodies.push(wheel_rb);
-
-                sim.multibody_joint_set.write().unwrap().insert(vehicle_handle, wheel_rb, joint, true);
-            }
-
-            // Create whiskers
-            let whisker_l = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).mass(0.0).translation(vector![hw * 1.25, 0.05, hd * -0.4]);
-            let whisker_l = sim.collider_set.write().unwrap().insert_with_parent(whisker_l, vehicle_handle, bodies);
-            let whisker_r = ColliderBuilder::cuboid(hw * 0.4, 0.025, hd * 0.8).sensor(true).mass(0.0).translation(vector![hw * 1.25, 0.05, hd * 0.4]);
-            let whisker_r = sim.collider_set.write().unwrap().insert_with_parent(whisker_r, vehicle_handle, bodies);
-
-            RobotData { 
-                body_handle: vehicle_handle,
-                wheel_joints,
-                wheel_bodies,
-                socket: None,
-                speed_l: 0.0,
-                speed_r: 0.0,
-                last_heartbeat: 0,
-                mac,
-                id,
-                whisker_l,
-                whisker_r,
-                whisker_states: [false, false],
-                ticks: [0.0, 0.0],
-                drive_state: DriveState::SetSpeed,
-                distance_l: 0.0,
-                distance_r: 0.0,
-                initial_transform: Transform { position: position.unwrap_or(box_center.to_owned().coords).into(), rotation: orientation.unwrap_or(box_rotation).into(), ..Default::default() },
-                claimed_by: None,
-                claimable: true,
-                start_time: SystemTime::now(),
-                speed_scale: 1.0,
-                last_message_time: SystemTime::UNIX_EPOCH,
-                min_message_spacing: 10,
-            }
-        };
-        
-        robot.update_transform(sim, position, orientation.and_then(|o| Some(o.into())), true);
-
-        robot
-    }
-
     pub fn setup_robot_socket(robot: &mut RobotData) {
         let server = std::env::var("ROBOSCAPE_SERVER").unwrap_or("52.73.65.98".to_string());
         let port = std::env::var("ROBOSCAPE_PORT").unwrap_or("1973".to_string());
@@ -254,7 +97,7 @@ impl RobotData {
         robot.socket = Some(socket);
         
         // Send initial message
-        if let Err(e) = robot.send_roboscape_message(b"I") {
+        if let Err(e) = send_roboscape_message(robot, b"I") {
             error!("{}", e);
         }
     }
@@ -267,36 +110,36 @@ impl RobotData {
         let mut had_messages = false;
 
         if get_timestamp() - robot.last_heartbeat > 50 {
-            if let Err(e) = robot.send_roboscape_message(b"I") {
+            if let Err(e) = send_roboscape_message(robot, b"I") { 
                 error!("{}", e);
             }
         }
 
-        if robot.drive_state == DriveState::SetDistance {
+        if robot.motor_data.drive_state == DriveState::SetDistance {
 
             // Stop robot if distance reached
-            if f64::abs(robot.distance_l) < f64::abs(robot.speed_l as f64 * -32.0 * dt) {
+            if f64::abs(robot.motor_data.distance_l) < f64::abs(robot.motor_data.speed_l as f64 * -32.0 * dt) {
                 trace!("Distance reached L");
-                robot.speed_l = 0.0;
+                robot.motor_data.speed_l = 0.0;
             } else {
-                robot.distance_l -= (robot.speed_l * -32.0) as f64 * dt;
+                robot.motor_data.distance_l -= (robot.motor_data.speed_l * -32.0) as f64 * dt;
             }
 
-            if f64::abs(robot.distance_r) < f64::abs(robot.speed_r as f64 * -32.0 * dt) {
+            if f64::abs(robot.motor_data.distance_r) < f64::abs(robot.motor_data.speed_r as f64 * -32.0 * dt) {
                 trace!("Distance reached R");
-                robot.speed_r = 0.0;
+                robot.motor_data.speed_r = 0.0;
             } else {
-                robot.distance_r -= (robot.speed_r * -32.0) as f64 * dt;
+                robot.motor_data.distance_r -= (robot.motor_data.speed_r * -32.0) as f64 * dt;
             }
 
-            if robot.speed_l == 0.0 && robot.speed_r == 0.0 {
-                robot.drive_state = DriveState::SetSpeed;
+            if robot.motor_data.speed_l == 0.0 && robot.motor_data.speed_r == 0.0 {
+                robot.motor_data.drive_state = DriveState::SetSpeed;
             }
         }
 
         // Update ticks
-        robot.ticks[0] += (robot.speed_l * robot.speed_scale * -32.0) as f64 * dt;
-        robot.ticks[1] += (robot.speed_r * robot.speed_scale * -32.0) as f64 * dt;
+        robot.motor_data.ticks[0] += (robot.motor_data.speed_l * robot.speed_scale * -32.0) as f64 * dt;
+        robot.motor_data.ticks[1] += (robot.motor_data.speed_r * robot.speed_scale * -32.0) as f64 * dt;
 
         let mut msg = None;
         
@@ -312,11 +155,11 @@ impl RobotData {
         // Apply calculated speeds to wheels
         {
             let jointset = &mut sim.multibody_joint_set.write().unwrap();
-            let joint1 = jointset.get_mut(robot.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
-            joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_l, 4.0);
+            let joint1 = jointset.get_mut(robot.physics.wheel_joints[0]).unwrap().0.link_mut(2).unwrap();
+            joint1.joint.data.set_motor_velocity(JointAxis::AngZ, robot.motor_data.speed_l, 4.0);
 
-            let joint2 = jointset.get_mut(robot.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
-            joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.speed_r, 4.0);
+            let joint2 = jointset.get_mut(robot.physics.wheel_joints[1]).unwrap().0.link_mut(1).unwrap();
+            joint2.joint.data.set_motor_velocity(JointAxis::AngZ, robot.motor_data.speed_r, 4.0);
         }
         
         let mut new_whisker_states = [false, false];
@@ -356,57 +199,13 @@ impl RobotData {
             let message: [u8; 2] = [b'W', if robot.whisker_states[1] { 0 } else { 1 } + if robot.whisker_states[0] { 0 } else { 2 } ];
 
             trace!("Whisker states: {:?}", robot.whisker_states);
-            
-            if let Err(e) = robot.send_roboscape_message(&message) {
+
+            if let Err(e) = send_roboscape_message(robot, &message) {
                 error!("{}", e);
             }
         }
 
         (had_messages, msg)
-    }
-
-    pub fn update_transform(&mut self, sim: Arc<Simulation>, position: Option<Vector3<Real>>, rotation: Option<Orientation>, reset_velocity: bool) {
-        if let Some(position) = position {
-            // Reset position
-            {
-                let rigid_body_set = &mut sim.rigid_body_set.write().unwrap();
-                for wheel in &self.wheel_bodies {
-                    let body = rigid_body_set.get_mut(*wheel).unwrap();
-                    body.set_linvel(vector![0.0, 0.0, 0.0], true);
-                    body.set_angvel(vector![0.0, 0.0, 0.0], true);
-                }
-                
-                // Reset position
-                let body = rigid_body_set.get_mut(self.body_handle).unwrap();
-                body.set_translation(position, false);
-                body.set_locked_axes(LockedAxes::all(), true);
-            }
-            
-            // // Update simulation a bit
-            // sim.update(1.0 / (UPDATE_FPS / 4.0));
-        }
-
-        let rigid_body_set = &mut sim.rigid_body_set.write().unwrap();
-        let body = rigid_body_set.get_mut(self.body_handle).unwrap();
-        body.set_locked_axes(LockedAxes::empty(), true);
-
-        // Reset velocity
-        if reset_velocity {
-            body.set_linvel(vector![0.0, -0.01, 0.0], true);
-            body.set_angvel(vector![0.0, 0.0, 0.0], true);
-        }
-
-        if let Some(rotation) = rotation {
-            // Set rotation
-            match rotation {
-                Orientation::Quaternion(q) => {
-                    body.set_rotation(UnitQuaternion::new_unchecked(q), true);
-                }
-                Orientation::Euler(e) => {
-                    body.set_rotation(UnitQuaternion::from_euler_angles(e.x, e.y, e.z), true);
-                }
-            }
-        }
     }
 }
 
@@ -415,22 +214,18 @@ impl Resettable for RobotData {
         let rotation = self.initial_transform.rotation.clone();
         let position = self.initial_transform.position - point![0.0, 0.0, 0.0];
 
-        self.update_transform(sim.clone(), Some(position), Some(rotation), true);
+        RobotPhysics::update_transform(self, sim.clone(), Some(position), Some(rotation), true);
 
         // Reset state
-        self.drive_state = DriveState::SetSpeed;
-        self.speed_l = 0.0;
-        self.speed_r = 0.0;
-        self.whisker_states = [false, false];
-        self.ticks = [0.0, 0.0];
+        self.motor_data = RobotMotorData::default();
         self.start_time = SystemTime::now();
 
         self.last_heartbeat = get_timestamp();
-        
-        self.update_transform(sim.clone(), Some(position), Some(rotation), true);
-        
+
+        RobotPhysics::update_transform(self, sim.clone(), Some(position), Some(rotation), true);
+
         // Send initial message
-        if let Err(e) = self.send_roboscape_message(b"I") {
+        if let Err(e) = send_roboscape_message(self, b"I") {
             error!("{}", e);
         }
     }

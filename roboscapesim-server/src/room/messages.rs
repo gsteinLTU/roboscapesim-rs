@@ -1,6 +1,8 @@
 use std::sync::Weak;
 
 
+use crate::robot::messages::send_roboscape_message;
+
 use super::*;
 
 #[derive(Debug, Default)]
@@ -125,8 +127,8 @@ impl MessageHandler {
                     ClientMessage::EncryptRobot(robot_id) => {
                         if room.is_authorized(*client.key(), &robot_id) {
                             if let Some(mut robot) = room.robots.get_mut(&robot_id) {
-                                robot.send_roboscape_message(&[b'P', 0]).unwrap();
-                                robot.send_roboscape_message(&[b'P', 1]).unwrap();
+                                send_roboscape_message(&mut robot, &[b'P', 0]).unwrap();
+                                send_roboscape_message(&mut robot, &[b'P', 1]).unwrap();
                             }
                         } else {
                             info!("Client {} not authorized to encrypt robot {}", client_username, robot_id);

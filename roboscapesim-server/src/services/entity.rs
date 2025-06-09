@@ -6,7 +6,7 @@ use nalgebra::{vector, UnitQuaternion};
 use netsblox_vm::runtime::SimpleValue;
 use rapier3d::prelude::RigidBodyHandle;
 
-use crate::{room::RoomData, util::util::num_val};
+use crate::{robot::physics::RobotPhysics, room::RoomData, util::util::num_val};
 
 use super::{service_struct::{Service, ServiceType, ServiceInfo, ServiceFactory}, HandleMessageResult};
 
@@ -37,7 +37,7 @@ impl Service for EntityService {
                 let z = num_val(&msg.params[2]);
 
                 if self.is_robot {
-                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(room.sim.clone(), Some(vector![x, y, z]), None, true);
+                    RobotPhysics::update_transform(&mut room.robots.get_mut(msg.device.as_str()).unwrap(), room.sim.clone(), Some(vector![x, y, z]), None, true);
                 } else {
                     if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                         o.set_translation(vector![x, y, z], true);
@@ -50,7 +50,7 @@ impl Service for EntityService {
                 let roll = num_val(&msg.params[0]) * PI / 180.0;
 
                 if self.is_robot {
-                    room.robots.get_mut(msg.device.as_str()).unwrap().update_transform(room.sim.clone(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
+                    RobotPhysics::update_transform(&mut room.robots.get_mut(msg.device.as_str()).unwrap(), room.sim.clone(), None, Some(roboscapesim_common::Orientation::Euler(vector![roll, pitch, yaw])), true);
                 } else {
                     if let Some(o) = room.sim.rigid_body_set.write().unwrap().get_mut(self.rigid_body) {
                         o.set_rotation(UnitQuaternion::from_euler_angles(roll, pitch, yaw), true);

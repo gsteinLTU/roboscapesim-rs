@@ -105,14 +105,14 @@ pub fn process_roboscape_message(robot: &mut RobotData, buf: [u8; 512], had_mess
     robot.last_message_time = SystemTime::now();
     
     // Return to sender
-    robot.send_roboscape_message(&buf[0..size]).unwrap();
+    send_roboscape_message(robot, &buf[0..size]).unwrap();
 }
 
 fn process_get_ticks_message(robot: &mut RobotData, had_messages: &mut bool) {
     trace!("OnGetTicks");
     *had_messages = true;
-    let left_ticks = (robot.ticks[0] as i32).to_le_bytes();
-    let right_ticks = (robot.ticks[1] as i32).to_le_bytes();
+    let left_ticks = (robot.motor_data.ticks[0] as i32).to_le_bytes();
+    let right_ticks = (robot.motor_data.ticks[1] as i32).to_le_bytes();
     let mut message: [u8; 9] = [0; 9];
 
     // Create message
@@ -120,7 +120,7 @@ fn process_get_ticks_message(robot: &mut RobotData, had_messages: &mut bool) {
     message[1..5].copy_from_slice(&right_ticks);
     message[5..9].copy_from_slice(&left_ticks);
 
-    if let Err(e) = robot.send_roboscape_message(&message) {
+    if let Err(e) = send_roboscape_message(robot, &message) {
         error!("{}", e);
     }
 }
@@ -131,14 +131,14 @@ fn process_get_range_message(robot: &mut RobotData, had_messages: &mut bool, sim
 
     // Setup raycast
     let rigid_body_set = &sim.rigid_body_set.read().unwrap();
-    let body = rigid_body_set.get(robot.body_handle).unwrap();
+    let body = rigid_body_set.get(robot.physics.body_handle).unwrap();
     let body_pos = body.translation();
     let offset = body.rotation() * vector![0.17, 0.05, 0.0];
     let start_point = point![body_pos.x + offset.x, body_pos.y + offset.y, body_pos.z + offset.z];
     let ray = Ray::new(start_point, body.rotation() * vector![1.0, 0.0, 0.0]);
     let max_toi = 3.0;
     let solid = true;
-    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.body_handle);
+    let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.physics.body_handle);
 
     let mut distance = (max_toi * 100.0) as u16;
     if let Some((handle, toi)) = sim.query_pipeline.lock().unwrap().cast_ray(rigid_body_set,
@@ -153,7 +153,7 @@ fn process_get_range_message(robot: &mut RobotData, had_messages: &mut bool, sim
 
     // Send result message
     let dist_bytes = u16::to_le_bytes(distance);
-    if let Err(e) = robot.send_roboscape_message(&[b'R', dist_bytes[0], dist_bytes[1]] ) {
+    if let Err(e) = send_roboscape_message(robot, &[b'R', dist_bytes[0], dist_bytes[1]]) {
         error!("{}", e);
     }
 }
@@ -173,15 +173,15 @@ fn process_beep_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &mu
 
 fn process_set_speed_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &mut bool) {
     trace!("OnSetSpeed");
-    robot.drive_state = DriveState::SetSpeed;
+    robot.motor_data.drive_state = DriveState::SetSpeed;
     *had_messages = true;
 
     if buf.len() > 4 {
         let s1 = i16::from_le_bytes([buf[1], buf[2]]);
         let s2 = i16::from_le_bytes([buf[3], buf[4]]);
 
-        robot.speed_l = -s2 as f32 * robot.speed_scale / 32.0;
-        robot.speed_r = -s1 as f32 * robot.speed_scale / 32.0;
+        robot.motor_data.speed_l = -s2 as f32 * robot.speed_scale / 32.0;
+        robot.motor_data.speed_r = -s1 as f32 * robot.speed_scale / 32.0;
     }
 }    
 
@@ -190,23 +190,45 @@ fn process_drive_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &m
     *had_messages = true;
     
     if buf.len() > 4 {
-        robot.drive_state = DriveState::SetDistance;
+        robot.motor_data.drive_state = DriveState::SetDistance;
     
         let d1 = i16::from_le_bytes([buf[1], buf[2]]);
         let d2 = i16::from_le_bytes([buf[3], buf[4]]);
     
-        robot.distance_l = d2 as f64;
-        robot.distance_r = d1 as f64;
-    
+        robot.motor_data.distance_l = d2 as f64;
+        robot.motor_data.distance_r = d1 as f64;
+
         trace!("OnDrive {} {}", d1, d2);
     
         // Check prevents robots from inching forwards from "drive 0 0"
-        if f64::abs(robot.distance_l) > f64::EPSILON {
-            robot.speed_l = f64::signum(robot.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
+        if f64::abs(robot.motor_data.distance_l) > f64::EPSILON {
+            robot.motor_data.speed_l = f64::signum(robot.motor_data.distance_l) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
         }
-    
-        if f64::abs(robot.distance_r) > f64::EPSILON {
-            robot.speed_r = f64::signum(robot.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
-        }                    
+
+        if f64::abs(robot.motor_data.distance_r) > f64::EPSILON {
+            robot.motor_data.speed_r = f64::signum(robot.motor_data.distance_r) as f32 * SET_DISTANCE_DRIVE_SPEED * robot.speed_scale;
+        }
     }
+}
+
+/// Send a RoboScape message to NetsBlox server
+pub fn send_roboscape_message(robot: &mut RobotData, message: &[u8]) -> Result<usize, std::io::Error> {
+    if robot.socket.is_none() {
+        return Err(std::io::Error::new(std::io::ErrorKind::NotConnected, "Socket not connected"));
+    }
+
+    let mut buf = Vec::<u8>::new();
+
+    // MAC address
+    let mut mac = Vec::from(robot.mac);
+    buf.append(&mut mac);
+
+    // Timestamp
+    let time = SystemTime::now().duration_since(robot.start_time).unwrap().as_secs() as u32;
+    buf.append(&mut Vec::from(time.to_be_bytes()));
+
+    // Message
+    buf.append(&mut Vec::from(message));
+
+    robot.socket.as_mut().unwrap().send(buf.as_slice())
 }

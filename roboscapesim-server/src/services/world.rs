@@ -252,7 +252,7 @@ impl Service for WorldService {
                         }
                     }
 
-                    let body = if is_robot { room.robots.get(&object).unwrap().body_handle.clone() } else {  room.sim.rigid_body_labels.get(&object).unwrap().clone() };
+                    let body = if is_robot { room.robots.get(&object).unwrap().physics.body_handle.clone() } else {  room.sim.rigid_body_labels.get(&object).unwrap().clone() };
 
                     trace!("Creating sensor of type {} for object {} with options {:?}", service_type, object, options);
                     response = vec![

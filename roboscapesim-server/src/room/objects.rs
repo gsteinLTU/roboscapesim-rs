@@ -1,3 +1,5 @@
+use crate::robot::physics::RobotPhysics;
+
 use super::*;
 
 impl RoomData {
@@ -6,10 +8,10 @@ impl RoomData {
         let speed_mult = speed_mult.unwrap_or(1.0).clamp(-10.0, 10.0);
         let scale: f32 = scale.unwrap_or(1.0).clamp(1.0, 5.0);
 
-        let mut robot = RobotData::create_robot_body(room.sim.clone(), None, Some(position), Some(orientation), Some(scale));
+        let mut robot = RobotPhysics::create_robot_body(room.sim.clone(), None, Some(position), Some(orientation), Some(scale));
         robot.speed_scale = speed_mult;
         let robot_id: String = "robot_".to_string() + robot.id.as_str();
-        room.sim.rigid_body_labels.insert(robot_id.clone(), robot.body_handle);
+        room.sim.rigid_body_labels.insert(robot_id.clone(), robot.physics.body_handle);
         room.objects.insert(robot_id.clone(), ObjectData {
             name: robot_id.clone(),
             transform: Transform {scaling: vector![scale * SCALE, scale * SCALE, scale * SCALE], ..Default::default() },
@@ -22,7 +24,7 @@ impl RoomData {
         // Wheel debug
         if wheel_debug {
             let mut i = 0;
-            for wheel in &robot.wheel_bodies {
+            for wheel in &robot.physics.wheel_bodies {
                 room.sim.rigid_body_labels.insert(format!("wheel_{}", i), *wheel);
                 room.objects.insert(format!("wheel_{}", i), ObjectData {
                     name: format!("wheel_{}", i),

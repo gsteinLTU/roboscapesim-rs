@@ -84,14 +84,14 @@ impl Simulation {
     /// Remove all parts of a robot from the simulation
     pub fn cleanup_robot(&self, r: &RobotData) {
         // Clean up robot parts
-        self.multibody_joint_set.write().unwrap().remove_multibody_articulations(r.body_handle, false);
+        self.multibody_joint_set.write().unwrap().remove_multibody_articulations(r.physics.body_handle, false);
 
-        for handle in &r.wheel_bodies {
+        for handle in &r.physics.wheel_bodies {
             self.multibody_joint_set.write().unwrap().remove_multibody_articulations(*handle, false);
             self.rigid_body_set.write().unwrap().remove(*handle, &mut self.island_manager.lock().unwrap(), &mut self.collider_set.write().unwrap(), &mut self.impulse_joint_set.write().unwrap(), &mut self.multibody_joint_set.write().unwrap(), true);
         }
-    
-        self.rigid_body_set.write().unwrap().remove(r.body_handle, &mut self.island_manager.lock().unwrap(), &mut self.collider_set.write().unwrap(), &mut self.impulse_joint_set.write().unwrap(), &mut self.multibody_joint_set.write().unwrap(), true);
+
+        self.rigid_body_set.write().unwrap().remove(r.physics.body_handle, &mut self.island_manager.lock().unwrap(), &mut self.collider_set.write().unwrap(), &mut self.impulse_joint_set.write().unwrap(), &mut self.multibody_joint_set.write().unwrap(), true);
     }
 
     pub fn remove_body(&self, handle: RigidBodyHandle) {
