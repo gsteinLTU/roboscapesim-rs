@@ -2,48 +2,104 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use dashmap::{DashMap, DashSet};
-use log::{error, info, trace};
+use log::{error, trace};
 use roboscapesim_common::UpdateMessage;
 use rapier3d::prelude::*;
 
 use crate::robot::{DriveState, RobotData, SET_DISTANCE_DRIVE_SPEED};
 use crate::room::clients::ClientsManager;
 use crate::simulation::Simulation;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MessageType {
+    Drive,           // b'D'
+    SetSpeed,        // b'S'
+    Beep,           // b'B'
+    SetLED,         // b'L'
+    GetRange,       // b'R'
+    GetTicks,       // b'T'
+    SetNumeric,     // b'n'
+    ButtonPress,    // b'P'
+    Initialize,     // b'I'
+}
 
-pub fn process_roboscape_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &mut bool, clients: &DashMap<String, DashSet<u128>>, sim: &Arc<Simulation>, msg: &mut Option<UpdateMessage>, size: usize) {
-    match &buf[0] {
-        b'n' | b'L' | b'I' | b'R' | b'T' => {
-            // Message should not be rejected no matter the timing of last message
-        },
-        _ => {
-            if robot.min_message_spacing > 0 && robot.last_message_time.elapsed().unwrap().as_millis() < robot.min_message_spacing {
-                // Reject message if too soon after last message
-                trace!("Rejecting message due to timing");
-                return;
-            }
+impl MessageType {
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            b'D' => Some(Self::Drive),
+            b'S' => Some(Self::SetSpeed),
+            b'B' => Some(Self::Beep),
+            b'L' => Some(Self::SetLED),
+            b'R' => Some(Self::GetRange),
+            b'T' => Some(Self::GetTicks),
+            b'n' => Some(Self::SetNumeric),
+            b'P' => Some(Self::ButtonPress),
+            b'I' => Some(Self::Initialize),
+            _ => None,
         }
     }
 
-    match &buf[0] {
-        b'D' => process_drive_message(robot, buf, had_messages),
-        b'S' => process_set_speed_message(robot, buf, had_messages),
-        b'B' => process_beep_message(robot, buf, had_messages, clients),
-        b'L' => {
+    pub fn to_byte(self) -> u8 {
+        match self {
+            Self::Drive => b'D',
+            Self::SetSpeed => b'S',
+            Self::Beep => b'B',
+            Self::SetLED => b'L',
+            Self::GetRange => b'R',
+            Self::GetTicks => b'T',
+            Self::SetNumeric => b'n',
+            Self::ButtonPress => b'P',
+            Self::Initialize => b'I',
+        }
+    }
+
+    pub fn requires_timing_check(self) -> bool {
+        match self {
+            Self::SetNumeric | Self::SetLED | Self::Initialize | Self::GetRange | Self::GetTicks => false,
+            _ => true,
+        }
+    }
+}
+
+pub fn process_roboscape_message(robot: &mut RobotData, buf: [u8; 512], had_messages: &mut bool, clients: &DashMap<String, DashSet<u128>>, sim: &Arc<Simulation>, msg: &mut Option<UpdateMessage>, size: usize) {
+    let msg_type = MessageType::from_byte(buf[0]);
+
+    if msg_type.is_none() {
+        trace!("Unknown message type: {}", buf[0]);
+        return;
+    }
+
+    let msg_type = msg_type.unwrap();
+
+    if msg_type.requires_timing_check() {
+        if robot.min_message_spacing > 0 && robot.last_message_time.elapsed().unwrap().as_millis() < robot.min_message_spacing {
+            // Reject message if too soon after last message
+            trace!("Rejecting message due to timing");
+            return;
+        }
+    }
+
+    match msg_type {
+        MessageType::Drive => process_drive_message(robot, buf, had_messages),
+        MessageType::SetSpeed => process_set_speed_message(robot, buf, had_messages),
+        MessageType::Beep => process_beep_message(robot, buf, had_messages, clients),
+        MessageType::SetLED => {
             trace!("OnSetLED");
             *had_messages = true;
         },
-        b'R' => process_get_range_message(robot, had_messages, sim),
-        b'T' => process_get_ticks_message(robot, had_messages),
-        b'n' => {
+        MessageType::GetRange => process_get_range_message(robot, had_messages, sim),
+        MessageType::GetTicks => process_get_ticks_message(robot, had_messages),
+        MessageType::SetNumeric => {
             trace!("OnSetNumeric");
             // TODO: Decide on supporting this better, for now show encrypt numbers
             *had_messages = true;
             *msg = Some(UpdateMessage::DisplayText(robot.id.clone(), buf[1].to_string(), Some(1.0)));
         },
-        b'P' => {
-            trace!("OnButtonPress");         
+        MessageType::ButtonPress => {
+            trace!("OnButtonPress");
         },
-        _ => {}
+        _ => {
+            trace!("Unhandled message type: {:?}", msg_type);
+        },
     }
 
     robot.last_message_time = SystemTime::now();
