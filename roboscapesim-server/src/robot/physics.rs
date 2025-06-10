@@ -152,7 +152,7 @@ impl RobotPhysics {
                 claimable: true,
                 start_time: SystemTime::now(),
                 last_message_time: SystemTime::UNIX_EPOCH,
-                min_message_spacing: 10,
+                min_message_spacing: 1000 / 25, // 25 messages per second
             }
         };
 
