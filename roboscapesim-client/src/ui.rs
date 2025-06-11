@@ -199,7 +199,13 @@ pub(crate) fn init_ui() {
                     return;
                 }
 
-                let id = id.split(" ").collect::<Vec<&str>>()[0].to_owned();
+                let mut id = id.split(" ").collect::<Vec<&str>>()[0].trim().to_owned();
+
+                // If ID does not start with "Room", prepend it
+                if !id.starts_with("Room") {
+                    id = id.to_uppercase();
+                    id = format!("Room{id}");
+                }
 
                 set_title("Connecting...");
                 join_room(id, password).await;
