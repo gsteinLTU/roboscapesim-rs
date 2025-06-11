@@ -44,8 +44,8 @@ pub fn join_room(username: &str, password: &str, peer_id: u128, room_id: &str) -
     room.clients_manager.send_info_to_client(&room, peer_id);
     room.clients_manager.send_state_to_client(&room, true, peer_id);
 
-    // Send room info to API
-    room.announce();
+    // Send room info to API (force announcement when client joins)
+    room.announce(true);
 
     // Initial robot claim data
     for robot in room.robots.iter() {

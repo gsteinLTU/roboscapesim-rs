@@ -8,6 +8,7 @@ use roboscapesim_common::api::{
 };
 use tower_http::cors::CorsLayer;
 use simple_logger::SimpleLogger;
+use rand::Rng;
 
 use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 
@@ -81,42 +82,51 @@ async fn main() {
     tokio::spawn(async move {
         loop {
             let mut servers_to_remove = Vec::new();
+            
+            // Collect servers that need to be checked (only those that are old enough)
             for server in SERVERS.iter() {
-                if server.value().last_update.elapsed().unwrap().as_secs() > 360 {
-                    servers_to_remove.push(server.key().clone());
-                }
-            }
-            for server in servers_to_remove {
-                // Attempt API call to server to check if it's still alive
-                let res = REQWEST_CLIENT
-                    .get(format!("{}/server/status", server))
-                    .send()
-                    .await;
-
-                // If error, remove server
-                match res {
-                    Ok(response) => {
-                        // Consume the response body to avoid connection issues
-                        let _ = response.bytes().await;
-                        // Server is alive, don't remove it
-                    }
-                    Err(_) => {
-                        info!("Removing server {} due to timeout", server);
-                        SERVERS.remove(&server);
-
-                        // Remove rooms on server
-                        let mut rooms_to_remove = Vec::new();
-                        for room in ROOMS.iter() {
-                            if room.value().server == server {
-                                rooms_to_remove.push(room.key().clone());
-                            }
-                        }
-                        for room in rooms_to_remove {
-                            ROOMS.remove(&room);
-                        }
+                if let Ok(elapsed) = server.value().last_update.elapsed() {
+                    if elapsed.as_secs() > 360 {
+                        servers_to_remove.push(server.key().clone());
                     }
                 }
             }
+            
+            // Check each old server with a timeout
+            for server_addr in servers_to_remove {
+                // Use a shorter timeout for health checks to avoid blocking
+                let health_check = async {
+                    let res = REQWEST_CLIENT
+                        .get(format!("{}/server/status", server_addr))
+                        .timeout(std::time::Duration::from_secs(2))
+                        .send()
+                        .await;
+
+                    match res {
+                        Ok(response) => {
+                            // Consume the response body to avoid connection issues
+                            let _ = response.bytes().await;
+                            false // Server is alive, don't remove it
+                        }
+                        Err(_) => true // Server is dead, remove it
+                    }
+                };
+                
+                // Execute health check with timeout
+                let should_remove = tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    health_check
+                ).await.unwrap_or(true); // If timeout, assume server is dead
+                
+                if should_remove {
+                    info!("Removing server {} due to timeout", server_addr);
+                    SERVERS.remove(&server_addr);
+
+                    // Remove rooms on server more efficiently
+                    ROOMS.retain(|_, room| room.server != server_addr);
+                }
+            }
+            
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
         }
     });
@@ -216,17 +226,29 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
 /// If multiple servers have the same number of active rooms, one is picked at random
 fn get_best_server() -> Option<String> {
     let active_rooms_per_server = get_active_rooms_per_server();
-    // Sort servers by number of active rooms
-    let mut active_rooms_per_server = active_rooms_per_server.iter().map(|x| (x.0.clone(), x.1.clone())).collect::<Vec<_>>();
-    active_rooms_per_server.sort_by(|a, b| a.1.cmp(&b.1));
-    active_rooms_per_server = active_rooms_per_server.iter().take_while(|r| r.1 == active_rooms_per_server[0].1).map(|r| r.to_owned()).collect();
-
-    // Pick server with fewest active rooms
-    let mut server = None;
-    if active_rooms_per_server.len() > 0 {
-        server = Some(active_rooms_per_server[rand::random::<usize>() % active_rooms_per_server.len()].0.clone());
+    
+    if active_rooms_per_server.is_empty() {
+        return None;
     }
-    server
+    
+    // Find minimum number of active rooms
+    let min_rooms = active_rooms_per_server.values().min().copied().unwrap_or(0);
+    
+    // Collect servers with minimum rooms
+    let best_servers: Vec<&String> = active_rooms_per_server
+        .iter()
+        .filter(|(_, &count)| count == min_rooms)
+        .map(|(server, _)| server)
+        .collect();
+    
+    // Pick one randomly
+    if !best_servers.is_empty() {
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..best_servers.len());
+        Some(best_servers[index].clone())
+    } else {
+        None
+    }
 }
 
 /// Get info about a room
@@ -264,16 +286,8 @@ async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl 
     // Check if server has been reset
     if data.active_rooms + data.hibernating_rooms == 0 && SERVERS.contains_key(&server.address){
         info!("Server {} reset", ip);
-        // Remove rooms that no longer exist on server
-        let mut rooms_to_remove = Vec::new();
-        for room in ROOMS.iter() {
-            if room.value().server == data.address.clone() {
-                rooms_to_remove.push(room.key().clone());
-            }
-        }
-        for room in rooms_to_remove {
-            ROOMS.remove(&room);
-        }
+        // Remove rooms that no longer exist on server more efficiently
+        ROOMS.retain(|_, room| room.server != server.address);
     }
 
     SERVERS.insert(server.address.clone(), server);
@@ -312,15 +326,16 @@ async fn get_environments_list() -> impl IntoResponse {
 fn get_active_rooms_per_server() -> HashMap<String, usize> {
     let mut active_rooms_per_server = HashMap::new();
 
+    // Initialize all servers with 0 count
     for server in SERVERS.iter() {
         active_rooms_per_server.insert(server.key().clone(), 0);
     }
 
+    // Count active rooms per server
     for room in ROOMS.iter() {
         if !room.value().is_hibernating {
-            let server = room.value().server.clone();
-            let count = active_rooms_per_server.get(&server).unwrap_or(&0) + 1;
-            active_rooms_per_server.insert(server, count);
+            let server = &room.value().server;
+            *active_rooms_per_server.entry(server.clone()).or_insert(0) += 1;
         }
     }
     

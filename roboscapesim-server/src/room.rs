@@ -236,7 +236,7 @@ impl RoomData {
 
         // Check if room empty/not empty
         self.metadata.check_hibernation_state(&self.clients_manager);
-        self.announce();
+        self.announce(false);
     }
     
     fn update_triggers(&self) {
@@ -452,17 +452,33 @@ impl RoomData {
         self.objects.iter().filter(|o| !o.value().is_kinematic).count() - self.robots.len()
     }
 
-    pub fn announce(&self) {
-        let room_info = self.metadata.get_room_info();
-        tokio::task::spawn(async move {
-            let response = REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
-            .json(&vec![room_info])
-            .send().await;
-            
-            if let Err(e) = response {
-                error!("Error sending room info to API: {e:?}");
+    pub fn announce(&self, force: bool) {
+        // Throttle announcements to at most once every 30 seconds (unless forced)
+        const ANNOUNCE_INTERVAL_SECS: i64 = 30;
+        
+        let current_time = get_timestamp();
+        let last_announce_time = self.metadata.last_announce_time.load(Ordering::Relaxed);
+        
+        if force || current_time - last_announce_time >= ANNOUNCE_INTERVAL_SECS {
+            // Update the announce time atomically
+            if self.metadata.last_announce_time.compare_exchange(
+                last_announce_time, 
+                current_time, 
+                Ordering::Relaxed, 
+                Ordering::Relaxed
+            ).is_ok() {
+                let room_info = self.metadata.get_room_info();
+                tokio::task::spawn(async move {
+                    let response = REQWEST_CLIENT.put(format!("{}/server/rooms", get_main_api_server()))
+                    .json(&vec![room_info])
+                    .send().await;
+                    
+                    if let Err(e) = response {
+                        error!("Error sending room info to API: {e:?}");
+                    }
+                });
             }
-        });
+        }
     }
 
     pub fn launch(room: Arc<RoomData>) {

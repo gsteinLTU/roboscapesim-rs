@@ -23,6 +23,8 @@ pub struct RoomMetadata {
     pub edit_mode: bool,
     pub hibernating: Arc<AtomicBool>,
     pub hibernating_since: Arc<AtomicI64>,
+    /// Last time the room was announced to the API server
+    pub last_announce_time: Arc<AtomicI64>,
 }
 
 impl RoomMetadata {
@@ -37,6 +39,7 @@ impl RoomMetadata {
             edit_mode,
             hibernating: Arc::new(AtomicBool::new(false)),
             hibernating_since: Arc::new(AtomicI64::default()),
+            last_announce_time: Arc::new(AtomicI64::new(0)),
         }
     }
 

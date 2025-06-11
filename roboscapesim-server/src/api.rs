@@ -203,8 +203,8 @@ pub(crate) async fn get_healthcheck() -> impl IntoResponse {
 pub(crate) async fn post_create(Json(request): Json<CreateRoomRequestData>) -> impl IntoResponse {
     let room_id = create_room(request.environment, request.password, request.edit_mode).await;
 
-    // Send room info to API
-    ROOMS.get(&room_id).unwrap().value().announce();
+    // Send room info to API (force announcement when room is created)
+    ROOMS.get(&room_id).unwrap().value().announce(true);
 
     Json(CreateRoomResponseData {
         server: get_server(),
