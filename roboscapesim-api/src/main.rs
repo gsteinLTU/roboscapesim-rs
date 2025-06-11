@@ -9,7 +9,7 @@ use roboscapesim_common::api::{
 use tower_http::cors::CorsLayer;
 use simple_logger::SimpleLogger;
 
-use std::{collections::HashMap, net::SocketAddr, time::{Duration, SystemTime}};
+use std::{collections::HashMap, net::SocketAddr, time::SystemTime};
 
 /// Known servers
 static SERVERS: Lazy<DashMap<String, ServerInfo>> = Lazy::new(|| DashMap::new());
@@ -28,6 +28,10 @@ pub(crate) static REQWEST_CLIENT: Lazy<reqwest::Client> = Lazy::new(||
     reqwest::ClientBuilder::new()
         .timeout(std::time::Duration::from_secs(3))
         .connect_timeout(std::time::Duration::from_secs(2))
+        .pool_idle_timeout(std::time::Duration::from_secs(5))
+        .pool_max_idle_per_host(2)
+        .user_agent("roboscapesim-api/1.0")
+        .tcp_keepalive(std::time::Duration::from_secs(30))
         .build()
         .unwrap()
 );
@@ -84,22 +88,32 @@ async fn main() {
             }
             for server in servers_to_remove {
                 // Attempt API call to server to check if it's still alive
-                let res = REQWEST_CLIENT.get(format!("{}/server/status", server)).timeout(Duration::from_secs(2)).send().await;
+                let res = REQWEST_CLIENT
+                    .get(format!("{}/server/status", server))
+                    .send()
+                    .await;
 
                 // If error, remove server
-                if res.is_err() {
-                    info!("Removing server {} due to timeout", server);
-                    SERVERS.remove(&server);
-
-                    // Remove rooms on server
-                    let mut rooms_to_remove = Vec::new();
-                    for room in ROOMS.iter() {
-                        if room.value().server == server {
-                            rooms_to_remove.push(room.key().clone());
-                        }
+                match res {
+                    Ok(response) => {
+                        // Consume the response body to avoid connection issues
+                        let _ = response.bytes().await;
+                        // Server is alive, don't remove it
                     }
-                    for room in rooms_to_remove {
-                        ROOMS.remove(&room);
+                    Err(_) => {
+                        info!("Removing server {} due to timeout", server);
+                        SERVERS.remove(&server);
+
+                        // Remove rooms on server
+                        let mut rooms_to_remove = Vec::new();
+                        for room in ROOMS.iter() {
+                            if room.value().server == server {
+                                rooms_to_remove.push(room.key().clone());
+                            }
+                        }
+                        for room in rooms_to_remove {
+                            ROOMS.remove(&room);
+                        }
                     }
                 }
             }
@@ -169,30 +183,31 @@ async fn post_create(Json(data): Json<CreateRoomRequestData>) -> impl IntoRespon
         .await;
 
     // If error, return error
-    if response.is_err() {
-        error!("Error sending request to server: {:?}", response);
+    let response = match response {
+        Ok(resp) => resp,
+        Err(e) => {
+            error!("Error sending request to server: {:?}", e);
+            // Remove server from list
+            SERVERS.remove(&server);
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
+        }
+    };
 
-        // Remove server from list
-        SERVERS.remove(&server);
-        
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
-    }
-
-    let response = response.unwrap();
-
-    info!("Response from server: {:?}", response);
+    info!("Response from server: {:?}", response.status());
 
     // Parse as JSON
     let parsed_response = response.json::<CreateRoomResponseData>().await;
     
     // If error, return error
-    if let Err(e) = parsed_response {
-        error!("Error parsing response from server: {:?}", e);
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
-    }
+    let parsed_response = match parsed_response {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Error parsing response from server: {:?}", e);
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(None));
+        }
+    };
 
     // If success, return created room's info
-    let parsed_response: CreateRoomResponseData = parsed_response.unwrap();
     (axum::http::StatusCode::OK, Json(Some(parsed_response)))
 }
 
@@ -263,6 +278,8 @@ async fn post_server_announce(Json(data): Json<(String, ServerStatus)>) -> impl 
 
     SERVERS.insert(server.address.clone(), server);
     info!("Server {} announced", ip);
+    
+    (axum::http::StatusCode::OK, Json(()))
 }
 
 /// Update list of rooms on server
@@ -270,6 +287,8 @@ async fn put_server_rooms(Json(data): Json<Vec<RoomInfo>>) -> impl IntoResponse 
     for room in data {
         ROOMS.insert(room.id.clone(), room);
     }
+    
+    (axum::http::StatusCode::OK, Json(()))
 }
 
 /// Update list of environments on server
@@ -278,6 +297,8 @@ async fn put_server_environments(Json(data): Json<Vec<EnvironmentInfo>>) -> impl
     for environment in data {
         ENVIRONMENTS.insert(environment.id.clone(), environment);
     }
+    
+    (axum::http::StatusCode::OK, Json(()))
 }
 
 /// Get list of environments
@@ -316,6 +337,6 @@ pub(crate) async fn get_external_ip() -> Result<String, reqwest::Error> {
     #[cfg(not(debug_assertions))]
     {
         let url = "http://checkip.amazonaws.com";
-        reqwest::get(url).await?.text().await
+        REQWEST_CLIENT.get(url).send().await?.text().await
     }
 }
