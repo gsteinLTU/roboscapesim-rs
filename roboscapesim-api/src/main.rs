@@ -71,7 +71,7 @@ async fn main() {
             CorsLayer::very_permissive()
         )
         .layer(axum::middleware::from_fn(additional_cors))
-        .layer(tower_http::timeout::TimeoutLayer::new(std::time::Duration::from_secs(10)));
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(axum::http::StatusCode::REQUEST_TIMEOUT, std::time::Duration::from_secs(10)));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5001));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
@@ -243,8 +243,8 @@ fn get_best_server() -> Option<String> {
     
     // Pick one randomly
     if !best_servers.is_empty() {
-        let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..best_servers.len());
+        let mut rng = rand::rng();
+        let index = rng.random_range(0..best_servers.len());
         Some(best_servers[index].clone())
     } else {
         None

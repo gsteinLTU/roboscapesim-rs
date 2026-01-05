@@ -99,7 +99,7 @@ pub async fn create_api() {
         // allow requests from any origin
         .allow_origin(Any)
 	    .allow_headers([header::CONTENT_TYPE]))
-    .layer(TimeoutLayer::new(std::time::Duration::from_secs(5)));
+    .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::REQUEST_TIMEOUT, std::time::Duration::from_secs(5)));
     
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port");
     let server = axum::serve(listener, app.into_make_service());

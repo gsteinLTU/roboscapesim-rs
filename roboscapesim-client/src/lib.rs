@@ -459,7 +459,7 @@ pub async fn connect(server: &String) {
         s.borrow().set_binary_type(web_sys::BinaryType::Arraybuffer);
 
         // Set callbacks
-        let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
+        let onmessage: Closure<dyn Fn(JsValue) -> _ + 'static> = Closure::new(move |evt: JsValue| {
             GAME.with(|game| { 
                 let gc = game.clone();
                 let mut msg = None;
@@ -493,18 +493,18 @@ pub async fn connect(server: &String) {
             });
         });
         s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
-        s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
+        s.borrow().set_onclose(Some(&Closure::<dyn Fn() -> _ + 'static>::new(move ||{
             GAME.with(|game| { 
                 let gc = game.clone();
                 set_title("Disconnected");
                 gc.borrow().cleanup();
             }); 
         }).into_js_value().unchecked_ref()));
-        s.borrow().set_onerror(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+        s.borrow().set_onerror(Some(&Closure::<dyn Fn() -> _ + 'static>::new(||{
             console_log!("error");
             show_message("Error", "Failed to connect to server");
         }).into_js_value().unchecked_ref()));
-        s.borrow().set_onopen(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+        s.borrow().set_onopen(Some(&Closure::<dyn Fn() -> _ + 'static>::new(||{
             console_log!("open");
         }).into_js_value().unchecked_ref()));
         socket.replace(Some(s));  

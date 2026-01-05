@@ -29,7 +29,7 @@ impl Unwindable for ProcessState {
     fn unwind_to(&mut self, _: &Self::UnwindPoint) { }
 }
 
-pub fn get_env<C: CustomTypes<StdSystem<C>>>(role: &ast::Role, system: Rc<StdSystem<C>>) -> Result<EnvArena<C>, FromAstError> {
+pub fn get_env<C: CustomTypes<StdSystem<C>>>(role: &'_ ast::Role, system: Rc<StdSystem<C>>) -> Result<EnvArena<C>, FromAstError<'_>> {
     let (bytecode, init_info, locs, _) = ByteCode::compile(role)?;
     Ok(EnvArena::new(|mc| {
         let proj = Project::from_init(mc, &init_info, Rc::new(bytecode), Settings::default(), system);

@@ -1,7 +1,7 @@
 use std::{rc::Rc, cell::RefCell};
 
 use gloo_timers::future::sleep;
-use instant::Duration;
+use web_time::Duration;
 use js_sys::Uint8Array;
 use roboscapesim_common::{api::CreateRoomResponseData, UpdateMessage, ClientMessage};
 use wasm_bindgen::prelude::*;
@@ -65,7 +65,7 @@ pub async fn step3() -> Result<(), JsValue> {
         s.borrow().set_binary_type(web_sys::BinaryType::Arraybuffer);
 
         // Set callbacks
-        let onmessage: Closure<(dyn Fn(JsValue) -> _ + 'static)> = Closure::new(move |evt: JsValue| {
+        let onmessage: Closure<dyn Fn(JsValue) -> _ + 'static> = Closure::new(move |evt: JsValue| {
             let mut msg = None;
             let data = js_get(&evt, "data").unwrap();
 
@@ -96,13 +96,13 @@ pub async fn step3() -> Result<(), JsValue> {
             }
         });
         s.borrow().set_onmessage(Some(onmessage.into_js_value().unchecked_ref()));
-        s.borrow().set_onclose(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(move ||{
+        s.borrow().set_onclose(Some(&Closure::<dyn Fn() -> _ + 'static>::new(move ||{
             console_log!("close");
         }).into_js_value().unchecked_ref()));
-        s.borrow().set_onerror(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+        s.borrow().set_onerror(Some(&Closure::<dyn Fn() -> _ + 'static>::new(||{
             console_log!("error");
         }).into_js_value().unchecked_ref()));
-        s.borrow().set_onopen(Some(&Closure::<(dyn Fn() -> _ + 'static)>::new(||{
+        s.borrow().set_onopen(Some(&Closure::<dyn Fn() -> _ + 'static>::new(||{
             console_log!("open");
         }).into_js_value().unchecked_ref()));
         socket.replace(Some(s));  

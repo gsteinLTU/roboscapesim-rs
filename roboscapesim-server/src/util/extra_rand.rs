@@ -30,7 +30,7 @@ pub fn generate_random_mac_address() -> [u8; 6]
 
     for b in  &mut result
     {
-        *b = rand::thread_rng().gen();
+        *b = rand::rng().random();
     }
 
     // Not needed for RoboScape, but set MAC to be locally administered and unicast

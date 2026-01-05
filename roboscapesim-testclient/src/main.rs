@@ -94,7 +94,7 @@ async fn run_test_client(args: &Args, id: usize) {
     info!("Client {}: Connected to simulation server", id);
 
     // Send join message
-    ws_stream.send(Message::Binary(rmp_serde::to_vec(&ClientMessage::JoinRoom(room.room_id.clone(), username.clone(), None)).unwrap())).await.expect("Failed to send join message");
+    ws_stream.send(Message::Binary(rmp_serde::to_vec(&ClientMessage::JoinRoom(room.room_id.clone(), username.clone(), None)).unwrap().into())).await.expect("Failed to send join message");
 
     let ws_stream = std::sync::Arc::new(tokio::sync::Mutex::new(ws_stream));
 
@@ -110,7 +110,7 @@ async fn run_test_client(args: &Args, id: usize) {
             
             if incoming.is_ok() {
                 let incoming = incoming.unwrap().unwrap().into_data();
-                let msg: UpdateMessage = rmp_serde::from_slice(incoming.as_slice()).unwrap();
+                let msg: UpdateMessage = rmp_serde::from_slice(&incoming).unwrap();
 
                 if let UpdateMessage::Update(_, _, objects) = &msg  {
                     for o in objects {

@@ -145,7 +145,7 @@ impl RoomData {
 
     /// Generate a random hexstring room ID of the given length (default 5)
     fn generate_room_id(length: Option<usize>) -> String {
-        let s: String = rand::thread_rng()
+        let s: String = rand::rng()
             .sample_iter(&UpperHexadecimal)
             .take(length.unwrap_or(5))
             .map(char::from)

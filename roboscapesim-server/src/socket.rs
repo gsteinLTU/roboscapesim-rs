@@ -1,10 +1,10 @@
 use async_std::net::{TcpListener, TcpStream};
 use derivative::Derivative;
-use futures::{StreamExt, stream::{SplitSink, SplitStream}};
+use futures::StreamExt;
 use log::{info, trace, error, warn};
 use once_cell::sync::Lazy;
 
-use async_tungstenite::{WebSocketStream, tungstenite::Message};
+use async_tungstenite::{WebSocketReceiver, WebSocketSender, tungstenite::Message};
 use async_listen::ListenExt;
 use roboscapesim_common::{ClientMessage, UpdateMessage};
 use std::sync::Arc;
@@ -40,9 +40,9 @@ pub struct SocketInfo {
     /// From client, internal use
     pub rx1: Receiver<UpdateMessage>, 
     #[derivative(Debug = "ignore")]
-    pub sink: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
+    pub sink: Arc<Mutex<WebSocketSender<TcpStream>>>,
     #[derivative(Debug = "ignore")]
-    pub stream: Arc<Mutex<SplitStream<WebSocketStream<TcpStream>>>>,
+    pub stream: Arc<Mutex<WebSocketReceiver<TcpStream>>>,
 }
 
 pub async fn accept_connection(tcp_stream: TcpStream) -> Result<u128, String> {
