@@ -142,15 +142,15 @@ fn process_get_range_message(robot: &mut RobotData, had_messages: &mut bool, sim
     let filter = QueryFilter::default().exclude_sensors().exclude_rigid_body(robot.physics.body_handle);
 
     let mut distance = (max_toi * 100.0) as u16;
-    if let Some((handle, toi)) = sim.query_pipeline.lock().unwrap().cast_ray(rigid_body_set,
-        &sim.collider_set.read().unwrap(), &ray, max_toi, solid, filter
-    ) {
-        // The first collider hit has the handle `handle` and it hit after
-        // the ray travelled a distance equal to `ray.dir * toi`.
-        let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-        distance = (toi * 100.0) as u16;
-        trace!("Collider {:?} hit at point {}", handle, hit_point);
-    }
+    sim.with_query_pipeline(Some(filter), |query_pipeline| {
+        if let Some((handle, toi)) = query_pipeline.with_filter(filter).cast_ray(&ray, max_toi, solid) {
+            // The first collider hit has the handle `handle` and it hit after
+            // the ray travelled a distance equal to `ray.dir * toi`.
+            let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+            distance = (toi * 100.0) as u16;
+            trace!("Collider {:?} hit at point {}", handle, hit_point);
+        }
+    });
 
     // Send result message
     let dist_bytes = u16::to_le_bytes(distance);

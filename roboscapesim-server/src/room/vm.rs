@@ -88,7 +88,7 @@ impl VMManager {
                                 netsblox_vm::runtime::Request::UnknownBlock { name, args: _ } => {
                                     match name.as_str() {
                                         "roomID" => {
-                                            key.complete(Ok(SimpleValue::String(format!("{id_clone}").into())));
+                                            key.complete(Ok(SimpleValue::Text(format!("{id_clone}").into())));
                                             RequestStatus::Handled
                                         },
                                         "robotsInRoom" => {
@@ -147,7 +147,7 @@ impl VMManager {
 
                             if let Ok((_service_id, msg_type, values)) = vm_netsblox_msg_rx.lock().unwrap().recv_timeout(Duration::ZERO) {
                                 // TODO: check for listen
-                                system.inject_message(msg_type.into(), values.iter().map(|(k, v)| (k.clone().into(), SimpleValue::String(v.clone().into()))).collect());
+                                system.inject_message(msg_type.into(), values.iter().map(|(k, v)| (k.clone().into(), SimpleValue::Text(v.clone().into()))).collect());
                             }
 
                             env.mutate(|mc, env| {

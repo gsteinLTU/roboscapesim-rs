@@ -144,14 +144,20 @@ fn do_rays(config: &LIDARConfig, simulation: Arc<Simulation>)  -> Vec<Value> {
     // TODO: figure out LIDAR not working
     for ray in rays {
         let mut distance = config.max_distance * 100.0;
-        if let Some((handle, toi)) = 
-            simulation.query_pipeline.lock().unwrap().cast_ray(&simulation.rigid_body_set.read().unwrap(),&simulation.collider_set.read().unwrap(), &ray, config.max_distance * SCALE, true, filter) {
-            // The first collider hit has the handle `handle` and it hit after
-            // the ray travelled a distance equal to `ray.dir * toi`.
-            let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
-            distance = toi * 100.0 / SCALE;
-            trace!("Collider {:?} hit at point {}", handle, hit_point);
-        }
+        
+        simulation.with_query_pipeline(Some(filter), |query_pipeline| {
+            if let Some((handle, toi)) = query_pipeline
+                .with_filter(filter)
+                .cast_ray(&ray, config.max_distance * SCALE, true)
+            {
+                // The first collider hit has the handle `handle` and it hit after
+                // the ray travelled a distance equal to `ray.dir * toi`.
+                let hit_point = ray.point_at(toi); // Same as: `ray.origin + ray.dir * toi`
+                distance = toi * 100.0 / SCALE;
+                trace!("Collider {:?} hit at point {}", handle, hit_point);
+            }
+        });
+        
         distances.push(distance);
     }
 

@@ -86,7 +86,7 @@ impl RobotPhysics {
                 //let collider = ColliderBuilder::ball(0.03 * scale).friction(0.8).density(40.0);
                 sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
 
-                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
+                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::LIN_AXES | JointAxesMask::ANG_X | JointAxesMask::ANG_Y )
                     .local_anchor1(pos)
                     .local_anchor2(point![0.0, 0.01 * scale * if pos.z > 0.0 { -1.0 } else { 1.0 }, 0.0])
                     .local_frame2(Isometry::new(vector![0.0, 0.0, 0.0], vector![FRAC_PI_2, 0.0, 0.0]))
@@ -117,7 +117,7 @@ impl RobotPhysics {
                 let collider = ColliderBuilder::ball(ball_wheel_radius).density(5.0).friction(0.25);
                 sim.collider_set.write().unwrap().insert_with_parent(collider, wheel_rb, bodies);
 
-                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::X | JointAxesMask::Y | JointAxesMask::Z )
+                let joint = rapier3d::dynamics::GenericJointBuilder::new(JointAxesMask::LIN_AXES)
                     .local_anchor1(pos)
                     .local_anchor2(point![0.0, 0.0, 0.0])
                     .build();
@@ -219,7 +219,7 @@ impl RobotPhysics {
         let mut new_whisker_states = [false, false];
 
         // Check whiskers
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_l) {
+        for c in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_l) {
             // Ignore non-intersections 
             if !c.2 {
                 continue;
@@ -232,7 +232,7 @@ impl RobotPhysics {
             }
         }
             
-        for c in sim.narrow_phase.lock().unwrap().intersections_with(robot.whisker_r) {
+        for c in sim.narrow_phase.lock().unwrap().intersection_pairs_with(robot.whisker_r) {
             // Ignore non-intersections 
             if !c.2 {
                 continue;

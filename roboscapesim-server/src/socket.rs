@@ -1,4 +1,4 @@
-use async_std::net::{TcpListener, TcpStream};
+use async_net::{TcpListener, TcpStream};
 use derivative::Derivative;
 use futures::StreamExt;
 use log::{info, trace, error, warn};
