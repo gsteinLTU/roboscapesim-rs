@@ -1,4 +1,4 @@
-FROM rust AS builder
+FROM rust:slim-trixie AS builder
 
 RUN update-ca-certificates
 
@@ -8,7 +8,7 @@ COPY . .
 WORKDIR /roboscape_build/roboscapesim-api
 RUN cargo b -r
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update
 RUN apt-get install -y libssl-dev ca-certificates
